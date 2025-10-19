@@ -39,6 +39,9 @@ public class SimpleCommandMap implements CommandMap {
         fallbackCommands.add(new MeCommand());
         fallbackCommands.add(new KillCommand());
         fallbackCommands.add(new HelpCommand());
+        fallbackCommands.add(new WeatherCommand());
+        fallbackCommands.add(new GameruleCommand());
+        fallbackCommands.add(new GameModeCommand());
     }
 
     public SimpleCommandMap(final Server server) {

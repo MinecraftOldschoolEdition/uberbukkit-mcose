@@ -53,6 +53,8 @@ public abstract class EntityHuman extends EntityLiving {
     public int D = 20;
     protected boolean E = false;
     public float F;
+    // Project Poseidon compatibility: 0 = survival, 1 = creative
+    public int gameMode = 0;
     private int d = 0;
     public EntityFish hookedFish = null;
 
@@ -342,6 +344,11 @@ public abstract class EntityHuman extends EntityLiving {
             this.a(true, true, false);
         }
 
+        // Project Poseidon - Load gamemode from NBT
+        if (nbttagcompound.hasKey("GameType")) {
+            this.gameMode = nbttagcompound.e("GameType");
+        }
+
         // CraftBukkit start
         this.spawnWorld = nbttagcompound.getString("SpawnWorld");
         if (this.spawnWorld == "") {
@@ -360,6 +367,7 @@ public abstract class EntityHuman extends EntityLiving {
         nbttagcompound.a("Dimension", this.dimension);
         nbttagcompound.a("Sleeping", this.sleeping);
         nbttagcompound.a("SleepTimer", (short) this.sleepTicks);
+        nbttagcompound.a("GameType", this.gameMode); // Project Poseidon - Save gamemode
         if (this.b != null) {
             nbttagcompound.a("SpawnX", this.b.x);
             nbttagcompound.a("SpawnY", this.b.y);
@@ -393,6 +401,10 @@ public abstract class EntityHuman extends EntityLiving {
         if (this.health <= 0) {
             return false;
         } else {
+            // Project Poseidon - No damage in creative mode
+            if (this.gameMode == 1) {
+                return false;
+            }
             if (this.isSleeping() && !this.world.isStatic) {
                 this.a(true, true, false);
             }

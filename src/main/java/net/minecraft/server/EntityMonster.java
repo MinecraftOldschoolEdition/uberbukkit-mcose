@@ -36,11 +36,21 @@ public class EntityMonster extends EntityCreature implements IMonster {
 
     protected Entity findTarget() {
         EntityHuman entityhuman = this.world.findNearbyPlayer(this, 16.0D);
-
-        return entityhuman != null && this.e(entityhuman) ? entityhuman : null;
+        if (entityhuman != null) {
+            // Ignore creative players
+            if (entityhuman.gameMode == 1) {
+                return null;
+            }
+            if (this.e(entityhuman)) return entityhuman;
+        }
+        return null;
     }
 
     public boolean damageEntity(Entity entity, int i) {
+        // Ignore retaliation against creative players
+        if (entity instanceof EntityHuman && ((EntityHuman) entity).gameMode == 1) {
+            return true;
+        }
         if (super.damageEntity(entity, i)) {
             if (this.passenger != entity && this.vehicle != entity) {
                 if (entity != this) {

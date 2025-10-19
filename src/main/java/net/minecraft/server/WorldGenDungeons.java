@@ -10,6 +10,10 @@ public class WorldGenDungeons extends WorldGenerator {
     }
 
     public boolean a(World world, Random random, int i, int j, int k) {
+        // Avoid triggering chunk loads during population: if the target chunk isn't already loaded, skip
+        if (!world.isLoaded(i, j, k)) {
+            return false;
+        }
         byte b0 = 3;
         int l = random.nextInt(2) + 2;
         int i1 = random.nextInt(2) + 2;

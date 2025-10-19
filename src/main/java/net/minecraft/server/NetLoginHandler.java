@@ -3,6 +3,7 @@ package net.minecraft.server;
 import com.projectposeidon.ConnectionType;
 import com.legacyminecraft.poseidon.PoseidonConfig;
 import com.legacyminecraft.poseidon.util.CrackedAllowlist;
+import com.legacyminecraft.poseidon.util.CryptoHelper;
 import com.projectposeidon.johnymuffin.LoginProcessHandler;
 
 import uk.betacraft.uberbukkit.Uberbukkit;
@@ -14,6 +15,9 @@ import org.bukkit.craftbukkit.CraftServer;
 
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import javax.crypto.SecretKey;
+import java.security.KeyPair;
+import java.security.SecureRandom;
 import java.util.Random;
 import java.util.logging.Logger;
 
@@ -35,6 +39,12 @@ public class NetLoginHandler extends NetHandler {
     private boolean receivedLoginPacket = false;
     private int rawConnectionType;
     private boolean receivedKeepAlive = false;
+
+    // Modern authentication fields
+    private boolean modernAuthEnabled = false;
+    private byte[] verifyToken;
+    private SecretKey sharedSecret;
+    private boolean modernAuthWithoutEncryption = true; // Beta 1.7.3 doesn't support encryption
 
     private final String msgKickShutdown;
 
@@ -77,6 +87,35 @@ public class NetLoginHandler extends NetHandler {
     }
 
     public void a(Packet2Handshake packet2handshake) {
+        boolean modernAuthSupport = this.server.propertyManager.getBoolean("modern-authentication", false);
+
+        if (modernAuthSupport) {
+            if (!this.server.onlineMode) {
+                a.warning("[AUTH] modern-authentication=true but online-mode=false; rejecting login for " + packet2handshake.a);
+                this.disconnect("Server misconfigured: set online-mode=true to use modern authentication");
+                return;
+            }
+
+            if (!CrackedAllowlist.get().contains(packet2handshake.a)) {
+                // Use modern authentication flow
+                this.modernAuthEnabled = true;
+                a.info("[AUTH] Using modern Mojang authentication for " + packet2handshake.a);
+
+                this.verifyToken = new byte[4];
+                new SecureRandom().nextBytes(this.verifyToken);
+
+                KeyPair keyPair = CryptoHelper.getServerKeyPair();
+                this.serverId = ""; // Empty string for modern auth
+                this.networkManager.queue(new Packet253EncryptionRequest(this.serverId, keyPair.getPublic(), this.verifyToken));
+                return;
+            }
+            // Cracked allowlist bypasses auth
+            a.info("[AUTH] Cracked allowlist user '" + packet2handshake.a + "' bypassing authentication");
+            this.networkManager.queue(new Packet2Handshake("-", packet2handshake.pvn11));
+            return;
+        }
+
+        // Legacy flow
         if (this.server.onlineMode && !CrackedAllowlist.get().contains(packet2handshake.a)) {
             this.serverId = Long.toHexString(d.nextLong());
             this.networkManager.queue(new Packet2Handshake(this.serverId, packet2handshake.pvn11));
@@ -87,6 +126,37 @@ public class NetLoginHandler extends NetHandler {
 
     public void a(Packet0KeepAlive packet0KeepAlive) {
         receivedKeepAlive = true;
+    }
+
+    // Handler for modern authentication response
+    public void a(Packet252SharedKey packet252SharedKey) {
+        if (!this.modernAuthEnabled || !this.server.onlineMode) {
+            this.disconnect("Protocol error");
+            return;
+        }
+
+        try {
+            KeyPair keyPair = CryptoHelper.getServerKeyPair();
+            byte[] decryptedSecret = CryptoHelper.decryptRSA(packet252SharedKey.sharedSecret, keyPair.getPrivate());
+            byte[] decryptedToken = CryptoHelper.decryptRSA(packet252SharedKey.verifyToken, keyPair.getPrivate());
+
+            if (!java.util.Arrays.equals(this.verifyToken, decryptedToken)) {
+                this.disconnect("Invalid verify token");
+                return;
+            }
+
+            this.sharedSecret = CryptoHelper.createSecretKey(decryptedSecret);
+            this.serverId = CryptoHelper.generateServerId("", keyPair.getPublic(), this.sharedSecret);
+
+            // No link-layer encryption is enabled for b1.7.3; continue waiting for login
+            if (this.modernAuthWithoutEncryption) {
+                this.f = 0; // reset timeout
+                this.receivedLoginPacket = false;
+            }
+        } catch (Exception e) {
+            a.warning("Error handling encryption response: " + e.getMessage());
+            this.disconnect("Encryption error");
+        }
     }
 
     public void a(Packet1Login packet1login) {
@@ -158,7 +228,11 @@ public class NetLoginHandler extends NetHandler {
             }
 
 
-            new LoginProcessHandler(this, packet1login, this.server.server, this.server.onlineMode);
+            LoginProcessHandler loginHandler = new LoginProcessHandler(this, packet1login, this.server.server, this.server.onlineMode);
+            // Inform login handler whether modern auth was used
+            try {
+                loginHandler.setUsingModernAuth(this.modernAuthEnabled);
+            } catch (Throwable ignore) {}
             // (new ThreadLoginVerifier(this, packet1login, this.server.server)).start(); // CraftBukkit
             //            }
         }
@@ -189,6 +263,24 @@ public class NetLoginHandler extends NetHandler {
 
             netserverhandler.sendPacket(new Packet1Login("", entityplayer.id, worldserver.getSeed(), dim));
             netserverhandler.sendPacket(new Packet6SpawnPosition(chunkcoordinates.x, chunkcoordinates.y, chunkcoordinates.z));
+
+            // Poseidon parity: signal client to enable special visuals for ALPHA/ALPHA_SNOW/SKY on overworld
+            try {
+                int actualTerrainType = (worldserver.worldData != null ? worldserver.worldData.getTerrainType() : 0);
+                if (worldserver.worldProvider.dimension == 0) {
+                    if (actualTerrainType == 1 || actualTerrainType == 5) {
+                        // ALPHA or ALPHA_SNOW visuals
+                        netserverhandler.sendPacket(new Packet70Bed(5));
+                        if (actualTerrainType == 5) {
+                            // Explicitly signal ALPHA_SNOW variant so client picks snow biome visuals
+                            netserverhandler.sendPacket(new Packet70Bed(10));
+                        }
+                    } else if (actualTerrainType == 3) {
+                        // SKY visuals
+                        netserverhandler.sendPacket(new Packet70Bed(6));
+                    }
+                }
+            } catch (Throwable ignore) {}
             this.server.serverConfigurationManager.a(entityplayer, worldserver);
             // this.server.serverConfigurationManager.sendAll(new Packet3Chat("\u00A7e" + entityplayer.name + " joined the game."));  // CraftBukkit - message moved to join event
             this.server.serverConfigurationManager.c(entityplayer);
@@ -196,6 +288,38 @@ public class NetLoginHandler extends NetHandler {
             this.server.networkListenThread.a(netserverhandler);
             netserverhandler.sendPacket(new Packet4UpdateTime(entityplayer.getPlayerTime())); // CraftBukkit - add support for player specific time
             entityplayer.syncInventory();
+
+            // Poseidon parity: apply saved gamemode visuals and containers on login
+            try {
+                entityplayer.updateContainer();
+                if (entityplayer.gameMode == 1) {
+                    netserverhandler.sendPacket(new Packet70Bed(3)); // creative HUD/flight enable
+                } else {
+                    netserverhandler.sendPacket(new Packet70Bed(4)); // survival HUD
+                }
+                // If SKY terrain, also send the SKY overlay refresh as Poseidon does in /gamemode
+                if (worldserver.worldData != null && worldserver.worldData.getTerrainType() == 3) {
+                    netserverhandler.sendPacket(new Packet70Bed(2));
+                }
+                // uberbukkit: signal client to enable ladder-gap mechanics on modded clients
+                netserverhandler.sendPacket(new Packet70Bed(7));
+                // Send Alpha terrain hint on login based on overworld terrain type
+                try {
+                    WorldServer ws = this.server.getWorldServer(0);
+                    if (ws != null && ws.worldData != null) {
+                        int terrainType = ws.worldData.getTerrainType();
+                        if (terrainType == 1 || terrainType == 5) {
+                            netserverhandler.sendPacket(new Packet70Bed(8)); // Alpha on
+                            if (terrainType == 5) {
+                                // Signal ALPHA_SNOW variant explicitly
+                                netserverhandler.sendPacket(new Packet70Bed(10));
+                            }
+                        } else {
+                            netserverhandler.sendPacket(new Packet70Bed(9)); // Alpha off
+                        }
+                    }
+                } catch (Throwable ignore) {}
+            } catch (Throwable ignore) {}
         }
 
         this.c = true;
@@ -207,7 +331,46 @@ public class NetLoginHandler extends NetHandler {
     }
 
     public void a(Packet packet) {
+        // Allow legacy server list pings during login phase
+        if (packet instanceof Packet254ServerPing) {
+            this.a((Packet254ServerPing) packet);
+            return;
+        }
         this.disconnect("Protocol error");
+    }
+
+    // Legacy server list ping (0xFE and 0xFE 0x01)
+    public void a(Packet254ServerPing ping) {
+        try {
+            int online = this.server.serverConfigurationManager.players.size();
+            int max = this.server.serverConfigurationManager.maxPlayers;
+            String motd = this.server.propertyManager.getString("motd", "A Minecraft Server");
+            if (motd == null || motd.trim().length() == 0) {
+                motd = "A Minecraft Server";
+                try {
+                    // Persist a default if empty to avoid blank MOTD
+                    this.server.propertyManager.properties.setProperty("motd", motd);
+                    this.server.propertyManager.savePropertiesFile();
+                } catch (Throwable ignored) {}
+            }
+
+            String response;
+            if (ping.extended) {
+                String protocol = "14";
+                String version = "b1.7.3";
+                response = "\u00a71\u0000" + protocol + "\u0000" + version + "\u0000" + motd + "\u0000" + online + "\u0000" + max;
+            } else {
+                response = motd + "\u00a7" + online + "\u00a7" + max;
+            }
+
+            this.networkManager.queue(new Packet255KickDisconnect(response));
+            this.networkManager.d();
+            this.c = true;
+        } catch (Throwable t) {
+            a.warning("Error handling legacy ping: " + t.getMessage());
+            try { this.networkManager.d(); } catch (Throwable ignore) {}
+            this.c = true;
+        }
     }
 
     public String b() {

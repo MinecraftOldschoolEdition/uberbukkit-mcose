@@ -15,6 +15,9 @@ public class NormalChunkGenerator extends InternalChunkGenerator {
     private final IChunkProvider provider;
 
     public NormalChunkGenerator(World world, long seed) {
+        if (world == null || world.worldProvider == null) {
+            throw new IllegalArgumentException("World or worldProvider is null");
+        }
         provider = world.worldProvider.getChunkProvider();
     }
 

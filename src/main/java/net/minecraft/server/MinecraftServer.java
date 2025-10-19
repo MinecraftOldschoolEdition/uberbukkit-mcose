@@ -2,11 +2,15 @@ package net.minecraft.server;
 
 import com.legacyminecraft.poseidon.Poseidon;
 import com.legacyminecraft.poseidon.PoseidonConfig;
-import com.legacyminecraft.poseidon.util.CrackedAllowlist;
+import com.legacyminecraft.poseidon.PoseidonPlugin;
 import com.legacyminecraft.poseidon.util.ServerLogRotator;
+// import com.legacyminecraft.poseidon.utility.PerformanceStatistic; // Not used in uberbukkit
+import com.legacyminecraft.poseidon.utility.PoseidonVersionChecker;
+import com.projectposeidon.johnymuffin.UUIDManager;
 import com.legacyminecraft.poseidon.watchdog.WatchDogThread;
 import jline.ConsoleReader;
 import joptsimple.OptionSet;
+import org.bukkit.Bukkit;
 import org.bukkit.World.Environment;
 import org.bukkit.craftbukkit.CraftServer;
 import org.bukkit.craftbukkit.LoggerOutputStream;
@@ -19,7 +23,6 @@ import org.bukkit.event.world.WorldLoadEvent;
 import org.bukkit.event.world.WorldSaveEvent;
 import org.bukkit.generator.ChunkGenerator;
 import org.bukkit.plugin.PluginLoadOrder;
-import uk.betacraft.uberbukkit.UberbukkitConfig;
 
 import java.io.File;
 import java.io.IOException;
@@ -63,6 +66,7 @@ public class MinecraftServer implements Runnable, ICommandListener {
     public ColouredConsoleSender console;
     public ConsoleReader reader;
     public static int currentTick;
+    public String configuredLevelType; // Added for server.properties level-type
     // CraftBukkit end
 
     //Poseidon Start
@@ -107,10 +111,18 @@ public class MinecraftServer implements Runnable, ICommandListener {
         modLoaderSupport = PoseidonConfig.getInstance().getBoolean("settings.support.modloader.enable", false);
 
         if (modLoaderSupport) {
-            log.info("[UberBukkit] ModLoaderMP support is enabled, but has been removed.");
+            log.info("EXPERIMENTAL MODLOADERMP SUPPORT ENABLED.");
+            if (!isModloaderPresent()) {
+                log.severe("ModLoaderMP support is enabled, however, it isn't present. Please install it before enabling this setting");
+                return false;
+            }
+            try {
+                Class.forName("net.minecraft.server.ModLoader");
+                // Optional: invoke via reflection if present
+            } catch (ClassNotFoundException ignore) {}
         }
 
-        log.info("Starting minecraft server... Accepting PVNs: " + String.join(", ", UberbukkitConfig.getInstance().getString("client.allowed_protocols.value", "14").split(",")));
+        log.info("Starting minecraft server version Beta 1.7.3");
         if (Runtime.getRuntime().maxMemory() / 1024L / 1024L < 512L) {
             log.warning("**** NOT ENOUGH RAM!");
             log.warning("To start the server with more ram, launch it as \"java -Xmx1024M -Xms1024M -jar minecraft_server.jar\"");
@@ -124,6 +136,7 @@ public class MinecraftServer implements Runnable, ICommandListener {
         this.spawnAnimals = this.propertyManager.getBoolean("spawn-animals", true);
         this.pvpMode = this.propertyManager.getBoolean("pvp", true);
         this.allowFlight = this.propertyManager.getBoolean("allow-flight", false);
+        this.configuredLevelType = this.propertyManager.getString("level-type", "DEFAULT").toUpperCase(); // Added
         InetAddress inetaddress = null;
 
         if (s.length() > 0) {
@@ -218,7 +231,72 @@ public class MinecraftServer implements Runnable, ICommandListener {
             ChunkGenerator gen = this.server.getGenerator(name);
 
             if (j == 0) {
-                world = new WorldServer(this, new ServerNBTManager(new File("."), s, true), s, dimension, i, org.bukkit.World.Environment.getEnvironment(dimension), gen); // CraftBukkit
+                System.out.println("[MINECRAFT_SERVER_DEBUG] Preparing Overworld. configuredLevelType: " + this.configuredLevelType + ", level-name: " + s + ", seed: " + i);
+                IDataManager dataManager = new ServerNBTManager(new File("."), s, true);
+                WorldData worldData = dataManager.c();
+                long seedToUse = i;
+
+                // Determine integer typeId from configuredLevelType string
+                int typeId = 0; // Default to 0 (NORMAL/DEFAULT)
+                if (this.configuredLevelType.equalsIgnoreCase("ALPHA")) {
+                    typeId = 1; // Assuming 1 is the integer ID for ALPHA type
+                    log.info("[MinecraftServer] Configured level-type ALPHA maps to ID 1.");
+                } else if (this.configuredLevelType.equalsIgnoreCase("FLAT")) {
+                    typeId = 2; // Example: if FLAT is type 2
+                    log.info("[MinecraftServer] Configured level-type FLAT maps to ID 2.");
+                } else if (this.configuredLevelType.equalsIgnoreCase("SKY")) { // Added for SKY
+                    typeId = 3; // SKY is type 3
+                    log.info("[MinecraftServer] Configured level-type SKY maps to ID 3.");
+                } else if (this.configuredLevelType.equalsIgnoreCase("ALPHA_SNOW") || this.configuredLevelType.equalsIgnoreCase("ALPHA-SNOW") || this.configuredLevelType.equalsIgnoreCase("ALPHASNOW")) {
+                    typeId = 5; // Match client ALPHA_SNOW ID
+                    log.info("[MinecraftServer] Configured level-type ALPHA_SNOW maps to ID 5.");
+                } else if (!this.configuredLevelType.equalsIgnoreCase("DEFAULT") && !this.configuredLevelType.equalsIgnoreCase("NORMAL")) {
+                    log.warning("[MinecraftServer] Unknown level-type in server.properties: '" + this.configuredLevelType + "'. Defaulting to type ID 0.");
+                }
+
+                if (worldData == null) { // New world
+                    log.info("[MinecraftServer] No existing world data for '" + s + "'. Creating new with seed: " + seedToUse + ", type ID: " + typeId);
+                    worldData = new WorldData(seedToUse, s); // Creates with terrainType 0 initially
+                    worldData.setTerrainType(typeId);      // Set the correct type
+                    
+                    // Set Alpha Snow flag when requested
+                    if (typeId == 5) {
+                        worldData.setSnowWorld(true);
+                        log.info("[MinecraftServer] Enabled AlphaSnow flag for ALPHA_SNOW terrain type.");
+                    }
+                    
+                    // Set appropriate default spawn for sky/alpha_snow worlds
+                    if (typeId == 3) { // SKY terrain type
+                        worldData.setSpawn(0, 90, 0); // Set a higher default Y for sky worlds
+                        log.info("[MinecraftServer] Set initial spawn for SKY world to (0, 90, 0)");
+                    } else if (typeId == 5) { // ALPHA_SNOW defaults to normal spawn; no special Y needed
+                        log.info("[MinecraftServer] Creating ALPHA_SNOW world; spawn will be determined by world logic.");
+                    }
+                    
+                    dataManager.a(worldData); // Save new WorldData (creates/updates level.dat)
+                    log.info("[MinecraftServer] Saved new WorldData for '" + s + "' with TerrainType ID: " + worldData.getTerrainType());
+                } else { // Existing world
+                    seedToUse = worldData.getSeed(); // Use seed from loaded world data
+                    log.info("[MinecraftServer] Loaded existing WorldData for '" + s + "'. Original TerrainType ID: " + worldData.getTerrainType() + ", Seed: " + seedToUse);
+                    boolean changed = false;
+                    if (worldData.getTerrainType() != typeId) {
+                        log.info("[MinecraftServer] Overriding TerrainType ID for world '" + s + "' from " + worldData.getTerrainType() + " to " + typeId + " (from server.properties).");
+                        worldData.setTerrainType(typeId);
+                        changed = true;
+                    }
+                    // Ensure AlphaSnow flag aligns with ALPHA_SNOW type
+                    if (typeId == 5 && !worldData.isSnowWorld()) {
+                        log.info("[MinecraftServer] Enabling AlphaSnow flag on existing world '" + s + "' for ALPHA_SNOW terrain type.");
+                        worldData.setSnowWorld(true);
+                        changed = true;
+                    }
+                    if (changed) dataManager.a(worldData); // Save modified WorldData
+                    log.info("[MinecraftServer] Using TerrainType ID: " + worldData.getTerrainType() + " for world '" + s + "'");
+                }
+                
+                // WorldServer will use dataManager to load this worldData with the correct type and seed.
+                world = new WorldServer(this, dataManager, s, dimension, seedToUse, org.bukkit.World.Environment.getEnvironment(dimension), gen);
+
             } else {
                 String dim = "DIM-1";
 
@@ -248,7 +326,8 @@ public class MinecraftServer implements Runnable, ICommandListener {
                     }
                 }
 
-                world = new SecondaryWorldServer(this, new ServerNBTManager(new File("."), name, true), name, dimension, i, this.worlds.get(0), org.bukkit.World.Environment.getEnvironment(dimension), gen); // CraftBukkit
+                log.info("[MinecraftServer] Preparing Nether world '" + name + "' with seed from overworld: " + i);
+                world = new SecondaryWorldServer(this, new ServerNBTManager(new File("."), name, true), name, dimension, i, this.worlds.get(0), org.bukkit.World.Environment.getEnvironment(dimension), gen);
             }
 
             if (gen != null) {
@@ -355,7 +434,6 @@ public class MinecraftServer implements Runnable, ICommandListener {
         // This is done before disablePlugins() to ensure the watchdog doesn't detect plugins disabling as a server hang
         Poseidon.getServer().shutdownServer();
 
-        CrackedAllowlist.get().saveAllowlist();
         //Project Poseidon End
 
         // CraftBukkit start
@@ -375,6 +453,55 @@ public class MinecraftServer implements Runnable, ICommandListener {
             this.saveChunks();
         }
         // CraftBukkit end
+
+        // Poseidon Start
+        // UberBukkit: Performance statistics not available; stubbed to empty
+        Map<String, Object> listenerStatistics = new java.util.HashMap<String, Object>();
+
+        // Only get the Listener Statistics if the Poseidon Server is not null. Prevents null pointer exceptions.
+        // if (Poseidon.getServer() != null && Poseidon.getServer().getConfig().getConfigBoolean("settings.performance-monitoring.listener-reporting.print-statistics-on-shutdown.enabled")) {
+        //     listenerStatistics = Poseidon.getServer().getSortedListenerPerformance();
+        // }
+
+        // Check if the statistics map is not empty
+        if (listenerStatistics != null && !listenerStatistics.isEmpty()) {
+            log.info("[Poseidon] Listener statistics from this session:");
+
+            // Iterate over each listener and log their statistics
+            for (Map.Entry<String, Object> entry : listenerStatistics.entrySet()) {
+                String listener = entry.getKey();
+                Object stats = entry.getValue();
+
+                /* if (stats.getMaxExecutionTime() == 0) {
+                    continue;
+                } */
+            }
+        }
+
+
+        // Check if the statistics map is not empty
+
+        Map<String, Object> taskStatistics = new java.util.HashMap<String, Object>();
+
+        // Only get the Task Statistics if the Poseidon Server is not null. Prevents null pointer exceptions.
+        // if (Poseidon.getServer() != null && Poseidon.getServer().getConfig().getConfigBoolean("settings.performance-monitoring.listener-reporting.print-statistics-on-shutdown.enabled")) {
+        //     taskStatistics = Poseidon.getServer().getSortedTaskPerformance();
+        // }
+
+        if (taskStatistics != null && !taskStatistics.isEmpty()) {
+            log.info("[Poseidon] Synchronous task statistics from this session:");
+
+            // Iterate over each task and log their statistics
+            for (Map.Entry<String, Object> entry : taskStatistics.entrySet()) {
+                String task = entry.getKey();
+                Object stats = entry.getValue();
+
+                /* if (stats.getMaxExecutionTime() == 0) {
+                    continue;
+                } */
+            }
+        }
+        // Poseidon End
     }
 
     public void a() {
@@ -387,6 +514,14 @@ public class MinecraftServer implements Runnable, ICommandListener {
                 long i = System.currentTimeMillis();
 
                 for (long j = 0L; this.isRunning; Thread.sleep(1L)) {
+                    if (modLoaderSupport) {
+                        try {
+                            Class<?> ml = Class.forName("net.minecraft.server.ModLoader");
+                            java.lang.reflect.Method m = ml.getMethod("OnTick", MinecraftServer.class);
+                            m.invoke(null, this);
+                        } catch (Throwable ignore) {}
+                    }
+
                     long k = System.currentTimeMillis();
                     long l = k - i;
 

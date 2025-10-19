@@ -102,6 +102,7 @@ public class Item {
     public static Item RAW_FISH = (new ItemFood(93, 2, false)).a(9, 5).a("fishRaw");
     public static Item COOKED_FISH = (new ItemFood(94, 5, false)).a(10, 5).a("fishCooked");
     public static Item INK_SACK = (new ItemDye(95)).a(14, 4).a("dyePowder");
+    public static Item STONE_BRICK_ITEM = (new ItemStoneBrick(Block.STONE_BRICK.id - 256)).a(6, 6).a("stonebricksmooth");
     public static Item BONE = (new Item(96)).a(12, 1).a("bone").g();
     public static Item SUGAR = (new Item(97)).a(13, 0).a("sugar").g();
     public static Item CAKE = (new ItemReed(98, Block.CAKE_BLOCK)).c(1).a(13, 1).a("cake");
@@ -112,6 +113,21 @@ public class Item {
     public static ItemShears SHEARS = (ItemShears) (new ItemShears(103)).a(13, 5).a("shears");
     public static Item GOLD_RECORD = (new ItemRecord(2000, "13")).a(0, 15).a("record");
     public static Item GREEN_RECORD = (new ItemRecord(2001, "cat")).a(1, 15).a("record");
+    public static Item RECORD_BLOCKS = (new ItemRecord(2002, "blocks")).a(2, 15).a("record");
+    public static Item RECORD_CHIRP  = (new ItemRecord(2003, "chirp")).a(3, 15).a("record");
+    public static Item RECORD_FAR    = (new ItemRecord(2004, "far")).a(4, 15).a("record");
+    public static Item RECORD_MALL   = (new ItemRecord(2005, "mall")).a(5, 15).a("record");
+    public static Item RECORD_MELLOHI= (new ItemRecord(2006, "mellohi")).a(6, 15).a("record");
+    public static Item RECORD_STAL   = (new ItemRecord(2007, "stal")).a(7, 15).a("record");
+    public static Item RECORD_STRAD  = (new ItemRecord(2008, "strad")).a(8, 15).a("record");
+    public static Item RECORD_WARD   = (new ItemRecord(2009, "ward")).a(9, 15).a("record");
+    public static Item RECORD_11     = (new ItemRecord(2010, "11")).a(10, 15).a("record");
+    public static Item RECORD_WAIT   = (new ItemRecord(2011, "wait")).a(11, 15).a("record");
+    // Uberbukkit - custom records to match client additions (shiftedIndex 2012..2015)
+    public static Item RECORD_ARIA_MATH   = (new ItemRecord(2012, "Aria Math")).a(12, 15).a("record");
+    public static Item RECORD_DOG         = (new ItemRecord(2013, "Dog")).a(13, 15).a("record");
+    public static Item RECORD_CERTITUDES  = (new ItemRecord(2014, "certitudes")).a(14, 15).a("record");
+    public static Item RECORD_TSUKI_NO_KOIBUMI = (new ItemRecord(2015, "tsuki no koibumi")).a(15, 15).a("record");
     public final int id;
     protected int maxStackSize = 64;
     private int durability = 0;

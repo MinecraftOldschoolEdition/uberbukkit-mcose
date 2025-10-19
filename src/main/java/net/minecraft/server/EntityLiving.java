@@ -587,11 +587,26 @@ public abstract class EntityLiving extends Entity {
                 if (this.isSneaking() && this.motY < 0.0D) {
                     this.motY = 0.0D;
                 }
+
+                // (Alpha parity does not add forward-based climb impulse here)
             }
 
             this.move(this.motX, this.motY, this.motZ);
-            if (this.positionChanged && this.p()) {
-                this.motY = 0.2D;
+            if (this.p()) {
+                // Standard ladder climb impulse when colliding horizontally
+                if (this.positionChanged) {
+                    this.motY = 0.2D;
+                } else {
+                    // Gap support: if only head-level ladder is present and the player is pushing forward, climb
+                    int ci = MathHelper.floor(this.locX);
+                    int cj = MathHelper.floor(this.boundingBox.b);
+                    int ck = MathHelper.floor(this.locZ);
+                    boolean feetLadder = this.world.getTypeId(ci, cj, ck) == Block.LADDER.id;
+                    boolean headLadder = this.world.getTypeId(ci, cj + 1, ck) == Block.LADDER.id;
+                    if (!feetLadder && headLadder && this.aA > 0.0F) {
+                        this.motY = 0.2D;
+                    }
+                }
             }
 
             this.motY -= 0.08D;
@@ -618,9 +633,9 @@ public abstract class EntityLiving extends Entity {
         int j = MathHelper.floor(this.boundingBox.b);
         int k = MathHelper.floor(this.locZ);
 
-        return this.world.getTypeId(i, j, k) == Block.LADDER.id ||
-            // uberbukkit
-            (UberbukkitConfig.getInstance().getBoolean("mechanics.allow_ladder_gap", false) && this.world.getTypeId(i, j + 1, k) == Block.LADDER.id);
+        if (this.world.getTypeId(i, j, k) == Block.LADDER.id) return true;
+        if (this.world.getTypeId(i, j + 1, k) == Block.LADDER.id) return true;
+        return false;
     }
 
     public void b(NBTTagCompound nbttagcompound) {

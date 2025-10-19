@@ -29,7 +29,11 @@ public class EntityCreature extends EntityLiving {
             // CraftBukkit start
             Entity target = this.findTarget();
             if (target != null) {
-                EntityTargetEvent event = new EntityTargetEvent(this.getBukkitEntity(), target.getBukkitEntity(), EntityTargetEvent.TargetReason.CLOSEST_PLAYER);
+                // Ignore creative players as targets
+				if (target instanceof EntityHuman && ((EntityHuman) target).gameMode == 1) {
+					target = null;
+				}
+				EntityTargetEvent event = new EntityTargetEvent(this.getBukkitEntity(), target == null ? null : target.getBukkitEntity(), EntityTargetEvent.TargetReason.CLOSEST_PLAYER);
                 this.world.getServer().getPluginManager().callEvent(event);
 
                 if (!event.isCancelled()) {
@@ -69,6 +73,10 @@ public class EntityCreature extends EntityLiving {
         }
 
         if (!this.e && this.target != null && (this.pathEntity == null || this.random.nextInt(20) == 0)) {
+            // If target is a creative player, forget it
+            if (this.target instanceof EntityHuman && ((EntityHuman) this.target).gameMode == 1) {
+                this.target = null;
+            }
             this.pathEntity = this.world.findPath(this, this.target, f);
         } else if (!this.e && (this.pathEntity == null && this.random.nextInt(80) == 0 || this.random.nextInt(80) == 0)) {
             this.B();

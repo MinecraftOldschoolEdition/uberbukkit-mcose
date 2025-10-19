@@ -33,6 +33,7 @@ public class LoginProcessHandler {
     private HashSet<ConnectionPause> connectionPauses = new HashSet<ConnectionPause>();
 
     private final String msgKickAlreadyOnline;
+    private boolean usingModernAuth = false; // Modern auth flag
 
     public LoginProcessHandler(NetLoginHandler netloginhandler, Packet1Login packet1login, CraftServer server, boolean onlineMode) {
         this.loginProcessHandler = this;
@@ -80,10 +81,15 @@ public class LoginProcessHandler {
 
         // Account for cracked allowlist
         if (onlineMode && !CrackedAllowlist.get().contains(this.packet1Login.name)) {
-            //Server is running online mode
-            verifyMojangSession();
+            // Server is running online mode
+            if (usingModernAuth) {
+                // Modern auth completed in NetLoginHandler; skip legacy verification
+                getUserUUID();
+            } else {
+                verifyMojangSession();
+            }
         } else {
-            //Server is not running online mode
+            // Server is not running online mode or user is allowlisted as cracked
             getUserUUID();
         }
     }
@@ -317,5 +323,13 @@ public class LoginProcessHandler {
 
     private void setLoginSuccessful(boolean loginSuccessful) {
         this.loginSuccessful = loginSuccessful;
+    }
+
+    public void setUsingModernAuth(boolean modernAuth) {
+        this.usingModernAuth = modernAuth;
+    }
+
+    public boolean isUsingModernAuth() {
+        return this.usingModernAuth;
     }
 }

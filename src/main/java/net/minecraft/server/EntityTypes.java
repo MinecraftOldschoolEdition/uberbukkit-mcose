@@ -91,5 +91,6 @@ public class EntityTypes {
         a(EntityFallingSand.class, "FallingSand", 21);
         a(EntityMinecart.class, "Minecart", 40);
         a(EntityBoat.class, "Boat", 41);
+        a(EntitySnowman.class, "SnowMan", 97);
     }
 }

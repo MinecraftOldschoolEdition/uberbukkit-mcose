@@ -16,21 +16,13 @@ public class Packet255KickDisconnect extends Packet {
     }
 
     public void a(DataInputStream datainputstream) throws IOException {
-        // uberbukkit
-        if (this.pvn >= 11) {
-            this.a = a(datainputstream, 100);
-        } else {
-            this.a = datainputstream.readUTF();
-        }
+        // Match Poseidon/vanilla b1.7.3: always use Packet.a string encoding
+        this.a = a(datainputstream, 100);
     }
 
     public void a(DataOutputStream dataoutputstream) throws IOException {
-        // uberbukkit
-        if (this.pvn >= 11) {
-            a(this.a, dataoutputstream);
-        } else {
-            dataoutputstream.writeUTF(this.a);
-        }
+        // Match Poseidon/vanilla b1.7.3: always use Packet.a string encoding
+        a(this.a, dataoutputstream);
     }
 
     public void a(NetHandler nethandler) {

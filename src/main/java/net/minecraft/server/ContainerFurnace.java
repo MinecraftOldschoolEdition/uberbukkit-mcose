@@ -92,7 +92,17 @@ public class ContainerFurnace extends Container {
 
             itemstack = itemstack1.cloneItemStack();
             if (i == 2) {
-                this.a(itemstack1, 3, 39, true);
+                // Shift-click: move as much as possible from output up to 64
+                int moved = 0;
+                while (itemstack1 != null && moved < 64) {
+                    int before = itemstack1.count;
+                    this.a(itemstack1, 3, 39, true);
+                    int diff = before - (itemstack1 != null ? itemstack1.count : 0);
+                    if (diff <= 0) break;
+                    moved += diff;
+                    itemstack1 = ((Slot) this.e.get(2)).getItem();
+                    if (itemstack1 == null) break;
+                }
             } else if (i >= 3 && i < 30) {
                 this.a(itemstack1, 30, 39, false);
             } else if (i >= 30 && i < 39) {

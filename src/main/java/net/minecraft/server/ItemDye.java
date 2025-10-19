@@ -71,6 +71,22 @@ public class ItemDye extends Item {
             }
         }
 
+        // Bonemeal on small mushrooms grows huge mushrooms (brown/red)
+        if (itemstack.getData() == 15) {
+            int id = world.getTypeId(i, j, k);
+            if (id == Block.BROWN_MUSHROOM.id || id == Block.RED_MUSHROOM.id) {
+                if (!world.isStatic) {
+                    WorldGenBigMushroom gen = new WorldGenBigMushroom(id == Block.BROWN_MUSHROOM.id ? 0 : 1);
+                    world.setTypeId(i, j, k, 0);
+                    if (!gen.a(world, world.random, i, j, k)) {
+                        world.setTypeId(i, j, k, id); // restore if failed
+                    }
+                    --itemstack.count;
+                }
+                return true;
+            }
+        }
+
         return false;
     }
 

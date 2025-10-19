@@ -27,7 +27,7 @@ public class GiveCommand extends VanillaCommand {
         Player player = Bukkit.getPlayerExact(args[0]);
 
         if (player != null) {
-            Material material = Material.matchMaterial(args[1]);
+            Material material = matchMaterialSmart(args[1]);
 
             if (material != null) {
                 Command.broadcastCommandMessage(sender, "Giving " + player.getName() + " some " + material.getId() + "(" + material + ")");
@@ -53,6 +53,27 @@ public class GiveCommand extends VanillaCommand {
         }
 
         return true;
+    }
+
+    private Material matchMaterialSmart(String token) {
+        // Try standard Bukkit name first
+        Material m = Material.matchMaterial(token);
+        if (m != null) return m;
+        // Try legacy names like minecraft:<name>
+        String lower = token.toLowerCase();
+        if (lower.startsWith("minecraft:")) {
+            String simple = lower.substring("minecraft:".length());
+            m = Material.matchMaterial(simple);
+            if (m != null) return m;
+        }
+        // Try numeric id
+        try {
+            int id = Integer.parseInt(token);
+            for (Material mat : Material.values()) {
+                if (mat.getId() == id) return mat;
+            }
+        } catch (NumberFormatException ignore) {}
+        return null;
     }
 
     @Override

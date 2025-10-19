@@ -99,7 +99,29 @@ public class ContainerWorkbench extends Container {
 
             itemstack = itemstack1.cloneItemStack();
             if (i == 0) {
-                this.a(itemstack1, 10, 46, true);
+                // Shift-click crafts repeatedly, consuming ingredients each time via SlotResult.a
+                int moved = 0;
+                Slot resultSlot = (Slot) this.e.get(0);
+                while (moved < 64) {
+                    ItemStack craft = this.resultInventory.getItem(0);
+                    if (craft == null) break;
+
+                    ItemStack toMove = craft.cloneItemStack();
+                    int amount = toMove.count;
+                    // Merge into player inventory (void method mutates toMove.count)
+                    this.a(toMove, 10, 46, true);
+                    // If any remain, inventory couldn't accept the full craft output
+                    if (toMove.count > 0) {
+                        break;
+                    }
+
+                    moved += amount;
+                    // Consume one craft worth of ingredients
+                    resultSlot.a(craft);
+                    // Recompute result and update clients
+                    this.a((IInventory) this.craftInventory);
+                }
+                return itemstack;
             } else if (i >= 10 && i < 37) {
                 this.a(itemstack1, 37, 46, false);
             } else if (i >= 37 && i < 46) {

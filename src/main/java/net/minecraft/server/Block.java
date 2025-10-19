@@ -16,7 +16,7 @@ public class Block {
     public static final StepSound f = new StepSound("gravel", 1.0F, 1.0F);
     public static final StepSound g = new StepSound("grass", 1.0F, 1.0F);
     public static final StepSound h = new StepSound("stone", 1.0F, 1.0F);
-    public static final StepSound i = new StepSound("stone", 1.0F, 1.5F);
+    public static final StepSound i = new StepSound("stone", 1.5F, 1.0F);
     public static final StepSound j = new StepSoundStone("stone", 1.0F, 1.0F);
     public static final StepSound k = new StepSound("cloth", 1.0F, 1.0F);
     public static final StepSound l = new StepSoundSand("sand", 1.0F, 1.0F);
@@ -120,12 +120,18 @@ public class Block {
     public static final Block GLOWSTONE = !UberbukkitConfig.getInstance().getBoolean("mechanics.glowstone_pre1_6_6", false) ? (new BlockLightStone(89, 105, Material.STONE)).c(0.3F).a(j).a(1.0F).a("lightgem") : (new BlockLightStone(89, 105, Material.SHATTERABLE)).c(0.3F).a(j).a(1.0F).a("lightgem");
     public static final BlockPortal PORTAL = (BlockPortal) (new BlockPortal(90, 14)).c(-1.0F).a(j).a(0.75F).a("portal");
     public static final Block JACK_O_LANTERN = (new BlockPumpkin(91, 102, true)).c(1.0F).a(e).a(1.0F).a("litpumpkin").g();
+    public static final Block BROWN_MUSHROOM_CAP = (new BlockMushroomCap(99, Material.WOOD, 142, 0)).c(0.2F).a(e).a("mushroom").g();
+    public static final Block RED_MUSHROOM_CAP = (new BlockMushroomCap(100, Material.WOOD, 142, 1)).c(0.2F).a(e).a("mushroom").g();
     public static final Block CAKE_BLOCK = (new BlockCake(92, 121)).c(0.5F).a(k).a("cake").n().g();
     public static final Block DIODE_OFF = (new BlockDiode(93, false)).c(0.0F).a(e).a("diode").n().g();
     public static final Block DIODE_ON = (new BlockDiode(94, true)).c(0.0F).a(0.625F).a(e).a("diode").n().g();
     // uberbukkit
     public static final Block LOCKED_CHEST = !UberbukkitConfig.getInstance().getBoolean("worldgen.generate_steveco_chests", false) ? (new BlockLockedChest(95)).c(0.0F).a(1.0F).a(e).a("lockedchest").a(true).g() : (new BlockLockedChest(95)).c(-1.0F).a(1.0F).a(e).a("lockedchest").g();
     public static final Block TRAP_DOOR = (new BlockTrapdoor(96, Material.WOOD)).c(3.0F).a(e).a("trapdoor").n().g();
+    public static final Block FENCE_GATE = (new BlockFenceGate(188, 4)).c(2.0F).b(5.0F).a(e).a("fenceGate").g();
+    public static final Block STONE_BRICK = (new BlockStoneBrick(98)).c(1.5F).b(10.0F).a(h).a("stonebricksmooth");
+    public static final Block STONE_BRICK_STAIRS = (new BlockStairs(109, STONE_BRICK)).a("stairsStoneBrickSmooth").g();
+    public static final Block BRICK_STAIRS = (new BlockStairs(108, BRICK)).a("stairsBrick").g();
     public static final List<Integer> leafDecayBlacklist = Arrays.asList(PoseidonConfig.getInstance().getTreeBlacklistIDs());
     public int textureId;
     public final int id;

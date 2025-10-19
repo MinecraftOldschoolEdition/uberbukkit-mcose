@@ -5,8 +5,7 @@ import org.bukkit.craftbukkit.generator.*;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.weather.LightningStrikeEvent;
 import org.bukkit.generator.ChunkGenerator;
-
-import uk.betacraft.uberbukkit.UberbukkitConfig;
+import net.minecraft.server.Alpha.AlphaChunkProvider;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -55,23 +54,28 @@ public class WorldServer extends World implements BlockChangeDelegate {
 
     protected IChunkProvider b() {
         IChunkLoader ichunkloader = this.w.a(this.worldProvider);
-
-        // CraftBukkit start
-        InternalChunkGenerator gen;
+        IChunkProvider provider;
 
         if (this.generator != null) {
-            gen = new CustomChunkGenerator(this, this.getSeed(), this.generator);
+            provider = new CustomChunkGenerator(this, this.getSeed(), this.generator);
         } else if (this.worldProvider instanceof WorldProviderHell) {
-            gen = new NetherChunkGenerator(this, this.getSeed());
+            provider = new NetherChunkGenerator(this, this.getSeed());
         } else if (this.worldProvider instanceof WorldProviderSky) {
-            gen = new SkyLandsChunkGenerator(this, this.getSeed());
+            provider = new SkyLandsChunkGenerator(this, this.getSeed());
         } else {
-            gen = new NormalChunkGenerator(this, this.getSeed());
+            int terrainType = this.worldData.getTerrainType();
+            if (terrainType == 1 || terrainType == 5) {
+                provider = new AlphaChunkProvider(this, this.getSeed());
+            } else if (terrainType == 2) {
+                 provider = new ChunkProviderFlat(this, this.getSeed(), false);
+            } else if (terrainType == 3) {
+                 provider = new ChunkProviderSky(this, this.getSeed());
+            } else {
+                provider = new ChunkProviderGenerate(this, this.getSeed());
+            }
         }
 
-        this.chunkProviderServer = new ChunkProviderServer(this, ichunkloader, gen);
-        // CraftBukkit end
-
+        this.chunkProviderServer = new ChunkProviderServer(this, ichunkloader, provider);
         return this.chunkProviderServer;
     }
 
@@ -120,12 +124,10 @@ public class WorldServer extends World implements BlockChangeDelegate {
         LightningStrikeEvent lightning = new LightningStrikeEvent(this.getWorld(), (org.bukkit.entity.LightningStrike) entity.getBukkitEntity());
         this.getServer().getPluginManager().callEvent(lightning);
 
-        // uberbukkit
-        if (lightning.isCancelled() || !UberbukkitConfig.getInstance().getBoolean("mechanics.do_weather", true)) {
+        if (lightning.isCancelled()) {
             return false;
         }
 
-        // uberbukkit
         if (super.strikeLightning(entity)) {
             this.server.serverConfigurationManager.sendPacketNearby(entity.locX, entity.locY, entity.locZ, 512.0D, this.dimension, new Packet71Weather(entity));
             // CraftBukkit end
@@ -167,7 +169,7 @@ public class WorldServer extends World implements BlockChangeDelegate {
         explosion.a = flag;
         explosion.a();
         explosion.a(false);
-         */
+        */
         this.server.serverConfigurationManager.sendPacketNearby(d0, d1, d2, 64.0D, this.dimension, new Packet60Explosion(d0, d1, d2, f, explosion.blocks));
         // CraftBukkit end
         return explosion;
@@ -190,15 +192,14 @@ public class WorldServer extends World implements BlockChangeDelegate {
         if (flag != this.v()) {
             // CraftBukkit start - only sending weather packets to those affected
             for (int i = 0; i < this.players.size(); ++i) {
-                EntityPlayer player = ((EntityPlayer) this.players.get(i));
-                if (player.world == this) {
-                    player.netServerHandler.sendPacket(new Packet70Bed(flag ? 2 : 1));
+                if (((EntityPlayer) this.players.get(i)).world == this) {
+                    ((EntityPlayer) this.players.get(i)).netServerHandler.sendPacket(new Packet70Bed(flag ? 2 : 1));
                 }
             }
             // CraftBukkit end
         }
     }
-
+    
     // Poseidon
     public PlayerManager getPlayerManager() {
         return this.manager;

@@ -132,6 +132,13 @@ public class ServerConfigurationManager {
         }
         // CraftBukkit end
 
+        // Broadcast player join for Tab overlay
+        try {
+            int initialPing = (entityplayer.netServerHandler != null) ? entityplayer.netServerHandler.b() : 0;
+            Packet201PlayerInfo joinInfo = new Packet201PlayerInfo(entityplayer.name, true, initialPing);
+            this.sendAll(joinInfo);
+        } catch (Throwable ignore) {}
+
         // Poseidon Start
         // Notify staff of Poseidon update if they are op or have poseidon.update permission
         if (PoseidonConfig.getInstance().getConfigBoolean("settings.update-checker.notify-staff.enabled", true) && Poseidon.getServer().isUpdateAvailable()) {
@@ -183,6 +190,12 @@ public class ServerConfigurationManager {
         this.server.getWorldServer(entityplayer.dimension).kill(entityplayer);
         this.players.remove(entityplayer);
         this.getPlayerManager(entityplayer.dimension).removePlayer(entityplayer);
+
+        // Broadcast player leave for Tab overlay
+        try {
+            Packet201PlayerInfo leaveInfo = new Packet201PlayerInfo(entityplayer.name, false, 0);
+            this.sendAll(leaveInfo);
+        } catch (Throwable ignore) {}
 
         return playerQuitEvent.getQuitMessage(); // CraftBukkit
     }
@@ -292,6 +305,26 @@ public class ServerConfigurationManager {
         entityplayer1.netServerHandler.teleport(new Location(worldserver.getWorld(), entityplayer1.locX, entityplayer1.locY, entityplayer1.locZ, entityplayer1.yaw, entityplayer1.pitch));
         // CraftBukkit end
         this.a(entityplayer1, worldserver);
+        // Notify client to enable/disable Alpha terrain rendering based on overworld terrain type on world change
+        try {
+            int terrainType = worldserver.worldData != null ? worldserver.worldData.getTerrainType() : 0;
+            // Apply only when attaching to overworld
+            if (worldserver.worldProvider != null && !(worldserver.worldProvider instanceof WorldProviderHell)) {
+                if (terrainType == 1 || terrainType == 5) {
+                    // Mirror login behavior for Alpha: deferred alpha enable before first chunk (code 5)
+                    entityplayer1.netServerHandler.sendPacket(new Packet70Bed(5));
+                    // Explicit ALPHA_SNOW indicator so client uses snowy biomes for precipitation
+                    if (terrainType == 5) {
+                        entityplayer1.netServerHandler.sendPacket(new Packet70Bed(10));
+                    }
+                    // And immediate alpha override in case chunks already started
+                    entityplayer1.netServerHandler.sendPacket(new Packet70Bed(8));
+                } else {
+                    // Explicitly disable alpha override
+                    entityplayer1.netServerHandler.sendPacket(new Packet70Bed(9));
+                }
+            }
+        } catch (Throwable ignore) {}
         this.getPlayerManager(entityplayer1.dimension).addPlayer(entityplayer1);
         worldserver.addEntity(entityplayer1);
         this.players.add(entityplayer1);
@@ -678,6 +711,18 @@ public class ServerConfigurationManager {
         if (worldserver.v()) {
             entityplayer.netServerHandler.sendPacket(new Packet70Bed(1));
         }
+        // Poseidon parity: ensure HUD matches gamemode on world attach
+        try {
+            entityplayer.updateContainer();
+            if (entityplayer.gameMode == 1) {
+                entityplayer.netServerHandler.sendPacket(new Packet70Bed(3));
+            } else {
+                entityplayer.netServerHandler.sendPacket(new Packet70Bed(4));
+            }
+            if (worldserver.worldData != null && worldserver.worldData.getTerrainType() == 3) {
+                entityplayer.netServerHandler.sendPacket(new Packet70Bed(2));
+            }
+        } catch (Throwable ignore) {}
     }
 
     public void updateClient(EntityPlayer entityplayer) {

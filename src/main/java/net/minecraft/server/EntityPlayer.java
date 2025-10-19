@@ -83,6 +83,23 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
     public UUID playerUUID; //Project Poseidon
     public org.bukkit.Location compassTarget;
     // CraftBukkit end
+    // Project Poseidon - Update container for creative/survival mode switch
+    public void updateContainer() {
+        this.defaultContainer = new ContainerPlayer(this.inventory, !this.world.isStatic);
+        this.activeContainer = this.defaultContainer;
+        if (this.netServerHandler != null) {
+            try {
+                this.activeContainer.a((ICrafting) this);
+            } catch (IllegalArgumentException already) {
+                // ignore duplicate listener during edge cases
+            }
+        }
+    }
+
+    public void setGameMode(int gameMode) {
+        this.gameMode = gameMode;
+        this.updateContainer();
+    }
 
     public void spawnIn(World world) {
         super.spawnIn(world);
@@ -114,7 +131,11 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
         if (this.netServerHandler.networkManager.pvn <= 6) {
             this.netServerHandler.refreshInventory();
         }
-        this.activeContainer.a((ICrafting) this);
+        try {
+            this.activeContainer.a((ICrafting) this);
+        } catch (IllegalArgumentException already) {
+            // Listener already registered; ignore to avoid duplicate registration during login
+        }
     }
 
     public ItemStack[] getEquipment() {

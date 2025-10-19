@@ -109,7 +109,7 @@ public class UberbukkitConfig extends Configuration {
         writeDefault("mechanics.spawn_wolves", true);
         writeDefault("mechanics.spawn_slimes", true);
         writeDefault("mechanics.do_weather", true);
-        writeDefault("mechanics.allow_ladder_gap", false);
+        writeDefault("mechanics.allow_ladder_gap", true);
         writeDefault("mechanics.old_slab_recipe", false);
         writeDefault("mechanics.burning_pig_drop_cooked_meat", true);
         writeDefault("mechanics.spawn_sheep_with_shades_of_black", true);

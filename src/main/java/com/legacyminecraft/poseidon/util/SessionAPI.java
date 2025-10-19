@@ -6,6 +6,7 @@ import org.json.simple.parser.JSONParser;
 import javax.net.ssl.HttpsURLConnection;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
 import java.net.URL;
 
 /**
@@ -17,6 +18,7 @@ import java.net.URL;
  */
 public class SessionAPI {
     public static final String SESSION_BASE = "http://session.minecraft.net/game/";
+    public static final String MODERN_SESSION_BASE = "https://sessionserver.mojang.com/session/minecraft/";
 
     public static boolean hasJoined(String username, String serverId) {
         HTTPResponse response = httpGetRequest(SESSION_BASE + String.format("checkserver.jsp?user=%s&serverId=%s", username, serverId));
@@ -26,15 +28,22 @@ public class SessionAPI {
 
     public static void hasJoined(String username, String serverId, String ip, SessionRequestRunnable callback) {
         try {
-            boolean checkIP = ip == "127.0.0.1" || ip == "localhost";
+            boolean checkIP = ip != "127.0.0.1" && ip != "localhost";
             StringBuilder sb = new StringBuilder();
-            sb.append("https://sessionserver.mojang.com/session/minecraft/hasJoined");
+            sb.append(MODERN_SESSION_BASE + "hasJoined");
             sb.append("?username=" + username);
             sb.append("&serverId=" + serverId);
             if (checkIP) sb.append("&ip=" + ip);
             String requestUrl = sb.toString();
 
             HTTPResponse response = httpGetRequest(requestUrl);
+
+            // Handle 204 No Content
+            if (response.getResponseCode() == 204 || response.getResponse().isEmpty()) {
+                callback.callback(204, "", "", "");
+                return;
+            }
+
             JSONObject obj = (JSONObject) new JSONParser().parse(response.getResponse());
             String res_username = (obj.containsKey("name") ? (String) obj.get("name") : "nousername");
             String res_uuid = (obj.containsKey("id") ? (String) obj.get("id") : "nouuid");
@@ -42,22 +51,31 @@ public class SessionAPI {
             callback.callback(response.getResponseCode(), res_username, res_uuid, res_ip);
         } catch (Exception ex) {
             System.out.println(String.format("Failed to authenticate session for '%s': %s", username, ex.getMessage()));
-            // TODO: if debug, print the stack trace
+            callback.callback(-1, "", "", "");
         }
     }
 
     private static HTTPResponse httpGetRequest(String url) {
         try {
             URL obj = new URL(url);
-            HttpsURLConnection con = (HttpsURLConnection) obj.openConnection();
+            HttpURLConnection con = (url.startsWith("https") ? (HttpsURLConnection) obj.openConnection() : (HttpURLConnection) obj.openConnection());
             con.setRequestMethod("GET");
-            con.setRequestProperty("User-Agent", "Project-Poseidon/0");
+            con.setRequestProperty("User-Agent", "Project-Poseidon/1.0");
+            con.setConnectTimeout(5000);
+            con.setReadTimeout(5000);
+
+            int responseCode = con.getResponseCode();
+
+            if (responseCode == 204) {
+                return new HTTPResponse("", responseCode);
+            }
+
             BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
             String inputLine;
             StringBuffer response = new StringBuffer();
             while ((inputLine = in.readLine()) != null) { response.append(inputLine); }
             in.close();
-            return new HTTPResponse(response.toString(), con.getResponseCode());
+            return new HTTPResponse(response.toString(), responseCode);
         } catch (Exception ex) {
             ex.printStackTrace();
             return new HTTPResponse("", -1);

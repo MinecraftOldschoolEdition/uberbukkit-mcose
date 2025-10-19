@@ -198,6 +198,11 @@ public abstract class Packet {
         a(0, true, true, Packet0KeepAlive.class);
         a(1, true, true, Packet1Login.class);
         a(2, true, true, Packet2Handshake.class);
+        // Modern auth packets
+        a(252, false, true, Packet252SharedKey.class); // client -> server
+        a(253, true, false, Packet253EncryptionRequest.class); // server -> client
+        // Legacy server list ping (client -> server)
+        a(254, false, true, Packet254ServerPing.class);
         a(3, true, true, Packet3Chat.class);
         a(4, true, false, Packet4UpdateTime.class);
         a(5, true, true, Packet5EntityEquipment.class);
@@ -250,9 +255,12 @@ public abstract class Packet {
         a(104, true, false, Packet104WindowItems.class);
         a(105, true, false, Packet105CraftProgressBar.class);
         a(106, true, true, Packet106Transaction.class);
+        // Creative inventory slot sync
+        a(107, true, true, Packet107CreativeSetSlot.class);
         a(130, true, true, Packet130UpdateSign.class);
         a(131, true, false, Packet131.class);
         a(200, true, false, Packet200Statistic.class);
+        a(201, true, false, Packet201PlayerInfo.class);
         a(255, true, true, Packet255KickDisconnect.class);
         packetClassToIdMap.put(ArtificialPacket53BlockChange.class, 53); //Poseidon - Artificial Block Change Packet
         e = new HashMap();

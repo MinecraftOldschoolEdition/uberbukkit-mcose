@@ -396,6 +396,8 @@ public class EntityTrackerEntry {
 
             if (this.tracker instanceof EntityBoat) {
                 return new Packet23VehicleSpawn(this.tracker, 1);
+            } else if (this.tracker instanceof EntitySnowman) {
+                return new Packet24MobSpawn((EntityLiving) this.tracker);
             } else if (this.tracker instanceof IAnimal) {
                 return new Packet24MobSpawn((EntityLiving) this.tracker);
             } else if (this.tracker instanceof EntityFish) {

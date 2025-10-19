@@ -21,6 +21,9 @@ public class WorldData {
     private int m;
     private boolean n;
     private int o;
+    // UberBukkit: terrain type and alpha snow flag
+    private int terrainType = 0; // 0=DEFAULT,1=ALPHA,2=FLAT,3=SKY,5=ALPHA_SNOW
+    private boolean alphaSnow = false;
 
     public WorldData(NBTTagCompound nbttagcompound) {
         this.a = nbttagcompound.getLong("RandomSeed");
@@ -40,6 +43,16 @@ public class WorldData {
             this.h = nbttagcompound.k("Player");
             this.i = this.h.e("Dimension");
         }
+        if (nbttagcompound.hasKey("TerrainType")) {
+            this.terrainType = nbttagcompound.e("TerrainType");
+        }
+        if (nbttagcompound.hasKey("AlphaSnow")) {
+            this.alphaSnow = nbttagcompound.m("AlphaSnow");
+        }
+        // Load gamerules, defaulting to true if not present
+        if (nbttagcompound.hasKey("DoDayNightCycle")) this.doDayNightCycle = nbttagcompound.m("DoDayNightCycle");
+        if (nbttagcompound.hasKey("TNTExplodes")) this.tntexplodes = nbttagcompound.m("TNTExplodes");
+        if (nbttagcompound.hasKey("MobGriefing")) this.mobGriefing = nbttagcompound.m("MobGriefing");
     }
 
     public WorldData(long i, String s) {
@@ -63,6 +76,8 @@ public class WorldData {
         this.l = worlddata.l;
         this.o = worlddata.o;
         this.n = worlddata.n;
+        this.terrainType = worlddata.terrainType;
+        this.alphaSnow = worlddata.alphaSnow;
     }
 
     public NBTTagCompound a() {
@@ -107,6 +122,11 @@ public class WorldData {
         if (nbttagcompound1 != null) {
             nbttagcompound.a("Player", nbttagcompound1);
         }
+        nbttagcompound.a("TerrainType", this.terrainType);
+        nbttagcompound.a("AlphaSnow", this.alphaSnow);
+        nbttagcompound.a("DoDayNightCycle", this.doDayNightCycle);
+        nbttagcompound.a("TNTExplodes", this.tntexplodes);
+        nbttagcompound.a("MobGriefing", this.mobGriefing);
     }
 
     public long getSeed() {
@@ -200,4 +220,23 @@ public class WorldData {
     public void setWeatherDuration(int i) {
         this.m = i;
     }
+
+    // UberBukkit: terrain type support
+    public int getTerrainType() { return this.terrainType; }
+    public void setTerrainType(int t) { this.terrainType = t; }
+    public boolean isSnowWorld() { return this.alphaSnow; }
+    public void setSnowWorld(boolean flag) { this.alphaSnow = flag; }
+
+    // Gamerules
+    private boolean doDayNightCycle = true;
+    private boolean tntexplodes = true;
+    private boolean mobGriefing = true;
+
+    // Poseidon gamerule compatibility: default to true if absent
+    public boolean getDoDayNightCycle() { return this.doDayNightCycle; }
+    public void setDoDayNightCycle(boolean v) { this.doDayNightCycle = v; }
+    public boolean getTntexplodes() { return this.tntexplodes; }
+    public void setTntexplodes(boolean v) { this.tntexplodes = v; }
+    public boolean getMobGriefing() { return this.mobGriefing; }
+    public void setMobGriefing(boolean v) { this.mobGriefing = v; }
 }

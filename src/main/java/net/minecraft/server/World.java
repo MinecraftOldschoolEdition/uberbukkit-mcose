@@ -1,24 +1,11 @@
 package net.minecraft.server;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Random;
-import java.util.Set;
-import java.util.TreeSet;
-import java.util.UUID;
-
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.block.BlockState;
 import org.bukkit.craftbukkit.CraftServer;
 import org.bukkit.craftbukkit.CraftWorld;
 import org.bukkit.craftbukkit.event.CraftEventFactory;
-import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockCanBuildEvent;
 import org.bukkit.event.block.BlockFormEvent;
 import org.bukkit.event.block.BlockPhysicsEvent;
@@ -30,16 +17,12 @@ import org.bukkit.event.weather.ThunderChangeEvent;
 import org.bukkit.event.weather.WeatherChangeEvent;
 import org.bukkit.generator.ChunkGenerator;
 
-import uk.betacraft.uberbukkit.Uberbukkit;
-import uk.betacraft.uberbukkit.UberbukkitConfig;
+import java.util.*;
 
 // CraftBukkit start
 // CraftBukkit end
 
 public class World implements IBlockAccess {
-
-    // uberbukkit
-    private static final boolean pre1_5_placement_rules = UberbukkitConfig.getInstance().getBoolean("mechanics.pre_b1_5_block_placement_rules", false);
 
     public boolean a = false;
     private List C = new ArrayList();
@@ -86,6 +69,7 @@ public class World implements IBlockAccess {
     private List R;
     public boolean isStatic;
     public final Map<Explosion.CacheKey, Float> explosionDensityCache = new HashMap<>(); // Paper - Optimize explosions
+    private int saveTickCounter = 0; // Decouple periodic saves from time-of-day gamerule
 
     public WorldChunkManager getWorldChunkManager() {
         return this.worldProvider.b;
@@ -134,12 +118,23 @@ public class World implements IBlockAccess {
         this.isStatic = false;
         this.w = idatamanager;
         this.worldMaps = new WorldMapCollection(idatamanager);
-        this.worldData = idatamanager.c();
-        this.s = this.worldData == null;
+        this.worldData = idatamanager.c(); // c() is loadWorldInfo()
+        // Debug world constructor log removed
+
+        this.s = this.worldData == null; // s is isNewWorld internally (field name)
+        if (this.worldData == null) {
+             this.worldData = new WorldData(i, s);
+        }
+
         if (worldprovider != null) {
             this.worldProvider = worldprovider;
         } else if (this.worldData != null && this.worldData.h() == -1) {
             this.worldProvider = WorldProvider.byDimension(-1);
+        } else if (this.worldData != null && this.worldData.getTerrainType() == 3) {
+            // Use WorldProviderSky for sky terrain type, even in overworld
+            this.worldProvider = new WorldProviderSky();
+            // Override the dimension to stay as overworld
+            this.worldProvider.dimension = 0;
         } else {
             this.worldProvider = WorldProvider.byDimension(0);
         }
@@ -157,6 +152,10 @@ public class World implements IBlockAccess {
         this.chunkProvider = this.b();
         if (flag) {
             this.c();
+        } else if (this.worldData != null && this.worldData.getTerrainType() == 3 && 
+                   this.worldData.c() == 0 && this.worldData.d() == 90 && this.worldData.e() == 0) {
+            // If it's a sky world with the default spawn we just set in MinecraftServer, run spawn finding
+            this.c();
         }
 
         this.g();
@@ -171,35 +170,113 @@ public class World implements IBlockAccess {
         return new ChunkProviderLoadOrGenerate(this, ichunkloader, this.worldProvider.getChunkProvider());
     }
 
-    protected void c() {
+    protected void c() { 
+        // Debug world.c enter log removed
         this.isLoading = true;
-        int i = 0;
-        byte b0 = 64;
+        
+        // Check if this is a sky world - either by provider type OR terrain type
+        boolean isSkyWorld = (this.worldProvider instanceof WorldProviderSky) || 
+                            (this.worldData != null && this.worldData.getTerrainType() == 3);
+        
+        if (isSkyWorld) {
+            
+            int spawnX = 0;
+            int spawnZ = 0;
+            int spawnY = 0; 
+            int attempts = 0;
+            boolean foundValidSpawnPoint = false;
 
-        int j;
+            while (attempts < 2000 && !foundValidSpawnPoint) {
+                spawnX = this.random.nextInt(128) - 64; 
+                spawnZ = this.random.nextInt(128) - 64;
 
-        // CraftBukkit start
+                // For sky terrain in overworld, we need to check differently than WorldProviderSky
+                boolean canSpawnHere = true;
+                if (this.worldProvider instanceof WorldProviderSky) {
+                    canSpawnHere = ((WorldProviderSky) this.worldProvider).canSpawn(spawnX, spawnZ);
+                } else {
+                    // For overworld with sky terrain, check if there's a solid platform in sky island range
+                    for (int y = 120; y >= 60; y--) {
+                        int blockId = this.getTypeId(spawnX, y, spawnZ);
+                        if (blockId != 0 && Block.byId[blockId] != null && Block.byId[blockId].material.isSolid()) {
+                            if (this.getTypeId(spawnX, y + 1, spawnZ) == 0) {
+                                canSpawnHere = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (canSpawnHere) { 
+                    int surfaceY = this.e(spawnX, spawnZ); // this.e is findTopSolidBlock, returns Y of air block ABOVE solid ground
+                    
+                    // MODIFIED: Ensure surfaceY is at a reasonable height for sky worlds
+                    if (surfaceY >= 60 && surfaceY < 126) { // Was: surfaceY > 0 && surfaceY < 126
+                        int groundBlockId = this.getTypeId(spawnX, surfaceY - 1, spawnZ);
+                        boolean groundIsSolid = (groundBlockId != 0 && Block.byId[groundBlockId] != null && Block.byId[groundBlockId].material.isSolid());
+
+                        if (groundIsSolid) {
+                            // Check if space for player (feet at surfaceY, head at surfaceY+1) is air
+                            if (this.getTypeId(spawnX, surfaceY, spawnZ) == 0 && this.getTypeId(spawnX, surfaceY + 1, spawnZ) == 0) {
+                                spawnY = surfaceY; // This is the Y for player's feet
+                                foundValidSpawnPoint = true;
+                                System.out.println("[ProjectPoseidon World.c] Sky World: Found valid island spawn at (" + spawnX + "," + spawnY + "," + spawnZ + ")");
+                                break; 
+                            }
+                        }
+                    }
+                }
+                attempts++;
+            }
+
+            if (!foundValidSpawnPoint) {
+                System.err.println("[ProjectPoseidon World.c] Sky World: Could not find a suitable natural island spawn after " + attempts + " attempts! Using safe air spawn at 0,90,0 (no platform)." );
+                spawnX = 0; 
+                spawnZ = 0;
+                spawnY = 90; // Air spawn; relies on server preventing immediate damage until client lands
+            }
+            
+            // Final clearance check for player body at the chosen/fallback spawnY
+            if (this.getTypeId(spawnX, spawnY, spawnZ) != 0) { 
+                this.setRawTypeId(spawnX, spawnY, spawnZ, 0); 
+            }
+            if (this.getTypeId(spawnX, spawnY + 1, spawnZ) != 0){ 
+                this.setRawTypeId(spawnX, spawnY + 1, spawnZ, 0); 
+            }
+
+            this.worldData.setSpawn(spawnX, spawnY, spawnZ);
+            System.out.println("[ProjectPoseidon World.c] Sky world initial spawn FINALIZED to: " + spawnX + "," + spawnY + "," + spawnZ);
+            this.isLoading = false;
+            return; 
+        }
+        
+        // Original logic for non-sky worlds or if Bukkit generator provides spawn:
+        int i = 0; 
+        byte b0 = 64; 
+        int j; 
+
         if (this.generator != null) {
-            Random rand = new Random(this.getSeed());
-            Location spawn = this.generator.getFixedSpawnLocation(((WorldServer) this).getWorld(), rand);
+            Random randForGenerator = new Random(this.getSeed()); 
+            Location spawn = this.generator.getFixedSpawnLocation(this.getWorld(), randForGenerator);
 
             if (spawn != null) {
-                if (spawn.getWorld() != ((WorldServer) this).getWorld()) {
+                if (spawn.getWorld() != this.getWorld()) {
                     throw new IllegalStateException("Cannot set spawn point for " + this.worldData.name + " to be in another world (" + spawn.getWorld().getName() + ")");
                 } else {
                     this.worldData.setSpawn(spawn.getBlockX(), spawn.getBlockY(), spawn.getBlockZ());
+                    System.out.println("[ProjectPoseidon World.c] Initial spawn set by Bukkit generator to: " + spawn.getBlockX() + "," + spawn.getBlockY() + "," + spawn.getBlockZ());
                     this.isLoading = false;
                     return;
                 }
             }
         }
-
+        
+        System.out.println("[ProjectPoseidon World.c] Using default spawn search logic for non-sky world.");
         for (j = 0; !this.canSpawn(i, j); j += this.random.nextInt(64) - this.random.nextInt(64)) {
             i += this.random.nextInt(64) - this.random.nextInt(64);
         }
-        // CraftBukkit end
-
-        this.worldData.setSpawn(i, b0, j);
+        this.worldData.setSpawn(i, b0, j); 
+        System.out.println("[ProjectPoseidon World.c] Initial spawn (default search or non-sky) set to: " + i + "," + b0 + "," + j);
         this.isLoading = false;
     }
 
@@ -297,11 +374,6 @@ public class World implements IBlockAccess {
     // CraftBukkit end
 
     public boolean setRawTypeIdAndData(int i, int j, int k, int l, int i1) {
-        // uberbukkit
-        if (!Uberbukkit.getProtocolHandler().canReceiveBlockItem(l)) {
-            return false;
-        }
-
         if (i >= -32000000 && k >= -32000000 && i < 32000000 && k <= 32000000) {
             if (j < 0) {
                 return false;
@@ -318,11 +390,6 @@ public class World implements IBlockAccess {
     }
 
     public boolean setRawTypeId(int i, int j, int k, int l) {
-        // uberbukkit
-        if (!Uberbukkit.getProtocolHandler().canReceiveBlockItem(l)) {
-            return false;
-        }
-
         if (i >= -32000000 && k >= -32000000 && i < 32000000 && k <= 32000000) {
             if (j < 0) {
                 return false;
@@ -366,10 +433,10 @@ public class World implements IBlockAccess {
         if (this.setRawData(i, j, k, l)) {
             int i1 = this.getTypeId(i, j, k);
 
-            if (Block.t[i1 & 255]) {
-                this.update(i, j, k, i1);
+            if (Block.t[i1 & 255]) { // Block.t seems to be Block.requiresSelfNotify
+                this.update(i, j, k, i1); // World.update (notifyBlockChange)
             } else {
-                this.applyPhysics(i, j, k, i1);
+                this.applyPhysics(i, j, k, i1); // World.applyPhysics (notifyBlocksOfNeighborChange)
             }
         }
     }
@@ -382,10 +449,29 @@ public class World implements IBlockAccess {
                 return false;
             } else {
                 Chunk chunk = this.getChunkAt(i >> 4, k >> 4);
+                int blockId = chunk.getTypeId(i & 15, j, k & 15);
+                boolean isFenceGate = (blockId == 188);
 
-                i &= 15;
-                k &= 15;
-                chunk.b(i, j, k, l);
+                if (isFenceGate) {
+                    System.out.println("[ServerWorld SET_RAW_DATA] For FENCE_GATE at (" + i + "," + j + "," + k + ") to meta: " + l + ". Current Block ID: " + blockId);
+                }
+
+                // CraftBukkit start
+                // org.bukkit.block.Block bblock = world.getBlockAt(i,j,k); // world is not defined here, should be this.world or this.getWorld()
+                org.bukkit.block.Block bblock = this.getWorld().getBlockAt(i,j,k); // Corrected world reference
+                BlockCanBuildEvent event = new BlockCanBuildEvent(bblock, bblock.getTypeId(), true);
+                // if(chunk.isEmpty(i & 15,j,k & 15)) event.setBuildable(true); // isEmpty is not a direct Chunk method
+                if((chunk.getTypeId(i & 15, j, k & 15) == 0)) event.setBuildable(true); // Corrected isEmpty check
+                this.getServer().getPluginManager().callEvent(event);
+                if (!event.isBuildable()) return false;
+                // CraftBukkit end
+
+                // Attempting to use 'b' as the obfuscated call to set metadata, as suggested by previous diffs.
+                // This assumes chunk.b(x,y,z,meta) is the server's way of calling what might be net.minecraft.src.Chunk.setBlockMetadata
+                // or an equivalent method.
+                chunk.b(i & 15, j, k & 15, l);
+
+                // this.g(i, j, k, l); // markBlocksDirtyVertical - this seems to be for lighting/rendering, not essential for state
                 return true;
             }
         } else {
@@ -507,12 +593,7 @@ public class World implements IBlockAccess {
             if (flag) {
                 int l = this.getTypeId(i, j, k);
 
-                boolean check = false;
-                if (Uberbukkit.getTargetPVN() >= 12) {
-                    check = l == Block.COBBLESTONE_STAIRS.id || l == Block.WOOD_STAIRS.id;
-                }
-
-                if (l == Block.STEP.id || l == Block.SOIL.id || check) {
+                if (l == Block.STEP.id || l == Block.SOIL.id || l == Block.COBBLESTONE_STAIRS.id || l == Block.WOOD_STAIRS.id) {
                     int i1 = this.a(i, j + 1, k, false);
                     int j1 = this.a(i + 1, j, k, false);
                     int k1 = this.a(i - 1, j, k, false);
@@ -867,7 +948,7 @@ public class World implements IBlockAccess {
 
 
     public boolean addEntity(Entity entity, SpawnReason spawnReason) { // Changed signature, added SpawnReason
-        // CraftBukkit end
+    // CraftBukkit end
         int i = MathHelper.floor(entity.locX / 16.0D);
         int j = MathHelper.floor(entity.locZ / 16.0D);
         boolean flag = false;
@@ -1572,10 +1653,6 @@ public class World implements IBlockAccess {
         }
 
         if (this.getTypeId(i, j, k) == Block.FIRE.id) {
-            if (entityhuman != null) {
-                BlockBreakEvent event = CraftEventFactory.callBlockBreakEvent(entityhuman, i, j, k);
-                if (event.isCancelled()) return;
-            }
             this.a(entityhuman, 1004, i, j, k, 0);
             this.setTypeId(i, j, k, 0);
         }
@@ -1632,9 +1709,6 @@ public class World implements IBlockAccess {
     }
 
     public boolean e(int i, int j, int k) {
-        if (UberbukkitConfig.getInstance().getBoolean("mechanics.pre_b1_6_block_opacity", false)) {
-            return this.p(i, j, k);
-        }
         Block block = Block.byId[this.getTypeId(i, j, k)];
 
         return block == null ? false : block.material.h() && block.b();
@@ -1738,54 +1812,57 @@ public class World implements IBlockAccess {
     }
 
     public void doTick() {
-        this.i();
-        long i;
+		this.i(); // Update weather each tick (ensure precipitation logic runs)
 
+        // Sleeping logic (advances time to morning if all players deeply sleeping)
         if (this.everyoneDeeplySleeping()) {
             boolean flag = false;
-
             if (this.allowMonsters && this.spawnMonsters >= 1) {
-                flag = SpawnerCreature.a(this, this.players);
+                flag = SpawnerCreature.a(this, this.players); // Original call
             }
-
             if (!flag) {
-                i = this.worldData.f() + 24000L;
-                this.worldData.a(i - i % 24000L);
-                this.s();
+                long timeToAdvance = this.worldData.f() + 24000L;
+                this.worldData.a(timeToAdvance - timeToAdvance % 24000L); // Set time to morning
+                this.s(); // Wake players
             }
         }
 
-        // CraftBukkit start - Only call spawner if we have players online and the world allows for mobs or animals
+        // CraftBukkit - Creature Spawning
         if ((this.allowMonsters || this.allowAnimals) && (this instanceof WorldServer && this.getServer().getHandle().players.size() > 0)) {
             SpawnerCreature.spawnEntities(this, this.allowMonsters, this.allowAnimals);
         }
-        // CraftBukkit end
 
-        this.chunkProvider.unloadChunks();
-        int j = this.a(1.0F);
+        // Unload chunks
+        this.chunkProvider.unloadChunks(); // Corrected from b() to unloadChunks()
 
-        if (j != this.f) {
-            this.f = j;
-
-            for (int k = 0; k < this.u.size(); ++k) {
-                ((IWorldAccess) this.u.get(k)).a();
+        // Update light levels
+        int j_light = this.a(1.0F); // skylightSubtracted - renamed to avoid conflict with loop var
+        if (j_light != this.f) {    // currentSkyLightSubtracted
+            this.f = j_light;
+            for (int k_loop = 0; k_loop < this.u.size(); ++k_loop) { // u is IWorldAccess list
+                ((IWorldAccess) this.u.get(k_loop)).a(); // Obfuscated: updateAllRenderers
             }
         }
 
-        i = this.worldData.f() + 1L;
-        if (i % (long) this.p == 0L) {
+        // Conditional Time Advancement & Periodic Save
+        long currentTickTime = this.worldData.f(); // getTime()
+        long nextTickTime = currentTickTime; 
+
+        if (this.worldData.getDoDayNightCycle()) { // Check gamerule
+            nextTickTime = currentTickTime + 1L; 
+        }
+
+        // Periodic save check decoupled from time-of-day so saves still occur when time is frozen
+        this.saveTickCounter++;
+        if (this.saveTickCounter >= this.p) { // p is worldTickFrequency
             this.save(false, (IProgressUpdate) null);
+            this.saveTickCounter = 0;
         }
 
-        // uberbukkit
-        if (this.worldProvider instanceof WorldProviderHell && Uberbukkit.getTargetPVN() < 12) {
-            this.worldData.a(18000);
-        } else {
-            this.worldData.a(i);
-        }
+        this.worldData.a(nextTickTime); // setTime() using the (conditionally) incremented value
 
-        this.a(false);
-        this.j();
+        this.a(false); // updateEntities (original call)
+        this.j();      // tickBlocksAndAmbiance (original call)
     }
 
     private void x() {
@@ -1798,7 +1875,40 @@ public class World implements IBlockAccess {
     }
 
     protected void i() {
-        if (!this.worldProvider.e) {
+		if (!this.worldProvider.e) {
+			// Alpha/Alpha Snow parity: enforce perpetual weather states to match client
+			int terrainType = this.worldData != null ? this.worldData.getTerrainType() : 0;
+			boolean isOverworld = (this.worldProvider != null && this.worldProvider.dimension == 0);
+			boolean isAlphaSnowWorld = isOverworld && (terrainType == 5 || (this.worldData != null && this.worldData.isSnowWorld()));
+			boolean isAlphaNormalWorld = isOverworld && (terrainType == 1 && (this.worldData == null || !this.worldData.isSnowWorld()));
+
+			if (isAlphaSnowWorld) {
+				// Force endless snowfall (no thunder) so snow layers/ice form consistently server-side
+				this.worldData.setStorm(true);
+				this.worldData.setWeatherDuration(Integer.MAX_VALUE / 2);
+				this.worldData.setThundering(false);
+				this.worldData.setThunderDuration(0);
+				// Smoothly ramp rain on, thunder off
+				this.i = this.j;
+				this.j = (float) Math.min(1.0D, (double) this.j + 0.01D);
+				this.k = this.l;
+				this.l = (float) Math.max(0.0D, (double) this.l - 0.01D);
+				return; // Skip vanilla toggling logic
+			}
+
+			if (isAlphaNormalWorld) {
+				// Force clear weather in ALPHA (non-snow) worlds for parity with client visuals
+				this.worldData.setStorm(false);
+				this.worldData.setWeatherDuration(0);
+				this.worldData.setThundering(false);
+				this.worldData.setThunderDuration(0);
+				// Smoothly ramp rain/thunder off
+				this.i = this.j;
+				this.j = (float) Math.max(0.0D, (double) this.j - 0.01D);
+				this.k = this.l;
+				this.l = (float) Math.max(0.0D, (double) this.l - 0.01D);
+				return; // Skip vanilla toggling logic
+			}
             if (this.m > 0) {
                 --this.m;
             }
@@ -1975,7 +2085,9 @@ public class World implements IBlockAccess {
                 l = k & 15;
                 j1 = k >> 8 & 15;
                 k1 = this.e(l + i, j1 + j);
-                if (this.getWorldChunkManager().getBiome(l + i, j1 + j).c() && k1 >= 0 && k1 < 128 && chunk.a(EnumSkyBlock.BLOCK, l, k1, j1) < 10) {
+                // Treat ALPHA_SNOW worlds as permanently cold for precipitation effects
+                boolean isColdOrAlphaSnow = this.getWorldChunkManager().getBiome(l + i, j1 + j).c() || (this.worldData != null && this.worldData.isSnowWorld());
+                if (isColdOrAlphaSnow && k1 >= 0 && k1 < 128 && chunk.a(EnumSkyBlock.BLOCK, l, k1, j1) < 10) {
                     l1 = chunk.getTypeId(l, k1 - 1, j1);
                     i2 = chunk.getTypeId(l, k1, j1);
                     if (this.v() && i2 == 0 && Block.SNOW.canPlace(this, l + i, k1, j1 + j) && l1 != 0 && l1 != Block.ICE.id && Block.byId[l1].material.isSolid()) {
@@ -1991,19 +2103,16 @@ public class World implements IBlockAccess {
                         // CraftBukkit end
                     }
 
-                    // uberbukkit
-                    boolean blocked = UberbukkitConfig.getInstance().getBoolean("mechanics.ice_generate_only_when_snowing", false) && !this.v();
-
                     // CraftBukkit start
-                    if (!blocked && l1 == Block.STATIONARY_WATER.id && chunk.getData(l, k1 - 1, j1) == 0) {
-                        BlockState blockState = this.getWorld().getBlockAt(l + i, k1 - 1, j1 + j).getState();
-                        blockState.setTypeId(Block.ICE.id);
+                        if (l1 == Block.STATIONARY_WATER.id && chunk.getData(l, k1 - 1, j1) == 0) {
+                            BlockState blockState = this.getWorld().getBlockAt(l + i, k1 - 1, j1 + j).getState();
+                            blockState.setTypeId(Block.ICE.id);
 
-                        BlockFormEvent iceBlockForm = new BlockFormEvent(blockState.getBlock(), blockState);
-                        this.getServer().getPluginManager().callEvent(iceBlockForm);
-                        if (!iceBlockForm.isCancelled()) {
-                            blockState.update(true);
-                        }
+                            BlockFormEvent iceBlockForm = new BlockFormEvent(blockState.getBlock(), blockState);
+                            this.getServer().getPluginManager().callEvent(iceBlockForm);
+                            if (!iceBlockForm.isCancelled()) {
+                                blockState.update(true);
+                            }
                     }
                     // CraftBukkit end
                 }
@@ -2036,7 +2145,8 @@ public class World implements IBlockAccess {
             for (int j = 0; j < i; ++j) {
                 NextTickListEntry nextticklistentry = (NextTickListEntry) this.E.first();
 
-                if (!flag && nextticklistentry.e > this.worldData.f()) {
+                // Project Poseidon - Don't check time if doDayNightCycle is false, so water/lava can still flow
+                if (!flag && this.worldData.getDoDayNightCycle() && nextticklistentry.e > this.worldData.f()) {
                     break;
                 }
 
@@ -2152,16 +2262,11 @@ public class World implements IBlockAccess {
         if (axisalignedbb != null && !this.containsEntity(axisalignedbb)) {
             defaultReturn = false; // CraftBukkit
         } else {
-            // uberbukkit - allow placing triple chests
-            if (pre1_5_placement_rules) {
-                defaultReturn = (block != Block.WATER && block != Block.STATIONARY_WATER && block != Block.LAVA && block != Block.STATIONARY_LAVA && block != Block.FIRE && block != Block.SNOW ? i > 0 && block == null && block1.canPlace(this, j, k, l) : true);
-            } else {
-                if (block == Block.WATER || block == Block.STATIONARY_WATER || block == Block.LAVA || block == Block.STATIONARY_LAVA || block == Block.FIRE || block == Block.SNOW) {
-                    block = null;
-                }
-
-                defaultReturn = i > 0 && block == null && block1.canPlace(this, j, k, l, i1); // CraftBukkit
+            if (block == Block.WATER || block == Block.STATIONARY_WATER || block == Block.LAVA || block == Block.STATIONARY_LAVA || block == Block.FIRE || block == Block.SNOW) {
+                block = null;
             }
+
+            defaultReturn = i > 0 && block == null && block1.canPlace(this, j, k, l, i1); // CraftBukkit
         }
 
         // CraftBukkit start
@@ -2349,8 +2454,7 @@ public class World implements IBlockAccess {
         return true;
     }
 
-    public void a(Entity entity, byte b0) {
-    }
+    public void a(Entity entity, byte b0) {}
 
     public IChunkProvider o() {
         return this.chunkProvider;
@@ -2454,11 +2558,7 @@ public class World implements IBlockAccess {
     }
 
     public boolean v() {
-        // uberbukkit
-        if (UberbukkitConfig.getInstance().getBoolean("mechanics.do_weather", true))
-            return (double) this.d(1.0F) > 0.2D;
-
-        return false;
+        return (double) this.d(1.0F) > 0.2D;
     }
 
     public boolean s(int i, int j, int k) {

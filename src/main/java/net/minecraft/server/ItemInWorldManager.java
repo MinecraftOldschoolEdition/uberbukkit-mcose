@@ -139,6 +139,11 @@ public class ItemInWorldManager {
         }
     }
 
+    // Project Poseidon - Enhanced creative mode check with debugging
+    public boolean isCreative() {
+        return this.player != null && this.player.gameMode == 1;
+    }
+
     // uberbukkit - make toolDamage from dig(...) accessible for getExpectedDigEnd()
     public float toolDamage = 1.0F;
 
@@ -199,7 +204,7 @@ public class ItemInWorldManager {
             ((CraftServer) Bukkit.getServer()).getHandle().sendPacketNearbyToScale(this.player, (double) i + 0.5D, (double) j + 0.5D, (double) k + 0.5D, vol1, ((WorldServer) this.player.world).dimension, new Packet62Sound(block.stepSound.getName(), (double) i + 0.5D, (double) j + 0.5D, (double) k + 0.5D, vol1, block.stepSound.getVolume2() * 0.5F));
         }
 
-        if (toolDamage >= 1.0F) {
+        if (this.isCreative() || toolDamage >= 1.0F) {
             // CraftBukkit end
             this.c(i, j, k);
         } else {
@@ -283,12 +288,12 @@ public class ItemInWorldManager {
         boolean flag = this.b(i, j, k);
         ItemStack itemstack = this.player.G();
 
-        if (flag && this.player.b(Block.byId[l])) {
+        if (flag && this.player.b(Block.byId[l]) && !this.isCreative()) {
             Block.byId[l].a(this.world, this.player, i, j, k, i1);
             ((EntityPlayer) this.player).netServerHandler.sendPacket(new Packet53BlockChange(i, j, k, this.world));
         }
 
-        if (itemstack != null) {
+        if (itemstack != null && !this.isCreative()) {
             itemstack.a(l, i, j, k, this.player);
             if (itemstack.count == 0) {
                 itemstack.a(this.player);
@@ -300,17 +305,24 @@ public class ItemInWorldManager {
     }
 
     public boolean useItem(EntityHuman entityhuman, World world, ItemStack itemstack) {
-        int i = itemstack.count;
-        ItemStack itemstack1 = itemstack.a(world, entityhuman);
+        int i = (itemstack == null ? 0 : itemstack.count);
+        ItemStack itemstack1 = (itemstack == null ? null : itemstack.a(world, entityhuman));
 
         if (itemstack1 == itemstack && (itemstack1 == null || itemstack1.count == i)) {
             return false;
         } else {
-            entityhuman.inventory.items[entityhuman.inventory.itemInHandIndex] = itemstack1;
-            if (itemstack1.count == 0) {
-                entityhuman.inventory.items[entityhuman.inventory.itemInHandIndex] = null;
+            if (this.isCreative()) {
+                // Restore original stack in creative mode
+                if (itemstack != null) {
+                    itemstack.count = i;
+                    entityhuman.inventory.items[entityhuman.inventory.itemInHandIndex] = itemstack;
+                }
+            } else {
+                entityhuman.inventory.items[entityhuman.inventory.itemInHandIndex] = itemstack1;
+                if (itemstack1 != null && itemstack1.count == 0) {
+                    entityhuman.inventory.items[entityhuman.inventory.itemInHandIndex] = null;
+                }
             }
-
             return true;
         }
     }

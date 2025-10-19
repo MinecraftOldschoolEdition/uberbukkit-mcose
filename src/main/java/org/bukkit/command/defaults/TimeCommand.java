@@ -10,7 +10,7 @@ public class TimeCommand extends VanillaCommand {
     public TimeCommand() {
         super("time");
         this.description = "Changes the time on each world";
-        this.usageMessage = "/time set <value>\n/time add <value>";
+        this.usageMessage = "/time set <value|day|noon|night|midnight>\n/time add <value>";
     }
 
     @Override
@@ -20,34 +20,39 @@ public class TimeCommand extends VanillaCommand {
             return false;
         }
 
-        int value = 0;
-
-        try {
-            value = Integer.parseInt(args[1]);
-        } catch (NumberFormatException ex) {
-            sender.sendMessage("Unable to convert time value, " + args[1]);
-            return true;
-        }
-
         if (args[0].equalsIgnoreCase("add")) {
+            int value;
+            try {
+                value = Integer.parseInt(args[1]);
+            } catch (NumberFormatException ex) {
+                sender.sendMessage("Unable to convert time value, " + args[1]);
+                return true;
+            }
             if (!sender.hasPermission("bukkit.command.time.add")) {
                 sender.sendMessage(ChatColor.RED + "You don't have permission to add to the time");
             } else {
                 for (World world : Bukkit.getWorlds()) {
                     world.setFullTime(world.getFullTime() + value);
                 }
-
                 Command.broadcastCommandMessage(sender, "Added " + value + " to time");
             }
         } else if (args[0].equalsIgnoreCase("set")) {
             if (!sender.hasPermission("bukkit.command.time.set")) {
                 sender.sendMessage(ChatColor.RED + "You don't have permission to set the time");
             } else {
-                for (World world : Bukkit.getWorlds()) {
-                    world.setTime(value);
+                Long target = parseNamedTime(args[1]);
+                if (target == null) {
+                    try {
+                        target = Long.parseLong(args[1]);
+                    } catch (NumberFormatException ex) {
+                        sender.sendMessage("Unable to convert time value, " + args[1]);
+                        return true;
+                    }
                 }
-
-                Command.broadcastCommandMessage(sender, "Set time to " + value);
+                for (World world : Bukkit.getWorlds()) {
+                    world.setTime(target);
+                }
+                Command.broadcastCommandMessage(sender, "Set time to " + args[1]);
             }
         } else {
             sender.sendMessage("Unknown method, use either \"add\" or \"set\"");
@@ -55,6 +60,14 @@ public class TimeCommand extends VanillaCommand {
         }
 
         return true;
+    }
+
+    private Long parseNamedTime(String name) {
+        if (name.equalsIgnoreCase("day")) return 1000L;       // sunrise-ish
+        if (name.equalsIgnoreCase("noon")) return 6000L;      // midday
+        if (name.equalsIgnoreCase("night")) return 13000L;    // sunset-ish
+        if (name.equalsIgnoreCase("midnight")) return 18000L; // midnight
+        return null;
     }
 
     @Override

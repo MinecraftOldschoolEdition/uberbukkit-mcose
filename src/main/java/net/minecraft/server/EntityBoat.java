@@ -4,8 +4,6 @@ import org.bukkit.Location;
 import org.bukkit.entity.Vehicle;
 import org.bukkit.event.vehicle.*;
 
-import uk.betacraft.uberbukkit.UberbukkitConfig;
-
 import java.util.List;
 
 // CraftBukkit start
@@ -55,8 +53,7 @@ public class EntityBoat extends Entity {
         return false;
     }
 
-    protected void b() {
-    }
+    protected void b() {}
 
     public AxisAlignedBB a_(Entity entity) {
         return entity.boundingBox;
@@ -122,20 +119,8 @@ public class EntityBoat extends Entity {
                     this.passenger.mount(this);
                 }
 
-                // uberbukkit - drop boat on damage, not planks & sticks
-                if (!UberbukkitConfig.getInstance().getBoolean("mechanics.boats.drop_boat_not_wood", false)) {
-                    int j;
-
-                    for (j = 0; j < 3; ++j) {
-                        this.a(Block.WOOD.id, 1, 0.0F);
-                    }
-
-                    for (j = 0; j < 2; ++j) {
-                        this.a(Item.STICK.id, 1, 0.0F);
-                    }
-                } else {
-                    this.a(Item.BOAT.id, 1, 0.0F);
-                }
+                // Drop a boat item instead of planks and sticks in modded physics
+                this.a(Item.BOAT.id, 1, 0.0F);
 
                 this.die();
             }
@@ -224,16 +209,9 @@ public class EntityBoat extends Entity {
                 this.motZ *= 0.9900000095367432D;
             }
         } else {
-            if (d0 < 1.0D) {
-                d3 = d0 * 2.0D - 1.0D;
-                this.motY += 0.03999999910593033D * d3;
-            } else {
-                if (this.motY < 0.0D) {
-                    this.motY /= 2.0D;
-                }
-
-                this.motY += 0.007000000216066837D;
-            }
+            // Use older boat buoyancy model (Beta 1.3_01 style): continuous buoyancy term without extra upward bias
+            d3 = d0 * 2.0D - 1.0D;
+            this.motY += 0.03999999910593033D * d3;
 
             if (this.passenger != null) {
                 this.motX += this.passenger.motX * 0.2D;
@@ -288,31 +266,8 @@ public class EntityBoat extends Entity {
                 }
             }
 
-            if (this.positionChanged && d4 > 0.15D) {
-                if (!this.world.isStatic) {
-
-                    if (UberbukkitConfig.getInstance().getBoolean("mechanics.boat.break_boat_on_collision", true)) {
-                        this.die();
-
-                        // uberbukkit - drop boat on damage, not planks & sticks
-                        if (!UberbukkitConfig.getInstance().getBoolean("mechanics.boats.drop_boat_not_wood", false)) {
-                            int k;
-
-                            for (k = 0; k < 3; ++k) {
-                                this.a(Block.WOOD.id, 1, 0.0F);
-                            }
-
-                            for (k = 0; k < 2; ++k) {
-                                this.a(Item.STICK.id, 1, 0.0F);
-                            }
-                        } else {
-                            this.a(Item.BOAT.id, 1, 0.0F);
-                        }
-                    }
-
-
-                }
-            } else {
+            // Do not break boats on wall collisions in modded physics; just apply normal friction
+            if (!(this.positionChanged && d4 > 0.15D)) {
                 this.motX *= 0.9900000095367432D;
                 this.motY *= 0.949999988079071D;
                 this.motZ *= 0.9900000095367432D;
@@ -403,11 +358,9 @@ public class EntityBoat extends Entity {
         }
     }
 
-    protected void b(NBTTagCompound nbttagcompound) {
-    }
+    protected void b(NBTTagCompound nbttagcompound) {}
 
-    protected void a(NBTTagCompound nbttagcompound) {
-    }
+    protected void a(NBTTagCompound nbttagcompound) {}
 
     public boolean a(EntityHuman entityhuman) {
         if (this.passenger != null && this.passenger instanceof EntityHuman && this.passenger != entityhuman) {

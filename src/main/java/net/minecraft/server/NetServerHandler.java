@@ -1,6 +1,7 @@
 package net.minecraft.server;
 
 import com.legacyminecraft.poseidon.Poseidon;
+import com.legacyminecraft.poseidon.PoseidonServer;
 import com.legacyminecraft.poseidon.event.PlayerSendPacketEvent;
 import com.projectposeidon.ConnectionType;
 import com.legacyminecraft.poseidon.PoseidonConfig;
@@ -59,7 +60,10 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     private int rawConnectionType = 0; //Project Poseidon - Create Variable
     private boolean receivedKeepAlive = false;
     private boolean firePacketEvents;
-
+    // Vanilla ordering: no pre-login buffering required
+    private boolean loginSent = true;
+    private java.util.List preLoginWorldPackets = null;
+    
     private final String msgPlayerLeave;
 
     public boolean isReceivedKeepAlive() {
@@ -69,6 +73,9 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     public void setReceivedKeepAlive(boolean receivedKeepAlive) {
         this.receivedKeepAlive = receivedKeepAlive;
     }
+
+    // markLoginPacketSent no-op (kept for compatibility)
+    public void markLoginPacketSent() { this.loginSent = true; }
 
     public NetServerHandler(MinecraftServer minecraftserver, NetworkManager networkmanager, EntityPlayer entityplayer) {
         this.minecraftServer = minecraftserver;
@@ -149,6 +156,18 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         if (this.f - this.g > 20) {
             this.sendPacket(new Packet0KeepAlive());
         }
+
+        // Periodically push updated ping to all clients for Tab overlay
+        try {
+            if ((MinecraftServer.currentTick - this.lastTick) >= 20) { // about once per second
+                this.lastTick = MinecraftServer.currentTick;
+                int currentPing = this.b();
+                if (this.player != null) {
+                    Packet201PlayerInfo update = new Packet201PlayerInfo(this.player.name, true, currentPing);
+                    this.minecraftServer.serverConfigurationManager.sendAll(update);
+                }
+            }
+        } catch (Throwable ignore) {}
 
         // uberbukkit - play breaking sound & animation for others
         if (this.mineExpire >= System.currentTimeMillis()) {
@@ -431,6 +450,8 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             d4 = d1 - this.player.locX;
             double d6 = d2 - this.player.locY;
             double d7 = d3 - this.player.locZ;
+
+            // Alpha parity: do not inject forward-based climb boost here; handled by collision logic
             double d14 = this.player.motX * this.player.motX + this.player.motY * this.player.motY + this.player.motZ * this.player.motZ;
             double d8 = d4 * d4 + d6 * d6 + d7 * d7;
 
@@ -467,7 +488,12 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
                 System.out.println("Expected " + this.player.locX + ", " + this.player.locY + ", " + this.player.locZ);
             }
 
-            this.player.setLocation(d1, d2, d3, f2, f3);
+            // Alpha parity: apply small upward impulse when pushing into ladders (supports ladder gaps)
+            double d2Adjusted = d2;
+            if (this.player.positionChanged && this.player.p() && d2 <= this.player.locY) {
+                d2Adjusted = this.player.locY + 0.2D;
+            }
+            this.player.setLocation(d1, d2Adjusted, d3, f2, f3);
             boolean flag2 = worldserver.getEntities(this.player, this.player.boundingBox.clone().shrink((double) f4, (double) f4, (double) f4)).size() == 0;
 
             if (flag && (flag1 || !flag2) && !this.player.isSleeping()) {
@@ -484,10 +510,14 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
                 bool = bukkitPlayer.isOp() || bukkitPlayer.hasPermission("uberbukkit.fly");
             }
 
-            if (!this.minecraftServer.allowFlight && !worldserver.b(axisalignedbb) && !bool) {
+            // Treat ladders (including ladder gaps via EntityLiving.p()) as valid support to avoid false fly checks
+            boolean supported = worldserver.b(axisalignedbb) || this.player.p();
+            if (!this.minecraftServer.allowFlight && !supported && !bool) {
                 if (d6 >= -0.03125D) {
                     ++this.h;
-                    if (this.h > 80) {
+            if (this.player != null && this.player instanceof EntityPlayer && ((EntityPlayer) this.player).gameMode == 1) {
+                this.h = 0; // Creative bypass
+            } else if (this.h > 80) {
                         a.warning(this.player.name + " was kicked for floating too long!");
                         this.disconnect("Flying is not enabled on this server");
                         return;
@@ -1317,6 +1347,39 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             this.player.a(false, true, true);
             this.checkMovement = false;
         }
+    }
+
+    // Creative inventory slot sync (client -> server)
+    public void handleCreativeSlot(Packet107CreativeSetSlot packet) {
+        if (this.player == null) return;
+        // Allow from true creative OR trusted modded clients (pvn >= 12) for pick-block support
+        boolean allow = (this.player.gameMode == 1) || (this.networkManager != null && this.networkManager.pvn >= 12);
+        if (!allow) return;
+        if (packet.slot == -1) {
+            if (packet.itemStack != null) {
+                int max = Math.min(64, packet.itemStack.getMaxStackSize());
+                if (packet.itemStack.count < 1) packet.itemStack.count = 1;
+                if (packet.itemStack.count > max) packet.itemStack.count = max;
+                this.player.a(packet.itemStack, true);
+            }
+            return;
+        }
+        int slot = packet.slot;
+        ItemStack stack = packet.itemStack;
+        if (stack != null) {
+            int max = Math.min(64, stack.getMaxStackSize());
+            if (stack.count < 1) stack.count = 1;
+            if (stack.count > max) stack.count = max;
+        }
+        if (slot >= 0 && slot < 36) {
+            this.player.inventory.items[slot] = stack;
+        } else if (slot >= 36 && slot < 45) {
+            this.player.inventory.items[slot - 36] = stack;
+        } else {
+            return;
+        }
+        ItemStack confirm = (slot >= 36 && slot < 45) ? this.player.inventory.items[slot - 36] : this.player.inventory.items[slot];
+        this.player.netServerHandler.sendPacket(new Packet103SetSlot(0, slot, confirm));
     }
 
     public void a(Packet0KeepAlive packet0KeepAlive) {

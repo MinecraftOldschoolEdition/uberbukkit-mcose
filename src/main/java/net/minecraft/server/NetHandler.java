@@ -103,6 +103,20 @@ public abstract class NetHandler {
         this.a((Packet) packet2handshake);
     }
 
+    // Modern auth packets
+    public void a(Packet252SharedKey packet252SharedKey) {
+        this.a((Packet) packet252SharedKey);
+    }
+
+    public void a(Packet253EncryptionRequest packet253EncryptionRequest) {
+        this.a((Packet) packet253EncryptionRequest);
+    }
+
+    // Legacy server list ping (0xFE)
+    public void a(Packet254ServerPing packet254serverping) {
+        this.a((Packet) packet254serverping);
+    }
+
     public void a(Packet24MobSpawn packet24mobspawn) {
         this.a((Packet) packet24mobspawn);
     }
@@ -225,5 +239,14 @@ public abstract class NetHandler {
 
     public void handle63Digging(Packet63Digging packet62) {
         this.a((Packet) packet62);
+    }
+
+    public void handleCreativeSlot(Packet107CreativeSetSlot packet107creativesetslot) {
+        this.a((Packet) packet107creativesetslot);
+    }
+
+    // Player list info (Tab overlay)
+    public void a(Packet201PlayerInfo packet201playerinfo) {
+        this.a((Packet) packet201playerinfo);
     }
 }
