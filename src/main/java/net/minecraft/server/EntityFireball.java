@@ -166,7 +166,8 @@ public class EntityFireball extends Entity {
                 this.world.getServer().getPluginManager().callEvent(event);
 
                 if (!event.isCancelled()) {
-                    // give 'this' instead of (Entity) null so we know what causes the damage
+                    // Pass 'this' (the fireball) as the entity causing the explosion
+                    // This allows World.createExplosion to check mobGriefing gamerule properly
                     this.world.createExplosion(this, this.locX, this.locY, this.locZ, event.getRadius(), event.getFire());
                 }
                 // CraftBukkit end

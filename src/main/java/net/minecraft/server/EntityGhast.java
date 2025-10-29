@@ -83,6 +83,13 @@ public class EntityGhast extends EntityFlying implements IMonster {
         if (this.target == null || this.h-- <= 0) {
             // CraftBukkit start
             Entity target = this.world.findNearbyPlayer(this, 100.0D);
+            // Ignore creative mode players (ghasts should not target creative players)
+            if (target != null && target instanceof EntityHuman) {
+                EntityHuman player = (EntityHuman) target;
+                if (player.gameMode == 1 || (player.capabilities != null && player.capabilities.isInvulnerable)) {
+                    target = null; // Ignore creative players
+                }
+            }
             if (target != null) {
                 EntityTargetEvent event = new EntityTargetEvent(this.getBukkitEntity(), target.getBukkitEntity(), EntityTargetEvent.TargetReason.CLOSEST_PLAYER);
                 this.world.getServer().getPluginManager().callEvent(event);

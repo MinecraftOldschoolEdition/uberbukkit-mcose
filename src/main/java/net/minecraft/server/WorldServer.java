@@ -67,9 +67,11 @@ public class WorldServer extends World implements BlockChangeDelegate {
             if (terrainType == 1 || terrainType == 5) {
                 provider = new AlphaChunkProvider(this, this.getSeed());
             } else if (terrainType == 2) {
-                 provider = new ChunkProviderFlat(this, this.getSeed(), false);
+                provider = new ChunkProviderFlat(this, this.getSeed(), false);
             } else if (terrainType == 3) {
-                 provider = new ChunkProviderSky(this, this.getSeed());
+                provider = new ChunkProviderSky(this, this.getSeed());
+            } else if (terrainType == 6) {
+                provider = new net.minecraft.server.Classic.ChunkProviderClassic(this, this.getSeed());
             } else {
                 provider = new ChunkProviderGenerate(this, this.getSeed());
             }

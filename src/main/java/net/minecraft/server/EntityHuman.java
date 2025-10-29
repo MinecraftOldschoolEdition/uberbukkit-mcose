@@ -235,6 +235,14 @@ public abstract class EntityHuman extends EntityLiving {
         }
 
         this.inventory.h();
+        // Multiplayer parity: send death tilt and smoke puff
+        if (!this.world.isStatic && this instanceof EntityPlayer) {
+            // status 3 indicates death animation on clients
+            this.world.a(this, (byte) 3);
+            // spawn death smoke
+            ((WorldServer) this.world).server.serverConfigurationManager.sendPacketNearby(this, this.locX, this.locY + 0.1D, this.locZ, 32.0D, ((WorldServer) this.world).dimension,
+                new Packet61(2001 /* aux effect id placeholder */, (int) Math.floor(this.locX), (int) Math.floor(this.locY), (int) Math.floor(this.locZ), 0));
+        }
         if (entity != null) {
             this.motX = (double) (-MathHelper.cos((this.af + this.yaw) * 3.1415927F / 180.0F) * 0.1F);
             this.motZ = (double) (-MathHelper.sin((this.af + this.yaw) * 3.1415927F / 180.0F) * 0.1F);

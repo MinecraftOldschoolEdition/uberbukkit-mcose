@@ -93,16 +93,21 @@ public class ItemInWorldManager {
 
                 this.damageDealt += block.getDamage(this.player);
 
-                // uberbukkit - play breaking sound for others
-                if (delaySound % 4.0F == 0.0F && block != null) {
-                    this.world.makeSound((double) i + 0.5D, (double) j + 0.5D, (double) k + 0.5D, block.stepSound.getName(), (block.stepSound.getVolume1() + 1.0F) / 8.0F, block.stepSound.getVolume2() * 0.5F);
-                    ((CraftServer) Bukkit.getServer()).getHandle().sendPacketNearby(player, i, j, k, 64D, player.dimension, new Packet63Digging(i, j, k, l, (float) this.damageDealt));
+                // uberbukkit - play breaking sound and send progress each tick
+                if (block != null) {
+                    if (delaySound % 4.0F == 0.0F) {
+                        this.world.makeSound((double) i + 0.5D, (double) j + 0.5D, (double) k + 0.5D, block.stepSound.getName(), (block.stepSound.getVolume1() + 1.0F) / 8.0F, block.stepSound.getVolume2() * 0.5F);
+                    }
+                    float elapsedTicks = (float) ((System.currentTimeMillis() - this.lastDigTick) / 50.0D);
+                    ((CraftServer) Bukkit.getServer()).getHandle().sendPacketNearby(player, i, j, k, 64D, player.dimension, new Packet63Digging(i, j, k, l, elapsedTicks));
                 }
 
                 delaySound++;
 
                 if (this.damageDealt >= 1.0F) {
                     this.c(i, j, k);
+                    // Inform clients to clear the overlay immediately
+                    ((CraftServer) Bukkit.getServer()).getHandle().sendPacketNearby(player, i, j, k, 64D, player.dimension, new Packet63Digging(i, j, k, l, -1.0F));
                     this.damageDealt = 0.0F;
                     this.c = 5;
                     delaySound = 0.0F;
@@ -128,6 +133,8 @@ public class ItemInWorldManager {
             if (j != 0) {
                 Block block = Block.byId[j];
                 float f = block.getDamage(this.player) * (float) (i + 1);
+                // Track absolute progress for accurate remote animation
+                this.damageDealt = (f > 1.0F) ? 1.0F : (f < 0.0F ? 0.0F : f);
 
                 if (f >= 1.0F) {
                     this.i = false;
@@ -135,6 +142,7 @@ public class ItemInWorldManager {
                 }
             } else {
                 this.i = false;
+                this.damageDealt = 0.0F;
             }
         }
     }
@@ -211,6 +219,8 @@ public class ItemInWorldManager {
             this.e = i;
             this.f = j;
             this.g = k;
+            this.damageDealt = 0.0F;
+            this.i = false; // reset timed progress; will be re-armed in a(int,int,int)
         }
     }
 
@@ -243,6 +253,11 @@ public class ItemInWorldManager {
 
     public long getExpectedDigEnd() {
         return (long) (1F / toolDamage / 0.0214285703109844D) + this.lastDigTick;
+    }
+
+    // Expose the last dig start time (ms since epoch) for precise progress calculation
+    public long getLastDigStart() {
+        return this.lastDigTick;
     }
 
     public int getCurrentMagic() {

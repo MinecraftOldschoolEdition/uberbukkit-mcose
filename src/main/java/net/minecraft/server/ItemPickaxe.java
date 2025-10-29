@@ -16,9 +16,27 @@ public class ItemPickaxe extends ItemTool {
 
     static {
         if (Uberbukkit.getTargetPVN() < 9) {
-            bk = new Block[] { Block.COBBLESTONE, Block.DOUBLE_STEP, Block.STEP, Block.STONE, Block.MOSSY_COBBLESTONE, Block.IRON_ORE, Block.IRON_BLOCK, Block.COAL_ORE, Block.GOLD_BLOCK, Block.GOLD_ORE, Block.DIAMOND_ORE, Block.DIAMOND_BLOCK, Block.ICE, Block.NETHERRACK, Block.LAPIS_ORE, Block.LAPIS_BLOCK };
+            bk = new Block[] {
+                Block.COBBLESTONE, Block.DOUBLE_STEP, Block.STEP, Block.STONE, Block.MOSSY_COBBLESTONE,
+                Block.IRON_ORE, Block.IRON_BLOCK, Block.COAL_ORE, Block.GOLD_BLOCK, Block.GOLD_ORE,
+                Block.DIAMOND_ORE, Block.DIAMOND_BLOCK, Block.ICE, Block.NETHERRACK,
+                Block.LAPIS_ORE, Block.LAPIS_BLOCK,
+                // Modern-effective additions for pickaxe
+                Block.REDSTONE_ORE, Block.GLOWING_REDSTONE_ORE,
+                Block.FURNACE, Block.BURNING_FURNACE, Block.DISPENSER,
+                Block.PISTON, Block.PISTON_STICKY, Block.PISTON_EXTENSION, Block.PISTON_MOVING
+            };
         } else {
-            bk = new Block[] { Block.COBBLESTONE, Block.DOUBLE_STEP, Block.STEP, Block.STONE, Block.SANDSTONE, Block.MOSSY_COBBLESTONE, Block.IRON_ORE, Block.IRON_BLOCK, Block.COAL_ORE, Block.GOLD_BLOCK, Block.GOLD_ORE, Block.DIAMOND_ORE, Block.DIAMOND_BLOCK, Block.ICE, Block.NETHERRACK, Block.LAPIS_ORE, Block.LAPIS_BLOCK };
+            bk = new Block[] {
+                Block.COBBLESTONE, Block.DOUBLE_STEP, Block.STEP, Block.STONE, Block.SANDSTONE, Block.MOSSY_COBBLESTONE,
+                Block.IRON_ORE, Block.IRON_BLOCK, Block.COAL_ORE, Block.GOLD_BLOCK, Block.GOLD_ORE,
+                Block.DIAMOND_ORE, Block.DIAMOND_BLOCK, Block.ICE, Block.NETHERRACK,
+                Block.LAPIS_ORE, Block.LAPIS_BLOCK, Block.STONE_BRICK,
+                // Modern-effective additions for pickaxe
+                Block.REDSTONE_ORE, Block.GLOWING_REDSTONE_ORE,
+                Block.FURNACE, Block.BURNING_FURNACE, Block.DISPENSER,
+                Block.PISTON, Block.PISTON_STICKY, Block.PISTON_EXTENSION, Block.PISTON_MOVING
+            };
         }
     }
 }

@@ -77,7 +77,11 @@ public class EntityCreature extends EntityLiving {
             if (this.target instanceof EntityHuman && ((EntityHuman) this.target).gameMode == 1) {
                 this.target = null;
             }
-            this.pathEntity = this.world.findPath(this, this.target, f);
+            if (this.target != null) {
+                this.pathEntity = this.world.findPath(this, this.target, f);
+            } else {
+                this.pathEntity = null;
+            }
         } else if (!this.e && (this.pathEntity == null && this.random.nextInt(80) == 0 || this.random.nextInt(80) == 0)) {
             this.B();
         }

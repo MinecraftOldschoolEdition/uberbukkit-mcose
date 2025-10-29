@@ -175,7 +175,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
                 return;
             }
 
-            if (this.networkManager.pvn < 9) return;
+            // Allow sending to all clients that support extension packets; Protocol layer will filter per-recipient
 
             delaySound++;
             if (delaySound % 4 != 0) return;
@@ -192,12 +192,21 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             this.minecraftServer.serverConfigurationManager.sendPacketNearbyToScale(this.player, (double) lastDigX + 0.5D, (double) lastDigY + 0.5D, (double) lastDigZ + 0.5D, vol1, ((WorldServer) this.player.world).dimension, new Packet62Sound(block.stepSound.getName(), (double) lastDigX + 0.5D, (double) lastDigY + 0.5D, (double) lastDigZ + 0.5D, vol1, block.stepSound.getVolume2() * 0.5F));
 
             if (lastDigFace != null) {
-                float progress = block.getDamage(this.player) * (float) (this.player.itemInWorldManager.getCurrentMagic() + 1);
-                if (progress > 1.0F) {
-                    progress = 1.0F;
-                }
+                // Compute progress based on exact elapsed time since dig start and toolDamage (blocks per tick)
+                long start = this.player.itemInWorldManager.getLastDigStart();
+                long now = System.currentTimeMillis();
+                double elapsedTicks = Math.max(0D, (now - start) / 50.0D);
+                float perTick = block.getDamage(this.player);
+                float progress = (float) (elapsedTicks * perTick);
+                if (progress > 1.0F) progress = 1.0F;
+                if (progress < 0.0F) progress = 0.0F;
 
                 this.minecraftServer.serverConfigurationManager.sendPacketNearby(player, lastDigX, lastDigY, lastDigZ, 64D, player.dimension, new Packet63Digging(lastDigX, lastDigY, lastDigZ, lastDigFace, progress));
+
+                if (progress >= 1.0F) {
+                    // Clear overlay immediately at completion
+                    this.minecraftServer.serverConfigurationManager.sendPacketNearby(player, lastDigX, lastDigY, lastDigZ, 64D, player.dimension, new Packet63Digging(lastDigX, lastDigY, lastDigZ, lastDigFace, -1.0F));
+                }
             }
         }
     }

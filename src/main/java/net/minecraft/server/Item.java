@@ -124,10 +124,11 @@ public class Item {
     public static Item RECORD_11     = (new ItemRecord(2010, "11")).a(10, 15).a("record");
     public static Item RECORD_WAIT   = (new ItemRecord(2011, "wait")).a(11, 15).a("record");
     // Uberbukkit - custom records to match client additions (shiftedIndex 2012..2015)
-    public static Item RECORD_ARIA_MATH   = (new ItemRecord(2012, "Aria Math")).a(12, 15).a("record");
-    public static Item RECORD_DOG         = (new ItemRecord(2013, "Dog")).a(13, 15).a("record");
+    // Record names should be lowercase (case-insensitive matching) to match standard records
+    public static Item RECORD_ARIA_MATH   = (new ItemRecord(2012, "aria math")).a(12, 15).a("record");
+    public static Item RECORD_DOG         = (new ItemRecord(2013, "dog")).a(13, 15).a("record");
     public static Item RECORD_CERTITUDES  = (new ItemRecord(2014, "certitudes")).a(14, 15).a("record");
-    public static Item RECORD_TSUKI_NO_KOIBUMI = (new ItemRecord(2015, "tsuki no koibumi")).a(15, 15).a("record");
+    public static Item RECORD_TSUKI_NO_KOIBUMI = (new ItemRecord(2015, "tsuku no koibumi")).a(15, 15).a("record");
     public final int id;
     protected int maxStackSize = 64;
     private int durability = 0;

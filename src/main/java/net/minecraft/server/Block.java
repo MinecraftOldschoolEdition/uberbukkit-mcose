@@ -304,7 +304,42 @@ public class Block {
     }
 
     public float getDamage(EntityHuman entityhuman) {
-        return this.strength < 0.0F ? 0.0F : (!entityhuman.b(this) ? 1.0F / this.strength / 100.0F : entityhuman.a(this) / this.strength / 30.0F);
+        // Base vanilla-like damage rate
+        float base = this.strength < 0.0F ? 0.0F : (!entityhuman.b(this) ? 1.0F / this.strength / 100.0F : entityhuman.a(this) / this.strength / 30.0F);
+
+        // Server-side modernization: apply same relative multipliers as our client for faster mining.
+        // Always apply on server to avoid client/server desync in break timing.
+        float mul = 1.0F;
+        // Obsidian significantly faster in modern versions
+        if (this == OBSIDIAN) {
+            mul = 6.0F;
+        // Ores noticeably faster
+        } else if (this == COAL_ORE || this == IRON_ORE || this == GOLD_ORE || this == DIAMOND_ORE ||
+                   this == LAPIS_ORE || this == REDSTONE_ORE || this == GLOWING_REDSTONE_ORE) {
+            mul = 2.0F;
+        // Storage ore blocks faster than default rock
+        } else if (this == GOLD_BLOCK || this == IRON_BLOCK || this == DIAMOND_BLOCK) {
+            mul = 1.75F;
+        // Common stone family (match cobblestone feel)
+        } else if (this == STONE || this == COBBLESTONE || this == STONE_BRICK || this == BRICK || this == SANDSTONE) {
+            mul = 1.75F;
+        // Utility blocks: furnaces and dispenser like cobblestone
+        } else if (this == FURNACE || this == BURNING_FURNACE || this == DISPENSER) {
+            mul = 1.75F;
+        // Stairs and slabs
+        } else if (this instanceof BlockStairs || this instanceof BlockStep) {
+            mul = 1.75F;
+        // Wood family (logs, planks, etc.)
+        } else if (this.material == Material.WOOD) {
+            mul = 1.5F;
+        // Dirt/grass/sand/clay family, with soul sand a touch faster
+        } else if (this.material == Material.EARTH || this.material == Material.GRASS || this.material == Material.SAND || this.material == Material.CLAY) {
+            mul = 1.4F;
+            if (this == SOUL_SAND) mul = 1.5F;
+        }
+        base *= mul;
+
+        return base;
     }
 
     public final void g(World world, int i, int j, int k, int l) {

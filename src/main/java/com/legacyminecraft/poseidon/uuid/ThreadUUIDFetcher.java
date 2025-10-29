@@ -18,6 +18,7 @@ public class ThreadUUIDFetcher extends Thread {
     //    final NetLoginHandler netLoginHandler;
     final LoginProcessHandler loginProcessHandler;
     final boolean useGetMethod;
+    private static volatile boolean warnedPostFailure = false; // reduce startup spam
 
     public ThreadUUIDFetcher(Packet1Login packet1Login, LoginProcessHandler loginProcessHandler, boolean useGetMethod) {
 //        this.netLoginHandler = netloginhandler; // The login handler
@@ -95,12 +96,29 @@ public class ThreadUUIDFetcher extends Thread {
                 loginProcessHandler.userUUIDReceived(uuid, true);
             }
         } catch (Exception e) {
-            System.out.println("[Poseidon] Mojang failed contact for user " + loginPacket.name + ":");
+            // First try a seamless fallback to GET to avoid disconnecting players on transient POST failures
+            if (!warnedPostFailure) {
+                warnedPostFailure = true;
+                System.out.println("[Poseidon] POST UUID fetch failed; falling back to GET. To use GET permanently, set settings.uuid-fetcher.method.value to GET.");
+                // Optional: one-line reason
+                if (e.getMessage() != null) {
+                    System.out.println("[Poseidon] POST error: " + e.getMessage());
+                }
+            }
+            // Attempt GET method path
+            try {
+                getMethod();
+                return; // handled by getMethod (either success or it cancels with a message)
+            } catch (Throwable ignore) {
+                // If GET path threw unexpectedly, fall through to original behavior
+            }
 
+            // As a last resort, keep original message and cancel
+            System.out.println("[Poseidon] Mojang failed contact for user " + loginPacket.name + ":");
             System.out.println("[Poseidon] If this issue persists, please utilize the GET method. Mojang's API frequently has issues with POST requests.");
             System.out.println("[Poseidon] You can do this by changing settings.uuid-fetcher.method.value to GET in the config");
-
-            e.printStackTrace();
+            // Reduce noise after initial warning
+            if (!warnedPostFailure && e != null) e.printStackTrace();
             loginProcessHandler.cancelLoginProcess(ChatColor.RED + "Sorry, we can't connect to Mojang currently, please try again later");
         }
 

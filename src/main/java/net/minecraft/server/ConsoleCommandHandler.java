@@ -264,7 +264,32 @@ public class ConsoleCommandHandler {
                                         } catch (NumberFormatException numberformatexception1) {
                                             icommandlistener.sendMessage("Unable to convert time value, " + astring[2]);
                                         }
-                                    } else if (s.toLowerCase().startsWith("say ")) {
+                    } else if (s.toLowerCase().startsWith("vanish")) {
+                        // Toggle vanish state for the executor if it is a player; otherwise require a target
+                        org.bukkit.command.CommandSender sender = null;
+                        if (this.listener instanceof ServerCommandListener) {
+                            sender = ((ServerCommandListener) this.listener).getSender();
+                        }
+                        if (sender instanceof org.bukkit.entity.Player) {
+                            org.bukkit.entity.Player bp = (org.bukkit.entity.Player) sender;
+                            boolean vanished = VanishAPI.toggle(bp);
+                            sender.sendMessage(vanished ? "You have vanished." : "You are now visible.");
+                        } else {
+                            String[] parts = s.split(" ");
+                            if (parts.length < 2) {
+                                icommandlistener.sendMessage("Usage: vanish <player>");
+                            } else {
+                                EntityPlayer ep = serverconfigurationmanager.i(parts[1]);
+                                if (ep == null) {
+                                    icommandlistener.sendMessage("Can't find user " + parts[1]);
+                                } else {
+                                    org.bukkit.entity.Player bp = (org.bukkit.entity.Player) ep.getBukkitEntity();
+                                    boolean vanished = VanishAPI.toggle(bp);
+                                    this.print(s1, (vanished ? "Vanished " : "Revealed ") + bp.getName());
+                                }
+                            }
+                        }
+                    } else if (s.toLowerCase().startsWith("say ")) {
                                         if (!checkPermission(listener, "say")) return true; // Craftbukkit
                                         s = s.substring(s.indexOf(" ")).trim();
                                         a.info("[" + s1 + "] " + s);

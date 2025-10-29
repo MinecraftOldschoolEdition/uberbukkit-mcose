@@ -54,6 +54,8 @@ public class SimpleCommandMap implements CommandMap {
         register("uberbukkit", new FlushInvCommand());
         register("uberbukkit", new UuidLookupCommand());
         register("uberbukkit", new CrackedAllowlistCommand());
+        register("minecraft", new uk.betacraft.uberbukkit.command.SetWorldSpawnCommand());
+        register("uberbukkit", new uk.betacraft.uberbukkit.command.VanishCommand("vanish"));
 
         register("bukkit", new VersionCommand("version"));
         register("bukkit", new ReloadCommand("reload"));

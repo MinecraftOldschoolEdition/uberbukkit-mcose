@@ -166,6 +166,15 @@ public class PlayerManager {
                         }
                     });
                 }
+                // Always bubble most-recently-added (closest to player movement) chunks to front for faster visibility
+                if (!entityplayer.chunkCoordIntPairQueue.isEmpty()) {
+                    java.util.LinkedList<ChunkCoordIntPair> q = (java.util.LinkedList<ChunkCoordIntPair>) entityplayer.chunkCoordIntPairQueue;
+                    // move last few entries (newest) to the front up to 8 items
+                    for (int n = 0; n < 8 && !q.isEmpty(); n++) {
+                        ChunkCoordIntPair last = q.removeLast();
+                        q.addFirst(last);
+                    }
+                }
                 // CraftBukkit end
             }
         }

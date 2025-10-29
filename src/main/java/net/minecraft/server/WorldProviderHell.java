@@ -24,6 +24,10 @@ public class WorldProviderHell extends WorldProvider {
     }
 
     public IChunkProvider getChunkProvider() {
+        // For Classic worlds, use Classic-style Nether generation (256x256 with lava borders)
+        if (this.a != null && this.a.worldData != null && this.a.worldData.getTerrainType() == 6) {
+            return new net.minecraft.server.Classic.ChunkProviderHellClassic(this.a, this.a.getSeed());
+        }
         return new ChunkProviderHell(this.a, this.a.getSeed());
     }
 

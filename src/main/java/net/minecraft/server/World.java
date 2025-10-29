@@ -250,6 +250,39 @@ public class World implements IBlockAccess {
             return; 
         }
         
+        // Classic world: fixed-size 256x256 map with centered spawn
+        if (this.worldData != null && this.worldData.getTerrainType() == 6) {
+            int bestX = 128;
+            int bestZ = 128;
+            int bestY = -1;
+            // Prefer solid ground at or above sea level (32) and within 0..255 bounds
+            int radius = 32;
+            outer:
+            for (int r = 0; r <= radius; r += 4) {
+                for (int dx = -r; dx <= r; dx += 4) {
+                    for (int dz = -r; dz <= r; dz += 4) {
+                        int sx = 128 + dx;
+                        int sz = 128 + dz;
+                        if (sx < 0 || sx > 255 || sz < 0 || sz > 255) continue;
+                        int y = this.f(sx, sz); // top solid block + 1
+                        if (y <= 0) continue;
+                        int groundId = this.getTypeId(sx, y - 1, sz);
+                        if (groundId == Block.WATER.id || groundId == Block.STATIONARY_WATER.id) continue; // skip ocean
+                        bestX = sx; bestZ = sz; bestY = y; break outer;
+                    }
+                }
+            }
+            if (bestY <= 0) {
+                bestY = 36; // fallback
+            }
+            // Ensure space for player
+            if (this.getTypeId(bestX, bestY, bestZ) != 0) this.setRawTypeId(bestX, bestY, bestZ, 0);
+            if (this.getTypeId(bestX, bestY + 1, bestZ) != 0) this.setRawTypeId(bestX, bestY + 1, bestZ, 0);
+            this.worldData.setSpawn(bestX, bestY, bestZ);
+            this.isLoading = false;
+            return;
+        }
+        
         // Original logic for non-sky worlds or if Bukkit generator provides spawn:
         int i = 0; 
         byte b0 = 64; 
@@ -374,6 +407,12 @@ public class World implements IBlockAccess {
     // CraftBukkit end
 
     public boolean setRawTypeIdAndData(int i, int j, int k, int l, int i1) {
+        // Prevent block placement/modification outside 256x256 in CLASSIC worlds
+        if (this.worldData != null && this.worldData.getTerrainType() == 6) {
+            if (i < 0 || i > 255 || k < 0 || k > 255) {
+                return false;
+            }
+        }
         if (i >= -32000000 && k >= -32000000 && i < 32000000 && k <= 32000000) {
             if (j < 0) {
                 return false;
@@ -390,6 +429,12 @@ public class World implements IBlockAccess {
     }
 
     public boolean setRawTypeId(int i, int j, int k, int l) {
+        // Prevent block placement/modification outside 256x256 in CLASSIC worlds
+        if (this.worldData != null && this.worldData.getTerrainType() == 6) {
+            if (i < 0 || i > 255 || k < 0 || k > 255) {
+                return false;
+            }
+        }
         if (i >= -32000000 && k >= -32000000 && i < 32000000 && k <= 32000000) {
             if (j < 0) {
                 return false;
@@ -1593,11 +1638,29 @@ public class World implements IBlockAccess {
     //Project Poseidon End
 
     public Explosion createExplosion(Entity entity, double d0, double d1, double d2, float f, boolean flag) {
-        Explosion explosion = new Explosion(this, entity, d0, d1, d2, f);
+        // Determine whether this explosion should damage blocks based on gamerules
+        boolean allowBlockDamage = true;
+        if (this.worldData != null) {
+            // TNT explosions obey "tntexplodes" gamerule
+            if (entity instanceof EntityTNTPrimed) {
+                allowBlockDamage = this.worldData.tntexplodes;
+            }
+            // Explosions caused by mobs (including fireballs from ghasts) obey "mobGriefing" gamerule
+            else if (entity instanceof EntityLiving || entity instanceof EntityFireball) {
+                allowBlockDamage = this.worldData.mobGriefing;
+            }
+        }
 
+        Explosion explosion = new Explosion(this, entity, d0, d1, d2, f);
         explosion.setFire = flag;
-        explosion.a();
-        explosion.a(true);
+        explosion.a(); // Calculates damage to entities & collects affected blocks
+        
+        if (allowBlockDamage) {
+            explosion.a(true); // Remove blocks + spawn particles
+        } else {
+            // If block damage is disabled, skip removing blocks but still play the sound/particles
+            this.makeSound(d0, d1, d2, "random.explode", 4.0F, (1.0F + (this.random.nextFloat() - this.random.nextFloat()) * 0.2F) * 0.7F);
+        }
         return explosion;
     }
 
@@ -2278,6 +2341,9 @@ public class World implements IBlockAccess {
     }
 
     public PathEntity findPath(Entity entity, Entity entity1, float f) {
+        if (entity == null || entity1 == null) {
+            return null;
+        }
         int i = MathHelper.floor(entity.locX);
         int j = MathHelper.floor(entity.locY);
         int k = MathHelper.floor(entity.locZ);

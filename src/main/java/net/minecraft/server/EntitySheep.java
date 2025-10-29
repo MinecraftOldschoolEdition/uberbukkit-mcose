@@ -8,6 +8,9 @@ public class EntitySheep extends EntityAnimal {
 
     public static final float[][] a = new float[][] { { 1.0F, 1.0F, 1.0F }, { 0.95F, 0.7F, 0.2F }, { 0.9F, 0.5F, 0.85F }, { 0.6F, 0.7F, 0.95F }, { 0.9F, 0.9F, 0.2F }, { 0.5F, 0.8F, 0.1F }, { 0.95F, 0.7F, 0.8F }, { 0.3F, 0.3F, 0.3F }, { 0.6F, 0.6F, 0.6F }, { 0.3F, 0.6F, 0.7F }, { 0.7F, 0.4F, 0.9F }, { 0.2F, 0.4F, 0.8F }, { 0.5F, 0.4F, 0.3F }, { 0.4F, 0.5F, 0.2F }, { 0.8F, 0.3F, 0.3F }, { 0.1F, 0.1F, 0.1F } };
 
+    // Eating animation/regrowth timer (mirrors 1.1 behavior)
+    private int eatTimer;
+
     public EntitySheep(World world) {
         super(world);
         this.texture = "/mob/sheep.png";
@@ -59,6 +62,59 @@ public class EntitySheep extends EntityAnimal {
 
     protected int j() {
         return Block.WOOL.id;
+    }
+
+    // Tick and animation hooks for eating grass and regrowing wool
+    public void R() {
+        super.R();
+        if (this.eatTimer > 0) {
+            --this.eatTimer;
+        }
+    }
+
+    protected void O() {
+        if (this.eatTimer <= 0) {
+            super.O();
+        }
+    }
+
+    protected void c_() {
+        super.c_();
+        int x;
+        int y;
+        int z;
+        if (!this.C() && this.eatTimer <= 0 && (this.random.nextInt(1000) == 0)) {
+            x = MathHelper.floor(this.locX);
+            y = MathHelper.floor(this.locY);
+            z = MathHelper.floor(this.locZ);
+            if ((this.world.getTypeId(x, y, z) == Block.LONG_GRASS.id && this.world.getData(x, y, z) == 1) || this.world.getTypeId(x, y - 1, z) == Block.GRASS.id) {
+                this.eatTimer = 40;
+                // Broadcast sheep eating animation to clients
+                if (!this.world.isStatic && this.world instanceof WorldServer) {
+                    ((WorldServer) this.world).a(this, (byte) 10);
+                }
+            }
+        } else if (this.eatTimer == 4) {
+            x = MathHelper.floor(this.locX);
+            y = MathHelper.floor(this.locY);
+            z = MathHelper.floor(this.locZ);
+            boolean ate = false;
+            if (this.world.getTypeId(x, y, z) == Block.LONG_GRASS.id) {
+                // Remove tall grass with effect
+                this.world.a("blockcrack_31_" + this.world.getData(x, y, z), x + 0.5D, y + 0.5D, z + 0.5D, 0.0D, 0.0D, 0.0D);
+                this.world.setTypeId(x, y, z, 0);
+                ate = true;
+            } else if (this.world.getTypeId(x, y - 1, z) == Block.GRASS.id) {
+                // Convert grass to dirt
+                this.world.a("blockcrack_2_0", x + 0.5D, y - 0.5D, z + 0.5D, 0.0D, 0.0D, 0.0D);
+                this.world.setTypeId(x, y - 1, z, Block.DIRT.id);
+                ate = true;
+            }
+
+            if (ate) {
+                this.setSheared(false);
+            }
+        }
     }
 
     public boolean a(EntityHuman entityhuman) {

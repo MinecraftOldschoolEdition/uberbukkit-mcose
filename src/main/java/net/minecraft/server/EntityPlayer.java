@@ -170,6 +170,10 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
     }
 
     public void die(Entity entity) {
+        // Send death status to trigger tilt on all clients before any other side effects
+        if (!this.world.isStatic) {
+            this.world.a(this, (byte) 3);
+        }
         // CraftBukkit start
         java.util.List<org.bukkit.inventory.ItemStack> loot = new java.util.ArrayList<org.bukkit.inventory.ItemStack>();
 
@@ -297,7 +301,7 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
                 Iterator iterator1 = this.chunkCoordIntPairQueue.iterator();
                 ArrayList arraylist1 = new ArrayList();
 
-                while (iterator1.hasNext() && arraylist.size() < 5) {
+                while (iterator1.hasNext() && arraylist.size() < 20) {
                     ChunkCoordIntPair chunkcoordintpair = (ChunkCoordIntPair) iterator1.next();
 
                     iterator1.remove();
@@ -307,6 +311,9 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
                         arraylist.add(chunk);
                         arraylist1.addAll(chunk.tileEntities.values());
                         // CraftBukkit end
+                    } else if (chunkcoordintpair != null) {
+                        // If not yet loaded, push back to the end of the queue instead of dropping it
+                        this.chunkCoordIntPairQueue.add(chunkcoordintpair);
                     }
                 }
 
@@ -316,6 +323,8 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
                     while (iterator2.hasNext()) {
                         Chunk chunk = (Chunk) iterator2.next();
 
+                        // Send pre-chunk ensure first to avoid invisible chunks on some clients
+                        this.netServerHandler.sendPacket(new Packet50PreChunk(chunk.x, chunk.z, true));
                         this.netServerHandler.sendPacket(new Packet51MapChunk(chunk.x * 16, 0, chunk.z * 16, 16, 128, 16, this.getWorldServer()));
                         this.getWorldServer().tracker.a(this, chunk);
                     }

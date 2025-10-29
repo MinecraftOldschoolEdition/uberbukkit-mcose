@@ -268,7 +268,7 @@ public class NetLoginHandler extends NetHandler {
             try {
                 int actualTerrainType = (worldserver.worldData != null ? worldserver.worldData.getTerrainType() : 0);
                 if (worldserver.worldProvider.dimension == 0) {
-                    if (actualTerrainType == 1 || actualTerrainType == 5) {
+                    if (actualTerrainType == 1 || actualTerrainType == 5 || actualTerrainType == 6) {
                         // ALPHA or ALPHA_SNOW visuals
                         netserverhandler.sendPacket(new Packet70Bed(5));
                         if (actualTerrainType == 5) {

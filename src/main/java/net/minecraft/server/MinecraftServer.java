@@ -250,6 +250,9 @@ public class MinecraftServer implements Runnable, ICommandListener {
                 } else if (this.configuredLevelType.equalsIgnoreCase("ALPHA_SNOW") || this.configuredLevelType.equalsIgnoreCase("ALPHA-SNOW") || this.configuredLevelType.equalsIgnoreCase("ALPHASNOW")) {
                     typeId = 5; // Match client ALPHA_SNOW ID
                     log.info("[MinecraftServer] Configured level-type ALPHA_SNOW maps to ID 5.");
+                } else if (this.configuredLevelType.equalsIgnoreCase("CLASSIC")) {
+                    typeId = 6; // CLASSIC terrain type
+                    log.info("[MinecraftServer] Configured level-type CLASSIC maps to ID 6.");
                 } else if (!this.configuredLevelType.equalsIgnoreCase("DEFAULT") && !this.configuredLevelType.equalsIgnoreCase("NORMAL")) {
                     log.warning("[MinecraftServer] Unknown level-type in server.properties: '" + this.configuredLevelType + "'. Defaulting to type ID 0.");
                 }

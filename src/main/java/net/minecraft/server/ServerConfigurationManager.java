@@ -153,6 +153,11 @@ public class ServerConfigurationManager {
 
         worldserver.addEntity(entityplayer);
         this.getPlayerManager(entityplayer.dimension).addPlayer(entityplayer);
+
+        // Apply vanish state for the joiner against already-vanished players
+        try {
+            VanishAPI.applyForJoiner(player);
+        } catch (Throwable ignore) {}
     }
 
     public void d(EntityPlayer entityplayer) {

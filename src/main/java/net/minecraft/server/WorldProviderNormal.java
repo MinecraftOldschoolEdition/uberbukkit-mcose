@@ -21,6 +21,9 @@ public class WorldProviderNormal extends WorldProvider {
             if (terrainType == 1 || terrainType == 5) { // 1 for ALPHA, 5 for ALPHA_SNOW
                 boolean snowWorld = (terrainType == 5) || (this.a.worldData != null && this.a.worldData.isSnowWorld());
                 this.b = new WorldChunkManagerAlpha(snowWorld ? BiomeBase.TAIGA : BiomeBase.PLAINS, this.a.getSeed(), snowWorld);
+            } else if (terrainType == 6) { // 6 for CLASSIC
+                // Match Alpha chunk manager for Classic for identical tinting/biome behavior
+                this.b = new WorldChunkManagerAlpha(BiomeBase.PLAINS, this.a.getSeed(), false);
             } else if (terrainType == 2) { // 2 for FLAT
                 this.b = new WorldChunkManagerFlat();
             } else if (terrainType == 3) { // 3 for SKY
@@ -46,6 +49,8 @@ public class WorldProviderNormal extends WorldProvider {
 
             if (terrainType == 1 || terrainType == 5) { // 1 for ALPHA, 5 for ALPHA_SNOW
                 return new net.minecraft.server.Alpha.AlphaChunkProvider(this.a, this.a.getSeed(), false);
+            } else if (terrainType == 6) { // 6 for CLASSIC
+                return new net.minecraft.server.Classic.ChunkProviderClassic(this.a, this.a.getSeed());
             } else if (terrainType == 2) { // 2 for FLAT
                 return new ChunkProviderFlat(this.a, this.a.getSeed(), false); // mapFeaturesEnabled = false
             } else if (terrainType == 3) { // 3 for SKY
