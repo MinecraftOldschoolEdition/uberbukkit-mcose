@@ -46,6 +46,8 @@ public class GameruleCommand extends VanillaCommand {
                 sender.sendMessage(args[0] + " = " + worldData.getTntexplodes());
             } else if (ruleName.equals("mobgriefing")) {
                 sender.sendMessage(args[0] + " = " + worldData.getMobGriefing());
+            } else if (ruleName.equals("doweathercycle")) {
+                sender.sendMessage(args[0] + " = " + worldData.getDoWeatherCycle());
             } else {
                 sender.sendMessage(ChatColor.RED + "Unknown game rule: " + args[0]);
                 return false;
@@ -76,6 +78,12 @@ public class GameruleCommand extends VanillaCommand {
                 }
             } else if (ruleName.equals("mobgriefing")) {
                 worldData.setMobGriefing(value);
+                sender.sendMessage("Game rule " + args[0] + " has been set to " + value);
+                if (!(sender instanceof org.bukkit.command.ConsoleCommandSender)) {
+                    Bukkit.getLogger().info("User " + sender.getName() + " set game rule " + args[0] + " to " + value);
+                }
+            } else if (ruleName.equals("doweathercycle")) {
+                worldData.setDoWeatherCycle(value);
                 sender.sendMessage("Game rule " + args[0] + " has been set to " + value);
                 if (!(sender instanceof org.bukkit.command.ConsoleCommandSender)) {
                     Bukkit.getLogger().info("User " + sender.getName() + " set game rule " + args[0] + " to " + value);

@@ -303,7 +303,6 @@ public class ChunkProviderHellClassic implements IChunkProvider {
         if (chunkX < 0 || chunkZ < 0 || chunkX > 15 || chunkZ > 15) {
             return;
         }
-        BlockSand.fallInstantly = true;
         int baseX = chunkX * 16;
         int baseZ = chunkZ * 16;
         this.rand.setSeed(this.worldObj.getSeed());
@@ -316,10 +315,8 @@ public class ChunkProviderHellClassic implements IChunkProvider {
             int x = baseX + this.rand.nextInt(16) + 8;
             int y = this.rand.nextInt(this.rand.nextInt(48) + 8);
             int z = baseZ + this.rand.nextInt(16) + 8;
-            (new WorldGenLiquids(Block.LAVA.id)).generate(this.worldObj, this.rand, x, y, z);
+            (new WorldGenLiquids(Block.LAVA.id)).a(this.worldObj, this.rand, x, y, z);
         }
-
-        BlockSand.fallInstantly = false;
     }
 
     public boolean isChunkLoaded(int x, int z) { return true; }

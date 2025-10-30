@@ -513,7 +513,16 @@ public abstract class EntityLiving extends Entity {
     public void a(float f, float f1) {
         double d0;
 
-        if (this.ad()) {
+        // Creative flying players should not be slowed or pushed by fluids
+        boolean bypassFluids = false;
+        if (this instanceof EntityHuman) {
+            EntityHuman ph = (EntityHuman) this;
+            if (ph.gameMode == 1 && !this.onGround) {
+                bypassFluids = true;
+            }
+        }
+
+        if (this.ad() && !bypassFluids) {
             d0 = this.locY;
             this.a(f, f1, 0.02F);
             this.move(this.motX, this.motY, this.motZ);
@@ -524,7 +533,7 @@ public abstract class EntityLiving extends Entity {
             if (this.positionChanged && this.d(this.motX, this.motY + 0.6000000238418579D - this.locY + d0, this.motZ)) {
                 this.motY = 0.30000001192092896D;
             }
-        } else if (this.ae()) {
+        } else if (this.ae() && !bypassFluids) {
             d0 = this.locY;
             this.a(f, f1, 0.02F);
             this.move(this.motX, this.motY, this.motZ);

@@ -72,6 +72,10 @@ public class EntitySlime extends EntityLiving implements IMonster {
     protected void c_() {
         this.U();
         EntityHuman entityhuman = this.world.findNearbyPlayer(this, 16.0D);
+        // Ignore creative players
+        if (entityhuman != null && entityhuman.gameMode == 1) {
+            entityhuman = null;
+        }
 
         if (entityhuman != null) {
             this.a(entityhuman, 10.0F, 20.0F);
@@ -120,7 +124,7 @@ public class EntitySlime extends EntityLiving implements IMonster {
     public void b(EntityHuman entityhuman) {
         int i = this.getSize();
 
-        if (i > 1 && this.e(entityhuman) && (double) this.f(entityhuman) < 0.6D * (double) i && entityhuman.damageEntity(this, i)) {
+        if (i > 1 && entityhuman != null && entityhuman.gameMode != 1 && this.e(entityhuman) && (double) this.f(entityhuman) < 0.6D * (double) i && entityhuman.damageEntity(this, i)) {
             this.world.makeSound(this, "mob.slimeattack", 1.0F, (this.random.nextFloat() - this.random.nextFloat()) * 0.2F + 1.0F);
         }
     }
@@ -139,6 +143,12 @@ public class EntitySlime extends EntityLiving implements IMonster {
 
     public boolean d() {
         Chunk chunk = this.world.getChunkAtWorldCoords(MathHelper.floor(this.locX), MathHelper.floor(this.locZ));
+        // Disable natural slime spawning in FLAT worlds
+        try {
+            if (this.world != null && this.world.worldData != null && this.world.worldData.getTerrainType() == 2 /* FLAT */) {
+                return false;
+            }
+        } catch (Throwable ignore) {}
 
         return (this.getSize() == 1 || this.world.spawnMonsters > 0) && this.random.nextInt(10) == 0 && chunk.a(987234911L).nextInt(10) == 0 && this.locY < 16.0D;
     }

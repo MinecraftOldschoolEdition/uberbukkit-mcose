@@ -219,6 +219,15 @@ public abstract class EntityHuman extends EntityLiving {
                 }
             }
         }
+
+        // Immediately extinguish Creative players when exiting lava or fire
+        if (this.gameMode == 1) {
+            boolean inLava = this.ae();
+            boolean inFire = this.world.d(this.boundingBox.shrink(0.0010D, 0.0010D, 0.0010D));
+            if (!inLava && !inFire && this.fireTicks > 0) {
+                this.fireTicks = 0;
+            }
+        }
     }
 
     private void i(Entity entity) {

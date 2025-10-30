@@ -367,13 +367,23 @@ public abstract class Entity {
             double d4 = this.locZ;
 
             if (this.bf) {
+                // Skip cobweb slowdown for Creative players while flying (server-side approximation)
+                boolean bypassWeb = false;
+                if (this instanceof EntityHuman) {
+                    EntityHuman ph = (EntityHuman) this;
+                    if (ph.gameMode == 1 && !this.onGround) {
+                        bypassWeb = true;
+                    }
+                }
                 this.bf = false;
-                d0 *= 0.25D;
-                d1 *= 0.05000000074505806D;
-                d2 *= 0.25D;
-                this.motX = 0.0D;
-                this.motY = 0.0D;
-                this.motZ = 0.0D;
+                if (!bypassWeb) {
+                    d0 *= 0.25D;
+                    d1 *= 0.05000000074505806D;
+                    d2 *= 0.25D;
+                    this.motX = 0.0D;
+                    this.motY = 0.0D;
+                    this.motZ = 0.0D;
+                }
             }
 
             double d5 = d0;
@@ -494,7 +504,6 @@ public abstract class Entity {
                     d1 = 0.0D;
                     d0 = 0.0D;
                 }
-
                 if (!this.bg && d6 != d1) {
                     d2 = 0.0D;
                     d1 = 0.0D;
@@ -516,7 +525,6 @@ public abstract class Entity {
                     this.boundingBox.b(axisalignedbb1);
                 } else {
                     double d12 = this.boundingBox.b - (double) ((int) this.boundingBox.b);
-
                     if (d12 > 0.0D) {
                         this.br = (float) ((double) this.br + d12 + 0.01D);
                     }

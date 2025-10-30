@@ -1553,7 +1553,16 @@ public class World implements IBlockAccess {
                 }
             }
 
-            if (vec3d.c() > 0.0D) {
+            // Bypass water push for Creative players while flying (server-side approximation)
+            boolean bypassWaterPush = false;
+            if (material == Material.WATER && entity instanceof EntityHuman) {
+                EntityHuman ph = (EntityHuman) entity;
+                if (ph.gameMode == 1 && !entity.onGround) {
+                    bypassWaterPush = true;
+                }
+            }
+
+            if (vec3d.c() > 0.0D && !bypassWaterPush) {
                 vec3d = vec3d.b();
                 double d1 = 0.014D;
 
@@ -1643,11 +1652,11 @@ public class World implements IBlockAccess {
         if (this.worldData != null) {
             // TNT explosions obey "tntexplodes" gamerule
             if (entity instanceof EntityTNTPrimed) {
-                allowBlockDamage = this.worldData.tntexplodes;
+                allowBlockDamage = this.worldData.getTntexplodes();
             }
             // Explosions caused by mobs (including fireballs from ghasts) obey "mobGriefing" gamerule
             else if (entity instanceof EntityLiving || entity instanceof EntityFireball) {
-                allowBlockDamage = this.worldData.mobGriefing;
+                allowBlockDamage = this.worldData.getMobGriefing();
             }
         }
 
@@ -1978,46 +1987,50 @@ public class World implements IBlockAccess {
 
             int i = this.worldData.getThunderDuration();
 
-            if (i <= 0) {
-                if (this.worldData.isThundering()) {
-                    this.worldData.setThunderDuration(this.random.nextInt(12000) + 3600);
-                } else {
-                    this.worldData.setThunderDuration(this.random.nextInt(168000) + 12000);
-                }
-            } else {
-                --i;
-                this.worldData.setThunderDuration(i);
+            if (this.worldData.getDoWeatherCycle()) {
                 if (i <= 0) {
-                    // CraftBukkit start
-                    ThunderChangeEvent thunder = new ThunderChangeEvent(this.getWorld(), !this.worldData.isThundering());
-                    this.getServer().getPluginManager().callEvent(thunder);
-                    if (!thunder.isCancelled()) {
-                        this.worldData.setThundering(!this.worldData.isThundering());
+                    if (this.worldData.isThundering()) {
+                        this.worldData.setThunderDuration(this.random.nextInt(12000) + 3600);
+                    } else {
+                        this.worldData.setThunderDuration(this.random.nextInt(168000) + 12000);
                     }
-                    // CraftBukkit end
+                } else {
+                    --i;
+                    this.worldData.setThunderDuration(i);
+                    if (i <= 0) {
+                        // CraftBukkit start
+                        ThunderChangeEvent thunder = new ThunderChangeEvent(this.getWorld(), !this.worldData.isThundering());
+                        this.getServer().getPluginManager().callEvent(thunder);
+                        if (!thunder.isCancelled()) {
+                            this.worldData.setThundering(!this.worldData.isThundering());
+                        }
+                        // CraftBukkit end
+                    }
                 }
             }
 
             int j = this.worldData.getWeatherDuration();
 
-            if (j <= 0) {
-                if (this.worldData.hasStorm()) {
-                    this.worldData.setWeatherDuration(this.random.nextInt(12000) + 12000);
-                } else {
-                    this.worldData.setWeatherDuration(this.random.nextInt(168000) + 12000);
-                }
-            } else {
-                --j;
-                this.worldData.setWeatherDuration(j);
+            if (this.worldData.getDoWeatherCycle()) {
                 if (j <= 0) {
-                    // CraftBukkit start
-                    WeatherChangeEvent weather = new WeatherChangeEvent(this.getWorld(), !this.worldData.hasStorm());
-                    this.getServer().getPluginManager().callEvent(weather);
-
-                    if (!weather.isCancelled()) {
-                        this.worldData.setStorm(!this.worldData.hasStorm());
+                    if (this.worldData.hasStorm()) {
+                        this.worldData.setWeatherDuration(this.random.nextInt(12000) + 12000);
+                    } else {
+                        this.worldData.setWeatherDuration(this.random.nextInt(168000) + 12000);
                     }
-                    // CraftBukkit end
+                } else {
+                    --j;
+                    this.worldData.setWeatherDuration(j);
+                    if (j <= 0) {
+                        // CraftBukkit start
+                        WeatherChangeEvent weather = new WeatherChangeEvent(this.getWorld(), !this.worldData.hasStorm());
+                        this.getServer().getPluginManager().callEvent(weather);
+
+                        if (!weather.isCancelled()) {
+                            this.worldData.setStorm(!this.worldData.hasStorm());
+                        }
+                        // CraftBukkit end
+                    }
                 }
             }
 

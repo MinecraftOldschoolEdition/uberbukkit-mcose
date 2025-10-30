@@ -97,6 +97,13 @@ public class LoginProcessHandler {
     private void getUserUUID() {
         //UUID uuid = UUIDManager.getInstance().getUUIDFromUsername(packet1Login.name, true);
         long unixTime = (System.currentTimeMillis() / 1000L);
+        // If the server is in offline mode, do not contact Mojang at all – immediately use an offline UUID
+        if (!this.onlineMode) {
+            UUID offlineUUID = UUIDManager.generateOfflineUUID(packet1Login.name);
+            this.userUUIDReceived(offlineUUID, false);
+            return;
+        }
+
         UUID uuid = UUIDManager.getInstance().getUUIDFromUsername(packet1Login.name, true, unixTime);
         if (uuid == null) {
             boolean useGetMethod = PoseidonConfig.getInstance().getString("settings.uuid-fetcher.method.value", "POST").equalsIgnoreCase("GET");

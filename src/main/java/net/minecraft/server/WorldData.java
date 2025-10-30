@@ -53,6 +53,7 @@ public class WorldData {
         if (nbttagcompound.hasKey("DoDayNightCycle")) this.doDayNightCycle = nbttagcompound.m("DoDayNightCycle");
         if (nbttagcompound.hasKey("TNTExplodes")) this.tntexplodes = nbttagcompound.m("TNTExplodes");
         if (nbttagcompound.hasKey("MobGriefing")) this.mobGriefing = nbttagcompound.m("MobGriefing");
+        if (nbttagcompound.hasKey("DoWeatherCycle")) this.doWeatherCycle = nbttagcompound.m("DoWeatherCycle");
     }
 
     public WorldData(long i, String s) {
@@ -127,6 +128,7 @@ public class WorldData {
         nbttagcompound.a("DoDayNightCycle", this.doDayNightCycle);
         nbttagcompound.a("TNTExplodes", this.tntexplodes);
         nbttagcompound.a("MobGriefing", this.mobGriefing);
+        nbttagcompound.a("DoWeatherCycle", this.doWeatherCycle);
     }
 
     public long getSeed() {
@@ -231,6 +233,7 @@ public class WorldData {
     private boolean doDayNightCycle = true;
     private boolean tntexplodes = true;
     private boolean mobGriefing = true;
+    private boolean doWeatherCycle = true;
 
     // Poseidon gamerule compatibility: default to true if absent
     public boolean getDoDayNightCycle() { return this.doDayNightCycle; }
@@ -239,4 +242,6 @@ public class WorldData {
     public void setTntexplodes(boolean v) { this.tntexplodes = v; }
     public boolean getMobGriefing() { return this.mobGriefing; }
     public void setMobGriefing(boolean v) { this.mobGriefing = v; }
+    public boolean getDoWeatherCycle() { return this.doWeatherCycle; }
+    public void setDoWeatherCycle(boolean v) { this.doWeatherCycle = v; }
 }

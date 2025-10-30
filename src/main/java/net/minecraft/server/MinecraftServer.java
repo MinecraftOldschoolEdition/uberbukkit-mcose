@@ -330,7 +330,23 @@ public class MinecraftServer implements Runnable, ICommandListener {
                 }
 
                 log.info("[MinecraftServer] Preparing Nether world '" + name + "' with seed from overworld: " + i);
-                world = new SecondaryWorldServer(this, new ServerNBTManager(new File("."), name, true), name, dimension, i, this.worlds.get(0), org.bukkit.World.Environment.getEnvironment(dimension), gen);
+                // Ensure Nether world data mirrors overworld terrain type for generator selection
+                ServerNBTManager dataManagerNether = new ServerNBTManager(new File("."), name, true);
+                WorldData dataNether = dataManagerNether.c();
+                if (dataNether == null) {
+                    dataNether = new WorldData(i, name);
+                }
+                try {
+                    WorldServer overworld = this.worlds.get(0);
+                    if (overworld != null && overworld.worldData != null) {
+                        int ot = overworld.worldData.getTerrainType();
+                        dataNether.setTerrainType(ot);
+                    } else if (this.configuredLevelType != null && this.configuredLevelType.equalsIgnoreCase("CLASSIC")) {
+                        dataNether.setTerrainType(6);
+                    }
+                } catch (Throwable ignore) {}
+                dataManagerNether.a(dataNether);
+                world = new SecondaryWorldServer(this, dataManagerNether, name, dimension, i, this.worlds.get(0), org.bukkit.World.Environment.getEnvironment(dimension), gen);
             }
 
             if (gen != null) {

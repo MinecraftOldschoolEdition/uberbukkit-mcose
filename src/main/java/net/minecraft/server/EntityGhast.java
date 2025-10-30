@@ -86,7 +86,7 @@ public class EntityGhast extends EntityFlying implements IMonster {
             // Ignore creative mode players (ghasts should not target creative players)
             if (target != null && target instanceof EntityHuman) {
                 EntityHuman player = (EntityHuman) target;
-                if (player.gameMode == 1 || (player.capabilities != null && player.capabilities.isInvulnerable)) {
+                if (player.gameMode == 1) {
                     target = null; // Ignore creative players
                 }
             }

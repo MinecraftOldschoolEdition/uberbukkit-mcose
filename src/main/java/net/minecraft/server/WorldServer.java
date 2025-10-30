@@ -59,7 +59,31 @@ public class WorldServer extends World implements BlockChangeDelegate {
         if (this.generator != null) {
             provider = new CustomChunkGenerator(this, this.getSeed(), this.generator);
         } else if (this.worldProvider instanceof WorldProviderHell) {
-            provider = new NetherChunkGenerator(this, this.getSeed());
+            // Choose Classic Nether generator for CLASSIC terrain worlds
+            boolean classic = false;
+            try {
+                // Prefer explicit overworld terrain type if available
+                if (this.server != null) {
+                    WorldServer overworld = this.server.getWorldServer(0);
+                    if (overworld != null && overworld.worldData != null && overworld.worldData.getTerrainType() == 6) {
+                        classic = true;
+                    }
+                }
+                // Fallback to configured level-type string (covers early init)
+                if (!classic && this.server != null && this.server.configuredLevelType != null) {
+                    classic = this.server.configuredLevelType.equalsIgnoreCase("CLASSIC");
+                }
+                // Final fallback to this world's own WorldData
+                if (!classic && this.worldData != null && this.worldData.getTerrainType() == 6) classic = true;
+            } catch (Throwable ignore) {}
+
+            if (classic) {
+                provider = new net.minecraft.server.Classic.ChunkProviderHellClassic(this, this.getSeed());
+                MinecraftServer.log.info("[WorldServer] Nether provider: ClassicHellLevelSource for world '" + this.worldData.name + "'");
+            } else {
+                provider = new NetherChunkGenerator(this, this.getSeed());
+                MinecraftServer.log.info("[WorldServer] Nether provider: Default for world '" + (this.worldData != null ? this.worldData.name : "<unknown>") + "'");
+            }
         } else if (this.worldProvider instanceof WorldProviderSky) {
             provider = new SkyLandsChunkGenerator(this, this.getSeed());
         } else {
@@ -207,3 +231,4 @@ public class WorldServer extends World implements BlockChangeDelegate {
         return this.manager;
     }
 }
+
