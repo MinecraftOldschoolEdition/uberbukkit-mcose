@@ -27,24 +27,24 @@ public class GiveCommand extends VanillaCommand {
         Player player = Bukkit.getPlayerExact(args[0]);
 
         if (player != null) {
-            Material material = matchMaterialSmart(args[1]);
-
-            if (material != null) {
-                Command.broadcastCommandMessage(sender, "Giving " + player.getName() + " some " + material.getId() + "(" + material + ")");
+            // Resolve via namespaced registry first
+            Resolution res = resolveItemIdSmart(args[1]);
+            if (res != null) {
+                Command.broadcastCommandMessage(sender, "Giving " + player.getName() + " some " + res.itemId + "(" + args[1] + ")");
 
                 int amount = 1;
-
                 if (args.length >= 3) {
-                    try {
-                        amount = Integer.parseInt(args[2]);
-                    } catch (NumberFormatException ex) {
-                    }
-
+                    try { amount = Integer.parseInt(args[2]); } catch (NumberFormatException ex) {}
                     if (amount < 1) amount = 1;
                     if (amount > 64) amount = 64;
                 }
 
-                player.getInventory().addItem(new ItemStack(material, amount));
+                short dmg = 0;
+                if (res.variantKey != null) {
+                    int vd = net.minecraft.server.registry.VariantDefaults.get(res.variantKey);
+                    if (vd >= 0) dmg = (short)vd;
+                }
+                player.getInventory().addItem(new ItemStack(res.itemId, amount, dmg));
             } else {
                 sender.sendMessage("There's no item called " + args[1]);
             }
@@ -55,23 +55,35 @@ public class GiveCommand extends VanillaCommand {
         return true;
     }
 
-    private Material matchMaterialSmart(String token) {
-        // Try standard Bukkit name first
+    private static final class Resolution { final int itemId; final String variantKey; Resolution(int id, String k){this.itemId=id;this.variantKey=k;} }
+
+    private Resolution resolveItemIdSmart(String token) {
+        // Try namespaced registry
+        try {
+            String keyStr = token.toLowerCase();
+            if (keyStr.indexOf(':') < 0) keyStr = "minecraft:" + keyStr;
+            net.minecraft.server.util.ResourceLocation rl = new net.minecraft.server.util.ResourceLocation(keyStr);
+            net.minecraft.server.Item it = net.minecraft.server.registry.Registries.ITEM.get(rl);
+            if (it != null) {
+                return new Resolution(it.id, rl.toString());
+            }
+        } catch (Throwable ignored) {}
+
+        // Fallback to Bukkit Material
         Material m = Material.matchMaterial(token);
-        if (m != null) return m;
-        // Try legacy names like minecraft:<name>
-        String lower = token.toLowerCase();
-        if (lower.startsWith("minecraft:")) {
-            String simple = lower.substring("minecraft:".length());
-            m = Material.matchMaterial(simple);
-            if (m != null) return m;
+        if (m == null) {
+            String lower = token.toLowerCase();
+            if (lower.startsWith("minecraft:")) {
+                String simple = lower.substring("minecraft:".length());
+                m = Material.matchMaterial(simple);
+            }
         }
-        // Try numeric id
+        if (m != null) return new Resolution(m.getId(), null);
+
+        // Numeric id
         try {
             int id = Integer.parseInt(token);
-            for (Material mat : Material.values()) {
-                if (mat.getId() == id) return mat;
-            }
+            return new Resolution(id, null);
         } catch (NumberFormatException ignore) {}
         return null;
     }

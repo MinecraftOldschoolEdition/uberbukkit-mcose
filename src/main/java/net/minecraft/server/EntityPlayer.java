@@ -378,7 +378,8 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
             } else {
                 // uberbukkit - play portal sound
                 if (this.F == 0.0F) {
-                    ((WorldServer) this.world).server.serverConfigurationManager.sendPacketNearby(this, this.locX, this.locY, this.locZ, 64D, this.dimension, new Packet62Sound("portal.trigger", this.locX, this.locY, this.locZ, 1.0F, this.random.nextFloat() * 0.4F + 0.8F));
+                    String legacy = net.minecraft.server.registry.SoundEventResolver.resolve("minecraft:block.portal.trigger");
+                    ((WorldServer) this.world).server.serverConfigurationManager.sendPacketNearby(this, this.locX, this.locY, this.locZ, 64D, this.dimension, new Packet62Sound(legacy, this.locX, this.locY, this.locZ, 1.0F, this.random.nextFloat() * 0.4F + 0.8F));
                 }
 
                 this.F += 0.0125F;
@@ -387,7 +388,8 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
                     this.D = 10;
 
                     // uberbukkit
-                    ((WorldServer) this.world).server.serverConfigurationManager.sendPacketNearby(this, this.locX, this.locY, this.locZ, 64D, this.dimension, new Packet62Sound("portal.travel", this.locX, this.locY, this.locZ, 1.0F, this.random.nextFloat() * 0.4F + 0.8F));
+                    String legacy2 = net.minecraft.server.registry.SoundEventResolver.resolve("minecraft:block.portal.travel");
+                    ((WorldServer) this.world).server.serverConfigurationManager.sendPacketNearby(this, this.locX, this.locY, this.locZ, 64D, this.dimension, new Packet62Sound(legacy2, this.locX, this.locY, this.locZ, 1.0F, this.random.nextFloat() * 0.4F + 0.8F));
 
                     this.b.serverConfigurationManager.f(this);
                 }

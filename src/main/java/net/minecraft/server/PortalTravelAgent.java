@@ -40,8 +40,8 @@ public class PortalTravelAgent {
                 double d3 = (double) k1 + 0.5D - entity.locZ;
 
                 for (int l1 = 127; l1 >= 0; --l1) {
-                    if (world.getTypeId(j1, l1, k1) == Block.PORTAL.id) {
-                        while (world.getTypeId(j1, l1 - 1, k1) == Block.PORTAL.id) {
+                    if (net.minecraft.server.registry.PointsOfInterest.isMatch("nether_portal", world.getTypeId(j1, l1, k1))) {
+                        while (net.minecraft.server.registry.PointsOfInterest.isMatch("nether_portal", world.getTypeId(j1, l1 - 1, k1))) {
                             --l1;
                         }
 
@@ -64,19 +64,19 @@ public class PortalTravelAgent {
             double d6 = (double) j + 0.5D;
 
             d1 = (double) k + 0.5D;
-            if (world.getTypeId(i - 1, j, k) == Block.PORTAL.id) {
+            if (net.minecraft.server.registry.PointsOfInterest.isMatch("nether_portal", world.getTypeId(i - 1, j, k))) {
                 d5 -= 0.5D;
             }
 
-            if (world.getTypeId(i + 1, j, k) == Block.PORTAL.id) {
+            if (net.minecraft.server.registry.PointsOfInterest.isMatch("nether_portal", world.getTypeId(i + 1, j, k))) {
                 d5 += 0.5D;
             }
 
-            if (world.getTypeId(i, j, k - 1) == Block.PORTAL.id) {
+            if (net.minecraft.server.registry.PointsOfInterest.isMatch("nether_portal", world.getTypeId(i, j, k - 1))) {
                 d1 -= 0.5D;
             }
 
-            if (world.getTypeId(i, j, k + 1) == Block.PORTAL.id) {
+            if (net.minecraft.server.registry.PointsOfInterest.isMatch("nether_portal", world.getTypeId(i, j, k + 1))) {
                 d1 += 0.5D;
             }
 

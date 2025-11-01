@@ -30,7 +30,9 @@ public class WorldManager implements IWorldAccess {
             var10 *= f;
         }
 
-        this.server.serverConfigurationManager.sendPacketNearby(d0, d1, d2, var10, this.world.dimension, new Packet62Sound(s, d0, d1, d2, f, f1));
+        // Resolve modern sound event ids through the registry before sending to clients
+        String legacy = net.minecraft.server.registry.SoundEventResolver.resolve(s);
+        this.server.serverConfigurationManager.sendPacketNearby(d0, d1, d2, var10, this.world.dimension, new Packet62Sound(legacy, d0, d1, d2, f, f1));
         // uberbukkit end
     }
 

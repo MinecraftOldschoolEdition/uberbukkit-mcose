@@ -124,6 +124,7 @@ public class World implements IBlockAccess {
         this.s = this.worldData == null; // s is isNewWorld internally (field name)
         if (this.worldData == null) {
              this.worldData = new WorldData(i, s);
+             try { this.worldMaps.resetIdCounts(); } catch (Throwable ignored) {} // Reset map idcounts for brand new worlds
         }
 
         if (worldprovider != null) {
@@ -151,6 +152,7 @@ public class World implements IBlockAccess {
         this.worldProvider.a(this);
         this.chunkProvider = this.b();
         if (flag) {
+            try { this.worldMaps.resetIdCounts(); } catch (Throwable ignored) {} // New world via constructor flag
             this.c();
         } else if (this.worldData != null && this.worldData.getTerrainType() == 3 && 
                    this.worldData.c() == 0 && this.worldData.d() == 90 && this.worldData.e() == 0) {
@@ -1661,7 +1663,8 @@ public class World implements IBlockAccess {
         }
 
         Explosion explosion = new Explosion(this, entity, d0, d1, d2, f);
-        explosion.setFire = flag;
+        // If block damage is disabled (e.g., mobGriefing=false for ghast fireballs), do not place fire either
+        explosion.setFire = flag && allowBlockDamage;
         explosion.a(); // Calculates damage to entities & collects affected blocks
         
         if (allowBlockDamage) {

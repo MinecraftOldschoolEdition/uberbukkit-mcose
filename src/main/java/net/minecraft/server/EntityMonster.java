@@ -35,13 +35,25 @@ public class EntityMonster extends EntityCreature implements IMonster {
     }
 
     protected Entity findTarget() {
-        EntityHuman entityhuman = this.world.findNearbyPlayer(this, 16.0D);
+        // Honor schedules for entity activity windows
+        if (!net.minecraft.server.registry.ScheduleRegistryBootstrap.isActiveFor(this.getClass(), this.world)) {
+            return null;
+        }
+        // Use sensor pipeline to select target
+        net.minecraft.server.EntityHuman entityhuman = net.minecraft.server.registry.Sensors.findNearestPlayerNonCreative(this, 16.0D);
         if (entityhuman != null) {
-            // Ignore creative players
-            if (entityhuman.gameMode == 1) {
-                return null;
+            // Write memory: nearest player
+            try {
+                net.minecraft.server.registry.EntityMemory.set(this, new net.minecraft.server.util.ResourceLocation("minecraft","nearest_player"), entityhuman);
+            } catch (Throwable ignored) {}
+            boolean visible = net.minecraft.server.registry.Sensors.hasLineOfSight(this, entityhuman);
+            if (visible) {
+                try {
+                    net.minecraft.server.registry.EntityMemory.set(this, new net.minecraft.server.util.ResourceLocation("minecraft","visible_target"), entityhuman);
+                    net.minecraft.server.registry.EntityMemory.set(this, new net.minecraft.server.util.ResourceLocation("minecraft","last_seen_pos"), new double[]{entityhuman.locX, entityhuman.locY, entityhuman.locZ});
+                } catch (Throwable ignored) {}
+                return entityhuman;
             }
-            if (this.e(entityhuman)) return entityhuman;
         }
         return null;
     }
@@ -52,6 +64,10 @@ public class EntityMonster extends EntityCreature implements IMonster {
             return true;
         }
         if (super.damageEntity(entity, i)) {
+            // Remember who hurt us
+            try {
+                net.minecraft.server.registry.EntityMemory.set(this, new net.minecraft.server.util.ResourceLocation("minecraft","hurt_by"), entity);
+            } catch (Throwable ignored) {}
             if (this.passenger != entity && this.vehicle != entity) {
                 if (entity != this) {
                     // CraftBukkit start
@@ -81,6 +97,7 @@ public class EntityMonster extends EntityCreature implements IMonster {
 
     protected void a(Entity entity, float f) {
         if (this.attackTicks <= 0 && f < 2.0F && entity.boundingBox.e > this.boundingBox.b && entity.boundingBox.b < this.boundingBox.e) {
+            try { net.minecraft.server.registry.EntityMemory.set(this, new net.minecraft.server.util.ResourceLocation("minecraft","attack_target"), entity); } catch (Throwable ignored) {}
             this.attackTicks = 20;
             // CraftBukkit start - this is still duplicated here and EntityHuman because it's possible for lastDamage EntityMonster
             // to damage another EntityMonster, and we want to catch those events.

@@ -15,6 +15,8 @@ public class EntityTypes {
 
     private static void a(Class oclass, String s, int i) {
         a.put(s, oclass);
+        // Also store lowercase alias for case-insensitive lookups (e.g., /summon cow)
+        try { a.put(s.toLowerCase(), oclass); } catch (Throwable ignore) {}
         b.put(oclass, s);
         c.put(Integer.valueOf(i), oclass);
         d.put(oclass, Integer.valueOf(i));
@@ -25,6 +27,9 @@ public class EntityTypes {
 
         try {
             Class oclass = (Class) a.get(s);
+            if (oclass == null && s != null) {
+                oclass = (Class) a.get(s.toLowerCase());
+            }
 
             if (oclass != null) {
                 entity = (Entity) oclass.getConstructor(new Class[] { World.class }).newInstance(new Object[] { world });

@@ -42,6 +42,7 @@ public class SimpleCommandMap implements CommandMap {
         fallbackCommands.add(new WeatherCommand());
         fallbackCommands.add(new GameruleCommand());
         fallbackCommands.add(new GameModeCommand());
+        fallbackCommands.add(new SummonCommand());
     }
 
     public SimpleCommandMap(final Server server) {
@@ -56,6 +57,9 @@ public class SimpleCommandMap implements CommandMap {
         register("uberbukkit", new CrackedAllowlistCommand());
         register("minecraft", new uk.betacraft.uberbukkit.command.SetWorldSpawnCommand());
         register("uberbukkit", new uk.betacraft.uberbukkit.command.VanishCommand("vanish"));
+        register("uberbukkit", new uk.betacraft.uberbukkit.command.OpenInvSwapCommand("openinvswap"));
+        // View another player's inventory via client-side GUI in the Oldschool Edition client
+        register("uberbukkit", new uk.betacraft.uberbukkit.command.OpenInventoryCommand("openinventory"));
 
         register("bukkit", new VersionCommand("version"));
         register("bukkit", new ReloadCommand("reload"));

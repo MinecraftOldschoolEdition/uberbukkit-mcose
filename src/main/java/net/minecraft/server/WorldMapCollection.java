@@ -171,4 +171,17 @@ public class WorldMapCollection {
             return oshort.shortValue();
         }
     }
+
+    // Reset all ID counters (used when creating a brand new world so first map is map_0)
+    public void resetIdCounts() {
+        try {
+            this.d.clear();
+            if (this.a != null) {
+                File file1 = this.a.b("idcounts");
+                if (file1 != null && file1.exists()) {
+                    try { file1.delete(); } catch (Throwable ignored) {}
+                }
+            }
+        } catch (Throwable ignored) {}
+    }
 }

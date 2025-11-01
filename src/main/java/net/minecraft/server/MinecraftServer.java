@@ -181,6 +181,28 @@ public class MinecraftServer implements Runnable, ICommandListener {
         log.info("Preparing level \"" + s1 + "\"");
         this.a(new WorldLoaderServer(new File(".")), s1, k);
 
+        // Bootstrap registries (blocks, items, block entity types, entities, biomes, generators, world types)
+        try {
+            net.minecraft.server.registry.BlockRegistryBootstrap.initialize();
+            net.minecraft.server.registry.ItemRegistryBootstrap.initialize();
+            net.minecraft.server.registry.BlockEntityTypeRegistryBootstrap.initialize();
+            net.minecraft.server.registry.EntityTypeRegistryBootstrap.initialize();
+            net.minecraft.server.registry.BiomeRegistryBootstrap.initialize();
+            net.minecraft.server.registry.ChunkGeneratorTypeRegistryBootstrap.initialize();
+            net.minecraft.server.registry.WorldTypeRegistryBootstrap.initialize();
+            net.minecraft.server.registry.FluidRegistryBootstrap.initialize();
+            net.minecraft.server.registry.DimensionTypeRegistryBootstrap.initialize();
+            net.minecraft.server.registry.PaintingMotiveRegistryBootstrap.initialize();
+            net.minecraft.server.registry.SoundEventRegistryBootstrap.initialize();
+            net.minecraft.server.registry.ScreenHandlerRegistryBootstrap.initialize();
+            net.minecraft.server.registry.StatRegistryBootstrap.initialize();
+            net.minecraft.server.registry.ScheduleRegistryBootstrap.initialize();
+            net.minecraft.server.registry.SensorTypeRegistryBootstrap.initialize();
+            net.minecraft.server.registry.MemoryModuleTypeRegistryBootstrap.initialize();
+            net.minecraft.server.registry.PointOfInterestRegistryBootstrap.initialize();
+            net.minecraft.server.registry.ParticleTypeRegistryBootstrap.initialize();
+        } catch (Throwable ignored) {}
+
         //Project Poseidon Start
         Poseidon.getServer().initializeServer();
         //Project Poseidon End
@@ -236,26 +258,28 @@ public class MinecraftServer implements Runnable, ICommandListener {
                 WorldData worldData = dataManager.c();
                 long seedToUse = i;
 
-                // Determine integer typeId from configuredLevelType string
+                // Determine integer typeId from configuredLevelType string via registry first, then fall back to legacy names
                 int typeId = 0; // Default to 0 (NORMAL/DEFAULT)
-                if (this.configuredLevelType.equalsIgnoreCase("ALPHA")) {
-                    typeId = 1; // Assuming 1 is the integer ID for ALPHA type
-                    log.info("[MinecraftServer] Configured level-type ALPHA maps to ID 1.");
-                } else if (this.configuredLevelType.equalsIgnoreCase("FLAT")) {
-                    typeId = 2; // Example: if FLAT is type 2
-                    log.info("[MinecraftServer] Configured level-type FLAT maps to ID 2.");
-                } else if (this.configuredLevelType.equalsIgnoreCase("SKY")) { // Added for SKY
-                    typeId = 3; // SKY is type 3
-                    log.info("[MinecraftServer] Configured level-type SKY maps to ID 3.");
-                } else if (this.configuredLevelType.equalsIgnoreCase("ALPHA_SNOW") || this.configuredLevelType.equalsIgnoreCase("ALPHA-SNOW") || this.configuredLevelType.equalsIgnoreCase("ALPHASNOW")) {
-                    typeId = 5; // Match client ALPHA_SNOW ID
-                    log.info("[MinecraftServer] Configured level-type ALPHA_SNOW maps to ID 5.");
-                } else if (this.configuredLevelType.equalsIgnoreCase("CLASSIC")) {
-                    typeId = 6; // CLASSIC terrain type
-                    log.info("[MinecraftServer] Configured level-type CLASSIC maps to ID 6.");
-                } else if (!this.configuredLevelType.equalsIgnoreCase("DEFAULT") && !this.configuredLevelType.equalsIgnoreCase("NORMAL")) {
-                    log.warning("[MinecraftServer] Unknown level-type in server.properties: '" + this.configuredLevelType + "'. Defaulting to type ID 0.");
-                }
+                try {
+                    String lt = this.configuredLevelType == null ? "default" : this.configuredLevelType.trim();
+                    String keyPath = lt.toLowerCase();
+                    if (keyPath.indexOf(':') < 0) keyPath = "minecraft:" + keyPath;
+                    Integer rid = net.minecraft.server.registry.Registries.WORLD_TYPE.get(new net.minecraft.server.util.ResourceLocation(keyPath));
+                    if (rid != null) {
+                        typeId = rid.intValue();
+                        log.info("[MinecraftServer] level-type resolved via registry '" + keyPath + "' => ID " + typeId);
+                    } else {
+                        // Legacy synonyms fallback
+                        if (lt.equalsIgnoreCase("ALPHA")) { typeId = 1; log.info("[MinecraftServer] Configured level-type ALPHA maps to ID 1."); }
+                        else if (lt.equalsIgnoreCase("FLAT")) { typeId = 2; log.info("[MinecraftServer] Configured level-type FLAT maps to ID 2."); }
+                        else if (lt.equalsIgnoreCase("SKY")) { typeId = 3; log.info("[MinecraftServer] Configured level-type SKY maps to ID 3."); }
+                        else if (lt.equalsIgnoreCase("ALPHA_SNOW") || lt.equalsIgnoreCase("ALPHA-SNOW") || lt.equalsIgnoreCase("ALPHASNOW")) { typeId = 5; log.info("[MinecraftServer] Configured level-type ALPHA_SNOW maps to ID 5."); }
+                        else if (lt.equalsIgnoreCase("CLASSIC")) { typeId = 6; log.info("[MinecraftServer] Configured level-type CLASSIC maps to ID 6."); }
+                        else if (!lt.equalsIgnoreCase("DEFAULT") && !lt.equalsIgnoreCase("NORMAL")) {
+                            log.warning("[MinecraftServer] Unknown level-type in server.properties: '" + lt + "'. Defaulting to type ID 0.");
+                        }
+                    }
+                } catch (Throwable ignored) {}
 
                 if (worldData == null) { // New world
                     log.info("[MinecraftServer] No existing world data for '" + s + "'. Creating new with seed: " + seedToUse + ", type ID: " + typeId);

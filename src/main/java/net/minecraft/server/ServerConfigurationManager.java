@@ -376,7 +376,8 @@ public class ServerConfigurationManager {
         }
         toWorld = ((CraftWorld) finalLocation.getWorld()).getHandle();
 
-        this.sendPacketNearby(entityplayer, finalLocation.getX(), finalLocation.getY(), finalLocation.getZ(), 64D, toWorld.dimension, new Packet62Sound("portal.travel", finalLocation.getX(), finalLocation.getY(), finalLocation.getZ(), 1.0F, toWorld.random.nextFloat() * 0.4F + 0.8F));
+        String legacy = net.minecraft.server.registry.SoundEventResolver.resolve("minecraft:block.portal.travel");
+        this.sendPacketNearby(entityplayer, finalLocation.getX(), finalLocation.getY(), finalLocation.getZ(), 64D, toWorld.dimension, new Packet62Sound(legacy, finalLocation.getX(), finalLocation.getY(), finalLocation.getZ(), 1.0F, toWorld.random.nextFloat() * 0.4F + 0.8F));
 
         this.moveToWorld(entityplayer, toWorld.dimension, finalLocation);
         // CraftBukkit end

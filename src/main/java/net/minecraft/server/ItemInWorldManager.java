@@ -96,7 +96,7 @@ public class ItemInWorldManager {
                 // uberbukkit - play breaking sound and send progress each tick
                 if (block != null) {
                     if (delaySound % 4.0F == 0.0F) {
-                        this.world.makeSound((double) i + 0.5D, (double) j + 0.5D, (double) k + 0.5D, block.stepSound.getName(), (block.stepSound.getVolume1() + 1.0F) / 8.0F, block.stepSound.getVolume2() * 0.5F);
+            this.world.makeSound((double) i + 0.5D, (double) j + 0.5D, (double) k + 0.5D, block.stepSound.getName(), (block.stepSound.getVolume1() + 1.0F) / 8.0F, block.stepSound.getVolume2() * 0.5F);
                     }
                     float elapsedTicks = (float) ((System.currentTimeMillis() - this.lastDigTick) / 50.0D);
                     ((CraftServer) Bukkit.getServer()).getHandle().sendPacketNearby(player, i, j, k, 64D, player.dimension, new Packet63Digging(i, j, k, l, elapsedTicks));
@@ -209,7 +209,7 @@ public class ItemInWorldManager {
         if (block != null) {
             float vol1 = (block.stepSound.getVolume1() + 1.0F) / 8.0F;
 
-            ((CraftServer) Bukkit.getServer()).getHandle().sendPacketNearbyToScale(this.player, (double) i + 0.5D, (double) j + 0.5D, (double) k + 0.5D, vol1, ((WorldServer) this.player.world).dimension, new Packet62Sound(block.stepSound.getName(), (double) i + 0.5D, (double) j + 0.5D, (double) k + 0.5D, vol1, block.stepSound.getVolume2() * 0.5F));
+        ((CraftServer) Bukkit.getServer()).getHandle().sendPacketNearbyToScale(this.player, (double) i + 0.5D, (double) j + 0.5D, (double) k + 0.5D, vol1, ((WorldServer) this.player.world).dimension, new Packet62Sound(block.stepSound.getName(), (double) i + 0.5D, (double) j + 0.5D, (double) k + 0.5D, vol1, block.stepSound.getVolume2() * 0.5F));
         }
 
         if (this.isCreative() || toolDamage >= 1.0F) {

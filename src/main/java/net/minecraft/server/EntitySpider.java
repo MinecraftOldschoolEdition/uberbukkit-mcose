@@ -28,15 +28,21 @@ public class EntitySpider extends EntityMonster {
     }
 
     protected Entity findTarget() {
-        float f = this.c(1.0F);
-
-        if (f < 0.5F) {
-            double d0 = 16.0D;
-
-            return this.world.findNearbyPlayer(this, d0);
-        } else {
-            return null;
+        boolean active = net.minecraft.server.registry.ScheduleRegistryBootstrap.isActiveFor(this.getClass(), this.world);
+        if (!active) return null;
+        net.minecraft.server.EntityHuman p = net.minecraft.server.registry.Sensors.findNearestPlayerNonCreative(this, 16.0D);
+        if (p != null) {
+            try { net.minecraft.server.registry.EntityMemory.set(this, new net.minecraft.server.util.ResourceLocation("minecraft","nearest_player"), p); } catch (Throwable ignored) {}
+            boolean visible = net.minecraft.server.registry.Sensors.hasLineOfSight(this, p);
+            if (visible) {
+                try {
+                    net.minecraft.server.registry.EntityMemory.set(this, new net.minecraft.server.util.ResourceLocation("minecraft","visible_target"), p);
+                    net.minecraft.server.registry.EntityMemory.set(this, new net.minecraft.server.util.ResourceLocation("minecraft","last_seen_pos"), new double[]{p.locX, p.locY, p.locZ});
+                } catch (Throwable ignored) {}
+                return p;
+            }
         }
+        return null;
     }
 
     protected String g() {
@@ -52,9 +58,8 @@ public class EntitySpider extends EntityMonster {
     }
 
     protected void a(Entity entity, float f) {
-        float f1 = this.c(1.0F);
-
-        if (f1 > 0.5F && this.random.nextInt(100) == 0) {
+        boolean passive = !net.minecraft.server.registry.ScheduleRegistryBootstrap.isActiveFor(this.getClass(), this.world);
+        if (passive && this.random.nextInt(100) == 0) {
             // CraftBukkit start
             EntityTargetEvent event = new EntityTargetEvent(this.getBukkitEntity(), null, EntityTargetEvent.TargetReason.FORGOT_TARGET);
             this.world.getServer().getPluginManager().callEvent(event);

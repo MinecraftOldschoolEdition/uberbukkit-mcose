@@ -14,27 +14,18 @@ public class ItemWorldMap extends ItemWorldMapBase {
     }
 
     public WorldMap a(ItemStack itemstack, World world) {
-
         WorldMap worldmap = (WorldMap) world.a(WorldMap.class, "map_" + itemstack.getData());
-
         if (worldmap == null) {
             itemstack.b(world.b("map"));
             String s = "map_" + itemstack.getData();
-
             worldmap = new WorldMap(s);
-            worldmap.b = world.q().c();
-            worldmap.c = world.q().e();
-            worldmap.e = 3;
-            worldmap.map = (byte) world.worldProvider.dimension;
-            worldmap.a();
+            // Do NOT stamp center/scale/dimension here; defer until first time selected/used
             world.a(s, (WorldMapBase) worldmap);
-
             // CraftBukkit start
             MapInitializeEvent event = new MapInitializeEvent(worldmap.mapView);
             Bukkit.getServer().getPluginManager().callEvent(event);
             // CraftBukkit end
         }
-
         return worldmap;
     }
 
@@ -212,31 +203,39 @@ public class ItemWorldMap extends ItemWorldMapBase {
 
     public void a(ItemStack itemstack, World world, Entity entity, int i, boolean flag) {
         if (!world.isStatic) {
+            if (!flag) {
+                // Not selected: do nothing to avoid premature map data stamping
+                return;
+            }
             WorldMap worldmap = this.a(itemstack, world);
-
+            // First selection: if not stamped yet, stamp center/scale/dimension now
+            if (worldmap.e == 0 && worldmap.b == 0 && worldmap.c == 0 && worldmap.map == 0) {
+                if (entity instanceof EntityHuman) {
+                    EntityHuman entityhuman = (EntityHuman) entity;
+                    worldmap.b = MathHelper.floor(entityhuman.locX);
+                    worldmap.c = MathHelper.floor(entityhuman.locZ);
+                } else {
+                    worldmap.b = world.q().c();
+                    worldmap.c = world.q().e();
+                }
+                worldmap.e = 3;
+                worldmap.map = (byte) ((WorldServer) world).dimension;
+                worldmap.a();
+            }
             if (entity instanceof EntityHuman) {
                 EntityHuman entityhuman = (EntityHuman) entity;
-
                 worldmap.a(entityhuman, itemstack);
             }
-
-            if (flag) {
-                this.a(world, entity, worldmap);
-            }
+            this.a(world, entity, worldmap);
         }
     }
 
     public void c(ItemStack itemstack, World world, EntityHuman entityhuman) {
+        // Allocate a new id and register an empty WorldMap; do not stamp dimension yet
         itemstack.b(world.b("map"));
         String s = "map_" + itemstack.getData();
         WorldMap worldmap = new WorldMap(s);
-
         world.a(s, (WorldMapBase) worldmap);
-        worldmap.b = MathHelper.floor(entityhuman.locX);
-        worldmap.c = MathHelper.floor(entityhuman.locZ);
-        worldmap.e = 3;
-        worldmap.map = (byte) ((WorldServer) world).dimension; // CraftBukkit
-        worldmap.a();
     }
 
     public Packet b(ItemStack itemstack, World world, EntityHuman entityhuman) {

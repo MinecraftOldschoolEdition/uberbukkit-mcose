@@ -83,11 +83,21 @@ public class EntitySheep extends EntityAnimal {
         int x;
         int y;
         int z;
-        if (!this.C() && this.eatTimer <= 0 && (this.random.nextInt(1000) == 0)) {
+        if (!this.C() && this.eatTimer <= 0 && this.isSheared() && (this.random.nextInt(1000) == 0)) {
             x = MathHelper.floor(this.locX);
             y = MathHelper.floor(this.locY);
             z = MathHelper.floor(this.locZ);
-            if ((this.world.getTypeId(x, y, z) == Block.LONG_GRASS.id && this.world.getData(x, y, z) == 1) || this.world.getTypeId(x, y - 1, z) == Block.GRASS.id) {
+            // Detect grazing POI: either tall grass (meta 1) at feet or grass block underfoot
+            boolean canGrazeHere = false;
+            int idFeet = this.world.getTypeId(x, y, z);
+            int idUnder = this.world.getTypeId(x, y - 1, z);
+            if (net.minecraft.server.registry.PointsOfInterest.isMatch("grazing", idFeet)) {
+                // Honor classic tall grass meta check when applicable
+                if (idFeet == Block.LONG_GRASS.id) canGrazeHere = (this.world.getData(x, y, z) == 1); else canGrazeHere = true;
+            } else if (net.minecraft.server.registry.PointsOfInterest.isMatch("grazing", idUnder)) {
+                canGrazeHere = (idUnder == Block.GRASS.id);
+            }
+            if (canGrazeHere) {
                 this.eatTimer = 40;
                 // Broadcast sheep eating animation to clients
                 if (!this.world.isStatic && this.world instanceof WorldServer) {
