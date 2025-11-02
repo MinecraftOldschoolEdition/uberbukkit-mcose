@@ -58,8 +58,15 @@ public class SimpleCommandMap implements CommandMap {
         register("minecraft", new uk.betacraft.uberbukkit.command.SetWorldSpawnCommand());
         register("uberbukkit", new uk.betacraft.uberbukkit.command.VanishCommand("vanish"));
         register("uberbukkit", new uk.betacraft.uberbukkit.command.OpenInvSwapCommand("openinvswap"));
-        // View another player's inventory via client-side GUI in the Oldschool Edition client
-        register("uberbukkit", new uk.betacraft.uberbukkit.command.OpenInventoryCommand("openinventory"));
+        register("uberbukkit", new uk.betacraft.uberbukkit.command.OpenInvMoveCommand("openinvmove"));
+        register("uberbukkit", new uk.betacraft.uberbukkit.command.OpenInvSyncCommand("openinvsync"));
+        register("uberbukkit", new uk.betacraft.uberbukkit.command.OpenInvStopCommand("openinvstop"));
+        register("uberbukkit", new uk.betacraft.uberbukkit.command.OpenInvPutCommand("openinvput"));
+        register("uberbukkit", new uk.betacraft.uberbukkit.command.OpenInvTakeCommand("openinvtake"));
+        register("uberbukkit", new uk.betacraft.uberbukkit.command.FreezeCommand("freeze"));
+        register("uberbukkit", new uk.betacraft.uberbukkit.command.MuteCommand("mute"));
+        // Admin inventory GUI command (primary: /admin). Keep legacy aliases inside the command class
+        register("uberbukkit", new uk.betacraft.uberbukkit.command.OpenInventoryCommand("admin"));
 
         register("bukkit", new VersionCommand("version"));
         register("bukkit", new ReloadCommand("reload"));

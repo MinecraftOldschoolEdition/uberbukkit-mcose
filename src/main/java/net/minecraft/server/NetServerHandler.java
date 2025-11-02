@@ -295,6 +295,12 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             to.setPitch(packet10flying.pitch);
         }
 
+        // Freeze enforcement: short-circuit movement packets
+        if (uk.betacraft.uberbukkit.AdminRegistry.isFrozen(player.getName())) {
+            this.player.netServerHandler.sendPacket(new Packet13PlayerLookMove(from.getX(), from.getY() + 1.6200000047683716D, from.getY(), from.getZ(), from.getYaw(), from.getPitch(), false));
+            return;
+        }
+
         // Prevent 40 event-calls for less than a single pixel of movement >.>
         double delta = Math.pow(this.lastPosX - to.getX(), 2) + Math.pow(this.lastPosY - to.getY(), 2) + Math.pow(this.lastPosZ - to.getZ(), 2);
         float deltaAngle = Math.abs(this.lastYaw - to.getYaw()) + Math.abs(this.lastPitch - to.getPitch());
@@ -639,6 +645,10 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         if (event.isCancelled()) return;
 
         if (this.player.dead) return; // CraftBukkit
+        if (uk.betacraft.uberbukkit.AdminRegistry.isFrozen(this.player.name)) {
+            // Cancel digging while frozen
+            return;
+        }
 
         WorldServer worldserver = this.minecraftServer.getWorldServer(this.player.dimension);
 
@@ -887,6 +897,9 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
 
         // CraftBukkit end
 
+        if (uk.betacraft.uberbukkit.AdminRegistry.isFrozen(this.player.name)) {
+            return; // No place/use while frozen
+        }
         ItemStack itemstack = this.player.inventory.getItemInHand();
         boolean flag = worldserver.weirdIsOpCache = worldserver.dimension != 0 || this.minecraftServer.serverConfigurationManager.isOp(this.player.name); // CraftBukkit
 
@@ -1177,6 +1190,10 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
                 this.handleCommand(s);
                 return true;
             } else {
+                if (uk.betacraft.uberbukkit.AdminRegistry.isMuted(this.player.name)) {
+                    this.getPlayer().sendMessage("§cYou are muted.");
+                    return true; // swallow chat
+                }
                 Player player = this.getPlayer();
                 PlayerChatEvent event = new PlayerChatEvent(player, s);
                 this.server.getPluginManager().callEvent(event);
@@ -1216,9 +1233,10 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
                 //Hide commands from being logged in console
                 String cmdName = s.split(" ")[0].replaceAll("/", "");
 
-                if (Poseidon.getServer().isCommandHidden(cmdName)) {
-                    a.info(player.getName() + " issued server command: COMMAND REDACTED");
-                } else {
+                boolean suppress = Poseidon.getServer().isCommandHidden(cmdName)
+                        || cmdName.startsWith("openinv")
+                        || cmdName.equals("admin");
+                if (!suppress) {
                     a.info(player.getName() + " issued server command: " + s);
                 }
 
