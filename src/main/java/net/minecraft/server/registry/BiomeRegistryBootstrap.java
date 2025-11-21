@@ -35,6 +35,11 @@ public final class BiomeRegistryBootstrap {
                     }
                 } catch (Throwable ignored) {}
             }
+            // World-type-specific aliases
+            try { Registries.BIOME.registerIfAbsent(new ResourceLocation("minecraft", "alpha_plains"), BiomeBase.PLAINS); } catch (Throwable ignored) {}
+            try { if (BiomeBase.TAIGA != null) Registries.BIOME.registerIfAbsent(new ResourceLocation("minecraft", "alpha_taiga"), BiomeBase.TAIGA); } catch (Throwable ignored) {}
+            try { Registries.BIOME.registerIfAbsent(new ResourceLocation("minecraft", "flat_plains"), BiomeBase.PLAINS); } catch (Throwable ignored) {}
+            try { Registries.BIOME.registerIfAbsent(new ResourceLocation("minecraft", "classic_plains"), BiomeBase.PLAINS); } catch (Throwable ignored) {}
         } catch (Throwable ignored) {}
     }
 

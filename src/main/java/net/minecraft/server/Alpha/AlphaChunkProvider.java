@@ -44,7 +44,7 @@ public class AlphaChunkProvider implements IChunkProvider {
     private double[] sandNoise = new double[256];
     private double[] gravelNoise = new double[256];
     private double[] stoneNoise = new double[256];
-    private final MapGenBase caveGenerator = new MapGenCaves();
+    private final MapGenBase caveGenerator = net.minecraft.server.registry.Carvers.create(new net.minecraft.server.util.ResourceLocation("minecraft","cave"));
     private double[] noise3;
     private double[] noise1;
     private double[] noise2;
@@ -293,12 +293,13 @@ public class AlphaChunkProvider implements IChunkProvider {
         this.rand.setSeed((long)chunkX * l1 + (long)chunkZ * l2 ^ this.worldObj.worldData.getSeed());
         // double d = 0.25D; // Client has this, not used by rand. Server has it commented. OK.
 
-        // Dungeon Gen (Matches Client: 8 attempts)
+        // Dungeon Gen (Matches Client: 8 attempts) – via FEATURE registry
+        net.minecraft.server.WorldGenerator dungeonGen = net.minecraft.server.registry.Features.create("minecraft:dungeon");
         for (int i = 0; i < 8; ++i) {
             int xx = x + this.rand.nextInt(16) + 8;
             int yy = this.rand.nextInt(128);
             int zz = z + this.rand.nextInt(16) + 8;
-            (new WorldGenDungeons()).a(this.worldObj, this.rand, xx, yy, zz); // .a is generate
+            if (dungeonGen != null) dungeonGen.a(this.worldObj, this.rand, xx, yy, zz);
         }
         // Clay Gen (Matches Client: 10 attempts)
         for (int i = 0; i < 10; ++i) {
@@ -365,19 +366,15 @@ public class AlphaChunkProvider implements IChunkProvider {
             ++treeCount;
         }
         
-        WorldGenerator treeGen = new WorldGenTrees(); 
-        boolean isBigTree = false;
-        if (this.rand.nextInt(10) == 0) { 
-            treeGen = new WorldGenBigTree();
-            isBigTree = true;
-        }
+        boolean isBigTree = (this.rand.nextInt(10) == 0);
+        net.minecraft.server.WorldGenerator treeGen = net.minecraft.server.registry.FoliagePlacers.create(new net.minecraft.server.util.ResourceLocation("minecraft", isBigTree ? "fancy_foliage_placer" : "blob_foliage_placer"));
 
         for (int i = 0; i < treeCount; ++i) {
             int xx = x + this.rand.nextInt(16) + 8;
             int zz = z + this.rand.nextInt(16) + 8;
             int yPos = this.worldObj.getHighestBlockYAt(xx, zz); 
-            if (isBigTree) { 
-                ((WorldGenBigTree)treeGen).a(1.0D, 1.0D, 1.0D); // Call obfuscated setScale 'a'
+            if (treeGen instanceof net.minecraft.server.WorldGenBigTree) {
+                ((net.minecraft.server.WorldGenBigTree)treeGen).a(1.0D, 1.0D, 1.0D); // set scale if fancy
             }
             treeGen.a(this.worldObj, this.rand, xx, yPos, zz); // .a is generate for WorldGenerator
         }

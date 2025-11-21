@@ -63,6 +63,8 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     // Vanilla ordering: no pre-login buffering required
     private boolean loginSent = true;
     private java.util.List preLoginWorldPackets = null;
+    private static final long VOICE_PACKET_COOLDOWN_MS = 40L;
+    private long lastVoicePacketAt = 0L;
     
     private final String msgPlayerLeave;
 
@@ -632,6 +634,59 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         }
         this.player.a(todrop, false);
         //this.player.F();
+    }
+
+    public void handle64Voice(Packet64Voice packet64voice) {
+        if (!this.minecraftServer.isVoiceChatEnabled()) {
+            return;
+        }
+
+        if (packet64voice == null || packet64voice.audioData == null || packet64voice.audioData.length == 0) {
+            return;
+        }
+
+        if (packet64voice.audioData.length > Packet64Voice.MAX_PAYLOAD_SIZE) {
+            this.disconnect("Invalid voice payload");
+            return;
+        }
+
+        if (this.player == null || this.player.dead) {
+            return;
+        }
+
+        long now = System.currentTimeMillis();
+        if (this.lastVoicePacketAt != 0L && now - this.lastVoicePacketAt < VOICE_PACKET_COOLDOWN_MS) {
+            return;
+        }
+        this.lastVoicePacketAt = now;
+
+		if(uk.betacraft.uberbukkit.AdminRegistry.isMuted(this.player.name)) {
+			return;
+		}
+
+		if(!this.canUseVoiceChat()) {
+			return;
+		}
+
+		if(this.minecraftServer.chatRoomManager.getRoomForPlayer(this.player) != null) {
+            this.minecraftServer.chatRoomManager.broadcastVoice(this.player, packet64voice);
+            return;
+        }
+
+        Packet64Voice outbound = packet64voice.cloneForForwarding(this.player.id, (float) this.minecraftServer.getVoiceChatBroadcastRadius(), this.player.name);
+        this.minecraftServer.serverConfigurationManager.sendPacketNearby(this.player, this.player.locX, this.player.locY, this.player.locZ, this.minecraftServer.getVoiceChatBroadcastRadius(), this.player.dimension, outbound);
+    }
+
+	private boolean canUseVoiceChat() {
+		CraftPlayer craft = this.getPlayer();
+		if(craft == null) {
+			return true;
+		}
+		return craft.isOp() || craft.hasPermission("uberbukkit.voice.chat") || craft.hasPermission("uberbukkit.*");
+	}
+
+    public void handle66ChatRoomAction(Packet66ChatRoomAction packet66) {
+        this.minecraftServer.chatRoomManager.handleAction(this.player, packet66);
     }
 
     public long mineExpire = 0;

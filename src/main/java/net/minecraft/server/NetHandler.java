@@ -241,6 +241,18 @@ public abstract class NetHandler {
         this.a((Packet) packet62);
     }
 
+    public void handle64Voice(Packet64Voice packet64voice) {
+        this.a((Packet) packet64voice);
+    }
+
+    public void handle65ChatRooms(Packet65ChatRooms packet65) {
+        this.a((Packet) packet65);
+    }
+
+    public void handle66ChatRoomAction(Packet66ChatRoomAction packet66) {
+        this.a((Packet) packet66);
+    }
+
     public void handleCreativeSlot(Packet107CreativeSetSlot packet107creativesetslot) {
         this.a((Packet) packet107creativesetslot);
     }

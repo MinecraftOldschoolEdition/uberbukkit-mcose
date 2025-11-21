@@ -87,7 +87,7 @@ public class NetLoginHandler extends NetHandler {
     }
 
     public void a(Packet2Handshake packet2handshake) {
-        boolean modernAuthSupport = this.server.propertyManager.getBoolean("modern-authentication", false);
+        boolean modernAuthSupport = this.server.propertyManager.getBoolean("modern-authentication", true);
 
         if (modernAuthSupport) {
             if (!this.server.onlineMode) {
@@ -319,6 +319,13 @@ public class NetLoginHandler extends NetHandler {
                         }
                     }
                 } catch (Throwable ignore) {}
+                if (this.server.isVoiceChatEnabled()) {
+                    netserverhandler.sendPacket(new Packet70Bed(11));
+                } else {
+                    netserverhandler.sendPacket(new Packet70Bed(12));
+                }
+                netserverhandler.sendPacket(new Packet70Bed(13));
+                this.server.chatRoomManager.sendSnapshot(entityplayer);
             } catch (Throwable ignore) {}
         }
 

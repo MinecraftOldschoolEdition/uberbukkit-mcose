@@ -18,7 +18,7 @@ public class ChunkProviderSky implements IChunkProvider {
     private double[] r = new double[256];
     private double[] s = new double[256];
     private double[] t = new double[256];
-    private MapGenBase u = new MapGenCaves();
+    private MapGenBase u = net.minecraft.server.registry.Carvers.create(new net.minecraft.server.util.ResourceLocation("minecraft","sky_cave"));
     private BiomeBase[] v;
     double[] d;
     double[] e;
@@ -163,7 +163,7 @@ public class ChunkProviderSky implements IChunkProvider {
         double[] adouble = this.p.getWorldChunkManager().temperature;
 
         this.a(i, j, abyte, this.v, adouble);
-        this.a(i, j, abyte, this.v);
+        net.minecraft.server.registry.SurfaceBuilders.applySky(this, i, j, abyte, this.v);
         this.u.a(this, this.p, i, j, abyte);
         chunk.initLighting();
         return chunk;
@@ -312,11 +312,12 @@ public class ChunkProviderSky implements IChunkProvider {
 
         int j2;
 
+        net.minecraft.server.WorldGenerator dungeonGen = net.minecraft.server.registry.Features.create("minecraft:dungeon");
         for (k1 = 0; k1 < 8; ++k1) {
             l1 = k + this.j.nextInt(16) + 8;
             i2 = this.j.nextInt(128);
             j2 = l + this.j.nextInt(16) + 8;
-            (new WorldGenDungeons()).a(this.p, this.j, l1, i2, j2);
+            if (dungeonGen != null) dungeonGen.a(this.p, this.j, l1, i2, j2);
         }
 
         for (k1 = 0; k1 < 10; ++k1) {

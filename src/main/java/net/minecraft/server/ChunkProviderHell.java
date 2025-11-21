@@ -17,7 +17,7 @@ public class ChunkProviderHell implements IChunkProvider {
     private double[] p = new double[256];
     private double[] q = new double[256];
     private double[] r = new double[256];
-    private MapGenBase s = new MapGenCavesHell();
+    private MapGenBase s = net.minecraft.server.registry.Carvers.create(new net.minecraft.server.util.ResourceLocation("minecraft","nether_cave"));
     double[] c;
     double[] d;
     double[] e;
@@ -186,7 +186,7 @@ public class ChunkProviderHell implements IChunkProvider {
         byte[] abyte = new byte['\u8000'];
 
         this.a(i, j, abyte);
-        this.b(i, j, abyte);
+        net.minecraft.server.registry.SurfaceBuilders.applyNether(this, i, j, abyte);
         this.s.a(this, this.n, i, j, abyte);
         Chunk chunk = new Chunk(this.n, abyte, i, j);
 

@@ -1,0 +1,17 @@
+Manifest-Version: 1.0
+Implementation-Title: UberBukkit
+Implementation-Vendor: Moresteck
+Specification-Title: Bukkit
+Specification-Vendor: Bukkit Team
+Specification-Version: unknown
+Main-Class: org.bukkit.craftbukkit.Main
+Sealed: true
+
+Name: net/bukkit/
+Sealed: true
+
+Name: com/bukkit/
+Sealed: true
+
+Name: org/bukkit/
+Sealed: true

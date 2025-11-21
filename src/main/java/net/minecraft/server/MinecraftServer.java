@@ -58,6 +58,10 @@ public class MinecraftServer implements Runnable, ICommandListener {
     public boolean spawnAnimals;
     public boolean pvpMode;
     public boolean allowFlight;
+    public boolean voiceChatEnabled;
+    public final VoiceChatRoomManager chatRoomManager;
+    private static final double DEFAULT_VOICE_CHAT_RADIUS = 48.0D;
+    private double voiceChatBroadcastRadius = DEFAULT_VOICE_CHAT_RADIUS;
 
     // CraftBukkit start
     public List<WorldServer> worlds = new ArrayList<WorldServer>();
@@ -77,6 +81,7 @@ public class MinecraftServer implements Runnable, ICommandListener {
 
     public MinecraftServer(OptionSet options) { // CraftBukkit - adds argument OptionSet
         new ThreadSleepForever(this);
+        this.chatRoomManager = new VoiceChatRoomManager(this);
 
         // CraftBukkit start
         this.options = options;
@@ -132,10 +137,14 @@ public class MinecraftServer implements Runnable, ICommandListener {
         this.propertyManager = new PropertyManager(this.options); // CraftBukkit - CLI argument support
         String s = this.propertyManager.getString("server-ip", "");
 
-        this.onlineMode = this.propertyManager.getBoolean("online-mode", false); //Project Poseidon - False by default
+        this.onlineMode = this.propertyManager.getBoolean("online-mode", true);
         this.spawnAnimals = this.propertyManager.getBoolean("spawn-animals", true);
         this.pvpMode = this.propertyManager.getBoolean("pvp", true);
         this.allowFlight = this.propertyManager.getBoolean("allow-flight", false);
+        this.voiceChatEnabled = this.propertyManager.getBoolean("voice-chat", true);
+        if (this.voiceChatEnabled) {
+            log.info("Voice chat broadcasting enabled");
+        }
         this.configuredLevelType = this.propertyManager.getString("level-type", "DEFAULT").toUpperCase(); // Added
         InetAddress inetaddress = null;
 
@@ -201,6 +210,11 @@ public class MinecraftServer implements Runnable, ICommandListener {
             net.minecraft.server.registry.MemoryModuleTypeRegistryBootstrap.initialize();
             net.minecraft.server.registry.PointOfInterestRegistryBootstrap.initialize();
             net.minecraft.server.registry.ParticleTypeRegistryBootstrap.initialize();
+            net.minecraft.server.registry.TreeDecoratorTypeRegistryBootstrap.initialize();
+            net.minecraft.server.registry.FoliagePlacerTypeRegistryBootstrap.initialize();
+            net.minecraft.server.registry.FeatureRegistryBootstrap.initialize();
+            net.minecraft.server.registry.CarverRegistryBootstrap.initialize();
+            net.minecraft.server.registry.SurfaceBuilderRegistryBootstrap.initialize();
         } catch (Throwable ignored) {}
 
         //Project Poseidon Start
@@ -805,5 +819,13 @@ public class MinecraftServer implements Runnable, ICommandListener {
 
     public WatchDogThread getWatchdog() {
         return Poseidon.getServer().getWatchDogThread();
+    }
+
+    public boolean isVoiceChatEnabled() {
+        return this.voiceChatEnabled;
+    }
+
+    public double getVoiceChatBroadcastRadius() {
+        return this.voiceChatBroadcastRadius;
     }
 }

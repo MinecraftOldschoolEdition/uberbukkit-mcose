@@ -1,3 +1,17 @@
+# Chat room / voice UI
+gui.chatroom.participants.title=Participants - %s
+gui.chatroom.participants.owner=Owner: %s
+gui.chatroom.kick.tooltip=Kick Player
+gui.chatroom.kick.owner=You cannot remove the room owner.
+gui.chatroom.kick.notfound=Player '%s' is not in that room.
+gui.chatroom.kick.removed=Removed %s from chat room '%s'.
+gui.chatroom.kick.removed_notify=You were removed from chat room '%s'.
+# Chat room / voice UI
+gui.chatroom.kick.tooltip=Kick Player
+gui.chatroom.kick.owner=You cannot remove the room owner.
+gui.chatroom.kick.notfound=Player '%s' is not in that room.
+gui.chatroom.kick.removed=Removed %s from chat room '%s'.
+gui.chatroom.kick.removed_notify=You were removed from chat room '%s'.
 
 gui.done=Done
 gui.cancel=Cancel

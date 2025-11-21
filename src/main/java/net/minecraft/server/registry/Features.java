@@ -1,0 +1,27 @@
+package net.minecraft.server.registry;
+
+import net.minecraft.server.*;
+import net.minecraft.server.util.ResourceLocation;
+
+public final class Features {
+    private Features() {}
+
+    public static WorldGenerator create(ResourceLocation key) {
+        if (key == null) return null;
+        String path = key.getPath();
+        if ("dungeon".equals(path)) return new WorldGenDungeons();
+        if ("lake_water".equals(path)) return new WorldGenLakes(Block.STATIONARY_WATER.id);
+        if ("lake_lava".equals(path)) return new WorldGenLakes(Block.STATIONARY_LAVA.id);
+        return null;
+    }
+
+    public static WorldGenerator create(String namespaced) {
+        ResourceLocation key = namespaced.indexOf(':') >= 0 ? new ResourceLocation(namespaced) : new ResourceLocation("minecraft", namespaced);
+        FeatureType t = Registries.FEATURE.get(key);
+        if (t == null) return create(key);
+        return create(key);
+    }
+}
+
+
+

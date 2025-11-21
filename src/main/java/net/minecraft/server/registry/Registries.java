@@ -24,6 +24,11 @@ public final class Registries {
     public static final SimpleRegistry<MemoryModuleType> MEMORY_MODULE_TYPE = new SimpleRegistry<MemoryModuleType>();
     public static final SimpleRegistry<PointOfInterestType> POINT_OF_INTEREST_TYPE = new SimpleRegistry<PointOfInterestType>();
     public static final SimpleRegistry<ParticleType> PARTICLE_TYPE = new SimpleRegistry<ParticleType>();
+    public static final SimpleRegistry<TreeDecoratorType> TREE_DECORATOR_TYPE = new SimpleRegistry<TreeDecoratorType>();
+    public static final SimpleRegistry<FoliagePlacerType> FOLIAGE_PLACER_TYPE = new SimpleRegistry<FoliagePlacerType>();
+    public static final SimpleRegistry<FeatureType> FEATURE = new SimpleRegistry<FeatureType>();
+    public static final SimpleRegistry<CarverType> CARVER = new SimpleRegistry<CarverType>();
+    public static final SimpleRegistry<SurfaceBuilderType> SURFACE_BUILDER = new SimpleRegistry<SurfaceBuilderType>();
 
     static {
         REGISTRIES.register(new ResourceLocation("minecraft","block"), BLOCK);
@@ -44,6 +49,11 @@ public final class Registries {
         REGISTRIES.register(new ResourceLocation("minecraft","memory_module_type"), MEMORY_MODULE_TYPE);
         REGISTRIES.register(new ResourceLocation("minecraft","point_of_interest_type"), POINT_OF_INTEREST_TYPE);
         REGISTRIES.register(new ResourceLocation("minecraft","particle_type"), PARTICLE_TYPE);
+        REGISTRIES.register(new ResourceLocation("minecraft","tree_decorator_type"), TREE_DECORATOR_TYPE);
+        REGISTRIES.register(new ResourceLocation("minecraft","foliage_placer_type"), FOLIAGE_PLACER_TYPE);
+        REGISTRIES.register(new ResourceLocation("minecraft","feature"), FEATURE);
+        REGISTRIES.register(new ResourceLocation("minecraft","carver"), CARVER);
+        REGISTRIES.register(new ResourceLocation("minecraft","surface_builder"), SURFACE_BUILDER);
     }
 
     private Registries() {}

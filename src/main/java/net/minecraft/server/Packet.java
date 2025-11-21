@@ -246,6 +246,9 @@ public abstract class Packet {
         a(61, true, false, Packet61.class);
         a(62, true, false, Packet62Sound.class); // uberbukkit - protocol extension
         a(63, true, false, Packet63Digging.class); // uberbukkit - protocol extension
+        a(64, true, true, Packet64Voice.class); // uberbukkit - voice chat extension
+        a(65, true, false, Packet65ChatRooms.class); // uberbukkit - chat rooms update
+        a(66, false, true, Packet66ChatRoomAction.class); // uberbukkit - chat rooms action
         a(70, true, false, Packet70Bed.class);
         a(71, true, false, Packet71Weather.class);
         a(100, true, false, Packet100OpenWindow.class);

@@ -153,6 +153,7 @@ public class ServerConfigurationManager {
 
         worldserver.addEntity(entityplayer);
         this.getPlayerManager(entityplayer.dimension).addPlayer(entityplayer);
+        this.sendOperatorStatus(entityplayer);
 
         // Apply vanish state for the joiner against already-vanished players
         try {
@@ -174,6 +175,8 @@ public class ServerConfigurationManager {
         PlayerQuitEvent playerQuitEvent = new PlayerQuitEvent(this.cserver.getPlayer(entityplayer), this.msgPlayerLeave.replace("%player%", entityplayer.name));
         this.cserver.getPluginManager().callEvent(playerQuitEvent);
         // CraftBukkit end
+
+        this.server.chatRoomManager.removePlayer(entityplayer);
 
         //Project POSEIDON Start
         //        boolean found = false;
@@ -333,6 +336,7 @@ public class ServerConfigurationManager {
         this.getPlayerManager(entityplayer1.dimension).addPlayer(entityplayer1);
         worldserver.addEntity(entityplayer1);
         this.players.add(entityplayer1);
+        this.sendOperatorStatus(entityplayer1);
         //PlayerTracker.getInstance().addPlayer(entityplayer1.name); //Project POSEIDON
         this.updateClient(entityplayer1); // CraftBukkit
         entityplayer1.x();
@@ -516,6 +520,10 @@ public class ServerConfigurationManager {
     public void e(String s) {
         this.h.add(s.toLowerCase());
         this.l();
+        EntityPlayer online = this.i(s);
+        if (online != null) {
+            this.sendOperatorStatus(online);
+        }
 
         // Craftbukkit start
         Player player = server.server.getPlayer(s);
@@ -528,6 +536,10 @@ public class ServerConfigurationManager {
     public void f(String s) {
         this.h.remove(s.toLowerCase());
         this.l();
+        EntityPlayer online = this.i(s);
+        if (online != null) {
+            this.sendOperatorStatus(online);
+        }
 
         // Craftbukkit start
         Player player = server.server.getPlayer(s);
@@ -612,6 +624,15 @@ public class ServerConfigurationManager {
 
     public boolean isOp(String s) {
         return this.h.contains(s.trim().toLowerCase());
+    }
+
+    private void sendOperatorStatus(EntityPlayer entityplayer) {
+        if (entityplayer == null || entityplayer.netServerHandler == null) {
+            return;
+        }
+        boolean isOp = this.isOp(entityplayer.name);
+        entityplayer.netServerHandler.sendPacket(new Packet70Bed(isOp ? 15 : 16));
+        entityplayer.netServerHandler.sendPacket(new Packet3Chat("[[ADMINOPS:" + (isOp ? "1" : "0") + "]]"));
     }
 
     public EntityPlayer i(String s) {
