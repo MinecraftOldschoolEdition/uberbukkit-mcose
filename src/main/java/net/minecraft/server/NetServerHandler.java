@@ -668,7 +668,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
 			return;
 		}
 
-		if(this.minecraftServer.chatRoomManager.getRoomForPlayer(this.player) != null) {
+        if(this.minecraftServer.chatRoomManager.getRoomForPlayer(this.player) != null) {
             this.minecraftServer.chatRoomManager.broadcastVoice(this.player, packet64voice);
             return;
         }
@@ -683,7 +683,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
 			return true;
 		}
 		return craft.isOp() || craft.hasPermission("uberbukkit.voice.chat") || craft.hasPermission("uberbukkit.*");
-	}
+    }
 
     public void handle66ChatRoomAction(Packet66ChatRoomAction packet66) {
         this.minecraftServer.chatRoomManager.handleAction(this.player, packet66);
