@@ -87,15 +87,8 @@ public class NetLoginHandler extends NetHandler {
     }
 
     public void a(Packet2Handshake packet2handshake) {
-        boolean modernAuthSupport = this.server.propertyManager.getBoolean("modern-authentication", true);
-
-        if (modernAuthSupport) {
-            if (!this.server.onlineMode) {
-                a.warning("[AUTH] modern-authentication=true but online-mode=false; rejecting login for " + packet2handshake.a);
-                this.disconnect("Server misconfigured: set online-mode=true to use modern authentication");
-                return;
-            }
-
+        // Online mode uses modern Mojang authentication
+        if (this.server.onlineMode) {
             if (!CrackedAllowlist.get().contains(packet2handshake.a)) {
                 // Use modern authentication flow
                 this.modernAuthEnabled = true;
@@ -115,13 +108,8 @@ public class NetLoginHandler extends NetHandler {
             return;
         }
 
-        // Legacy flow
-        if (this.server.onlineMode && !CrackedAllowlist.get().contains(packet2handshake.a)) {
-            this.serverId = Long.toHexString(d.nextLong());
-            this.networkManager.queue(new Packet2Handshake(this.serverId, packet2handshake.pvn11));
-        } else {
-            this.networkManager.queue(new Packet2Handshake("-", packet2handshake.pvn11));
-        }
+        // Offline mode - no authentication
+        this.networkManager.queue(new Packet2Handshake("-", packet2handshake.pvn11));
     }
 
     public void a(Packet0KeepAlive packet0KeepAlive) {

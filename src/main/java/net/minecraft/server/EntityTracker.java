@@ -55,6 +55,8 @@ public class EntityTracker {
             this.a(entity, 64, 3, true); // uberbukkit - backported frequency from 1.0.0
         } else if (entity instanceof EntitySnowman) {
             this.a(entity, 160, 3); // Poseidon parity
+        } else if (entity instanceof EntityHerobrine) {
+            this.a(entity, 160, 3, true); // Herobrine - track like other mobs
         } else if (entity instanceof IAnimal) {
             this.a(entity, 80, 3, true); // uberbukkit - backported from 1.0.0
         } else if (entity instanceof EntityTNTPrimed) {
@@ -62,6 +64,8 @@ public class EntityTracker {
         } else if (entity instanceof EntityFallingSand) {
             this.a(entity, 160, 20, true);
         } else if (entity instanceof EntityPainting) {
+            this.a(entity, 160, Integer.MAX_VALUE, false);
+        } else if (entity instanceof EntityMapHanging) {
             this.a(entity, 160, Integer.MAX_VALUE, false);
         }
     }

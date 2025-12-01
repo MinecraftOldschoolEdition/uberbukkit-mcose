@@ -1708,4 +1708,23 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     public boolean c() {
         return true;
     }
+
+    /**
+     * Handle Packet131 map data from client.
+     * Type 2 = lock request
+     */
+    @Override
+    public void a(Packet131 packet131) {
+        if (packet131.c != null && packet131.c.length >= 1) {
+            // Type 2 = lock map request
+            if (packet131.c[0] == 2) {
+                int mapId = packet131.b; // Now supports int mapId for extended format
+                WorldMap worldmap = (WorldMap) this.player.world.a(WorldMap.class, "map_" + mapId);
+                if (worldmap != null && !worldmap.locked) {
+                    worldmap.locked = true;
+                    worldmap.a(); // Mark dirty to save
+                }
+            }
+        }
+    }
 }

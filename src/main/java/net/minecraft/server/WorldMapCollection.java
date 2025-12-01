@@ -117,13 +117,16 @@ public class WorldMapCollection {
 
                 while (iterator.hasNext()) {
                     NBTBase nbtbase = (NBTBase) iterator.next();
-
-                    if (nbtbase instanceof NBTTagShort) {
+                    String key = nbtbase.b();
+                    
+                    // Support both old Short format and new Integer format
+                    if (nbtbase instanceof NBTTagInt) {
+                        NBTTagInt nbttagint = (NBTTagInt) nbtbase;
+                        this.d.put(key, Integer.valueOf(nbttagint.a));
+                    } else if (nbtbase instanceof NBTTagShort) {
+                        // Backwards compatibility: convert old short values to int
                         NBTTagShort nbttagshort = (NBTTagShort) nbtbase;
-                        String s = nbttagshort.b();
-                        short short1 = nbttagshort.a;
-
-                        this.d.put(s, Short.valueOf(short1));
+                        this.d.put(key, Integer.valueOf(nbttagshort.a));
                     }
                 }
             }
@@ -132,18 +135,24 @@ public class WorldMapCollection {
         }
     }
 
+    /**
+     * Gets the next unique ID for the given data type.
+     * Now supports up to Integer.MAX_VALUE (~2 billion) IDs.
+     * @param s The data type key (e.g., "map")
+     * @return The next unique ID
+     */
     public int a(String s) {
-        Short oshort = (Short) this.d.get(s);
+        Integer oint = (Integer) this.d.get(s);
 
-        if (oshort == null) {
-            oshort = Short.valueOf((short) 0);
+        if (oint == null) {
+            oint = Integer.valueOf(0);
         } else {
-            oshort = Short.valueOf((short) (oshort.shortValue() + 1));
+            oint = Integer.valueOf(oint.intValue() + 1);
         }
 
-        this.d.put(s, oshort);
+        this.d.put(s, oint);
         if (this.a == null) {
-            return oshort.shortValue();
+            return oint.intValue();
         } else {
             try {
                 File file1 = this.a.b("idcounts");
@@ -154,9 +163,9 @@ public class WorldMapCollection {
 
                     while (iterator.hasNext()) {
                         String s1 = (String) iterator.next();
-                        short short1 = ((Short) this.d.get(s1)).shortValue();
+                        int id = ((Integer) this.d.get(s1)).intValue();
 
-                        nbttagcompound.a(s1, short1);
+                        nbttagcompound.a(s1, id);
                     }
 
                     DataOutputStream dataoutputstream = new DataOutputStream(new FileOutputStream(file1));
@@ -168,7 +177,7 @@ public class WorldMapCollection {
                 exception.printStackTrace();
             }
 
-            return oshort.shortValue();
+            return oint.intValue();
         }
     }
 

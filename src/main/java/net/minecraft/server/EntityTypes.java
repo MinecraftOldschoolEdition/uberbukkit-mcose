@@ -76,6 +76,7 @@ public class EntityTypes {
         a(EntitySnowball.class, "Snowball", 11);
         a(EntityItem.class, "Item", 1);
         a(EntityPainting.class, "Painting", 9);
+        a(EntityMapHanging.class, "MapHanging", 26); // Wall-mounted maps
         a(EntityLiving.class, "Mob", 48);
         a(EntityMonster.class, "Monster", 49);
         a(EntityCreeper.class, "Creeper", 50);
@@ -97,5 +98,15 @@ public class EntityTypes {
         a(EntityMinecart.class, "Minecart", 40);
         a(EntityBoat.class, "Boat", 41);
         a(EntitySnowman.class, "SnowMan", 97);
+        a(EntityHerobrine.class, "Herobrine", 100); // Must match client EntityList
+        
+        // Initialize registry bootstraps
+        try { net.minecraft.server.registry.SpawnGroupRegistryBootstrap.initialize(); } catch (Throwable ignored) {}
+        try { net.minecraft.server.registry.JukeboxSongRegistryBootstrap.initialize(); } catch (Throwable ignored) {}
+        try { net.minecraft.server.registry.RecipeTypeRegistryBootstrap.initialize(); } catch (Throwable ignored) {}
+        try { net.minecraft.server.registry.LootTables.initialize(); } catch (Throwable ignored) {}
+        try { net.minecraft.server.registry.StructureTypes.initialize(); } catch (Throwable ignored) {}
+        try { net.minecraft.server.registry.AchievementRegistryBootstrap.initialize(); } catch (Throwable ignored) {}
+        try { net.minecraft.server.registry.WorldFeatureRegistryBootstrap.initialize(); } catch (Throwable ignored) {}
     }
 }

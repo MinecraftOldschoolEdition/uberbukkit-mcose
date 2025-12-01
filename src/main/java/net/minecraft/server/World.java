@@ -1888,6 +1888,9 @@ public class World implements IBlockAccess {
 
     public void doTick() {
 		this.i(); // Update weather each tick (ensure precipitation logic runs)
+        
+        // Update Herobrine event manager
+        HerobrineEventManager.getInstance(this).update();
 
         // Sleeping logic (advances time to morning if all players deeply sleeping)
         if (this.everyoneDeeplySleeping()) {

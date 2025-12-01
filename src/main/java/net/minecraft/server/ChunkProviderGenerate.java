@@ -622,6 +622,19 @@ public class ChunkProviderGenerate implements IChunkProvider {
             j3 = l + this.j.nextInt(16) + 8;
             (new WorldGenCactus()).a(this.p, this.j, l2, k3, j3);
         }
+        
+        // Herobrine Shrine generation in deserts (1/750000 chance per chunk)
+        // Uses a separate random to avoid affecting other world generation
+        if (biomebase == BiomeBase.DESERT) {
+            long shrineSeed = (long)i * 341873128712L + (long)j * 132897987541L + this.p.getSeed() + 777777777L;
+            Random shrineRand = new Random(shrineSeed);
+            if (shrineRand.nextInt(750000) == 0) {
+                int shrineX = k + shrineRand.nextInt(16) + 8;
+                int shrineZ = l + shrineRand.nextInt(16) + 8;
+                int shrineY = this.p.getHighestBlockYAt(shrineX, shrineZ);
+                (new WorldGenHerobrineShrine()).a(this.p, shrineRand, shrineX, shrineY, shrineZ);
+            }
+        }
 
         for (i3 = 0; i3 < 50; ++i3) {
             l2 = k + this.j.nextInt(16) + 8;

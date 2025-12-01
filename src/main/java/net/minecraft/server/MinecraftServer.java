@@ -78,6 +78,9 @@ public class MinecraftServer implements Runnable, ICommandListener {
     private boolean modLoaderSupport = false;
 //    private PoseidonVersionChecker poseidonVersionChecker;
     //Poseidon End
+    
+    // GUI mode flag - when true, don't call System.exit() on stop
+    public static boolean guiMode = false;
 
     public MinecraftServer(OptionSet options) { // CraftBukkit - adds argument OptionSet
         new ThreadSleepForever(this);
@@ -637,7 +640,10 @@ public class MinecraftServer implements Runnable, ICommandListener {
             } catch (Throwable throwable1) {
                 throwable1.printStackTrace();
             } finally {
-                System.exit(0);
+                // Don't exit if running in GUI mode - let the GUI stay open
+                if (!guiMode) {
+                    System.exit(0);
+                }
             }
         }
     }

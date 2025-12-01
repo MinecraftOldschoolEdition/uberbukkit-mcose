@@ -143,6 +143,12 @@ public class EntityTrackerEntry {
             }
 
             if (packet != null) {
+                // Debug: log Herobrine position updates
+                if (this.tracker instanceof EntityHerobrine) {
+                    System.out.println("[Herobrine Tracker] Sending packet: " + packet.getClass().getSimpleName() + 
+                        " to " + this.trackedPlayers.size() + " players, pos=(" + 
+                        (this.d / 32.0) + "," + (this.e / 32.0) + "," + (this.f / 32.0) + ")");
+                }
                 this.a((Packet) packet);
             }
 
@@ -398,6 +404,10 @@ public class EntityTrackerEntry {
                 return new Packet23VehicleSpawn(this.tracker, 1);
             } else if (this.tracker instanceof EntitySnowman) {
                 return new Packet24MobSpawn((EntityLiving) this.tracker);
+            } else if (this.tracker instanceof EntityHerobrine) {
+                System.out.println("[Herobrine] Creating spawn packet for entity ID " + this.tracker.id + " at " + 
+                    (int)this.tracker.locX + ", " + (int)this.tracker.locY + ", " + (int)this.tracker.locZ);
+                return new Packet24MobSpawn((EntityLiving) this.tracker);
             } else if (this.tracker instanceof IAnimal) {
                 return new Packet24MobSpawn((EntityLiving) this.tracker);
             } else if (this.tracker instanceof EntityFish) {
@@ -439,6 +449,8 @@ public class EntityTrackerEntry {
 
                 if (this.tracker instanceof EntityPainting) {
                     return new Packet25EntityPainting((EntityPainting) this.tracker);
+                } else if (this.tracker instanceof EntityMapHanging) {
+                    return new Packet26EntityMapHanging((EntityMapHanging) this.tracker);
                 } else {
                     throw new IllegalArgumentException("Don\'t know how to add " + this.tracker.getClass() + "!");
                 }

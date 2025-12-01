@@ -226,6 +226,7 @@ public abstract class Packet {
         a(23, true, false, Packet23VehicleSpawn.class);
         a(24, true, false, Packet24MobSpawn.class);
         a(25, true, false, Packet25EntityPainting.class);
+        a(26, true, false, Packet26EntityMapHanging.class); // Map hanging entity spawn
         a(27, false, false, Packet27.class); // CraftBukkit - true -> false; disabled unused packet. TODO -- check if needed
         a(28, true, false, Packet28EntityVelocity.class);
         a(29, true, false, Packet29DestroyEntity.class);
@@ -261,9 +262,10 @@ public abstract class Packet {
         // Creative inventory slot sync
         a(107, true, true, Packet107CreativeSetSlot.class);
         a(130, true, true, Packet130UpdateSign.class);
-        a(131, true, false, Packet131.class);
+        a(131, true, true, Packet131.class); // Made bidirectional for map lock requests
         a(200, true, false, Packet200Statistic.class);
         a(201, true, false, Packet201PlayerInfo.class);
+        a(250, true, true, Packet250CustomPayload.class); // Custom payload for plugin channels
         a(255, true, true, Packet255KickDisconnect.class);
         packetClassToIdMap.put(ArtificialPacket53BlockChange.class, 53); //Poseidon - Artificial Block Change Packet
         e = new HashMap();

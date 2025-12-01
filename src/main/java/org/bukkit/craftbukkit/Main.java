@@ -3,6 +3,7 @@ package org.bukkit.craftbukkit;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 import net.minecraft.server.MinecraftServer;
+import org.bukkit.craftbukkit.gui.ServerGUI;
 
 import java.io.File;
 import java.io.IOException;
@@ -14,9 +15,36 @@ import java.util.logging.Logger;
 
 public class Main {
     public static boolean useJline = true;
+    public static boolean useGui = false;
 
     public static void main(String[] args) {
-        // Todo: Installation script
+        // Check for GUI mode first (before option parsing)
+        boolean launchGui = false;
+        List<String> argList = Arrays.asList(args);
+        
+        // Check for --gui or -gui flag
+        if (argList.contains("--gui") || argList.contains("-gui") || argList.contains("gui")) {
+            launchGui = true;
+            // Remove gui flag from args before passing to server
+            args = argList.stream()
+                .filter(a -> !a.equals("--gui") && !a.equals("-gui") && !a.equals("gui"))
+                .toArray(String[]::new);
+        }
+        
+        // If no args provided and we detect a graphical environment, offer GUI
+        if (args.length == 0 && !java.awt.GraphicsEnvironment.isHeadless()) {
+            // Check if running from double-click (no console args)
+            launchGui = true;
+        }
+        
+        if (launchGui) {
+            useGui = true;
+            final String[] finalArgs = args;
+            ServerGUI.main(finalArgs);
+            return;
+        }
+        
+        // Normal console mode
         OptionParser parser = new OptionParser() {
             {
                 acceptsAll(asList("?", "help"), "Show the help");
@@ -51,7 +79,9 @@ public class Main {
 
                 acceptsAll(asList("nojline"), "Disables jline and emulates the vanilla console");
 
-                acceptsAll(asList("nogui"), "Some modern panels like to pass this thru. Just ignore it");
+                acceptsAll(asList("nogui"), "Run in console mode without GUI");
+                
+                acceptsAll(asList("gui"), "Launch with graphical user interface");
 
                 acceptsAll(asList("v", "version"), "Show the CraftBukkit Version");
             }

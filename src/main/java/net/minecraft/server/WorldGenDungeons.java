@@ -2,14 +2,40 @@ package net.minecraft.server;
 
 import java.util.Random;
 
+import net.minecraft.server.registry.LootTable;
+import net.minecraft.server.registry.LootTables;
+import net.minecraft.server.registry.StructureType;
+import net.minecraft.server.registry.StructureTypes;
+
 import uk.betacraft.uberbukkit.UberbukkitConfig;
 
 public class WorldGenDungeons extends WorldGenerator {
+    
+    // Stone brick metadata values
+    private static final int STONE_BRICK_META = 0;
+    private static final int MOSSY_STONE_BRICK_META = 1;
+    private static final int CRACKED_STONE_BRICK_META = 2;
+    
+    // Cache structure type and loot tables
+    private static StructureType dungeonType = null;
+    private static LootTable simpleDungeonLoot = null;
+    private static LootTable monsterDungeonLoot = null;
+    
+    private static void ensureInitialized() {
+        if (dungeonType == null) {
+            StructureTypes.initialize();
+            dungeonType = StructureTypes.get(StructureTypes.DUNGEON);
+            simpleDungeonLoot = LootTables.get(LootTables.SIMPLE_DUNGEON_LOOT);
+            monsterDungeonLoot = LootTables.get(LootTables.MONSTER_DUNGEON_LOOT);
+        }
+    }
 
     public WorldGenDungeons() {
     }
 
     public boolean a(World world, Random random, int i, int j, int k) {
+        ensureInitialized();
+        
         // Avoid triggering chunk loads during population: if the target chunk isn't already loaded, skip
         if (!world.isLoaded(i, j, k)) {
             return false;
@@ -18,6 +44,10 @@ public class WorldGenDungeons extends WorldGenerator {
         int l = random.nextInt(2) + 2;
         int i1 = random.nextInt(2) + 2;
         int j1 = 0;
+        
+        // 25% chance of a monster dungeon using stone bricks
+        boolean useStoneBricks = random.nextInt(4) == 0;
+        LootTable lootTable = useStoneBricks ? monsterDungeonLoot : simpleDungeonLoot;
 
         int k1;
         int l1;
@@ -52,10 +82,24 @@ public class WorldGenDungeons extends WorldGenerator {
                         } else if (l1 >= 0 && !world.getMaterial(k1, l1 - 1, i2).isBuildable()) {
                             world.setTypeId(k1, l1, i2, 0);
                         } else if (world.getMaterial(k1, l1, i2).isBuildable()) {
-                            if (l1 == j - 1 && random.nextInt(4) != 0) {
-                                world.setTypeId(k1, l1, i2, Block.MOSSY_COBBLESTONE.id);
+                            if (useStoneBricks) {
+                                // Monster dungeon: use stone bricks, mossy stone bricks, and cracked stone bricks
+                                if (l1 == j - 1 && random.nextInt(4) != 0) {
+                                    // Floor: mostly mossy stone bricks
+                                    world.setTypeIdAndData(k1, l1, i2, Block.STONE_BRICK.id, MOSSY_STONE_BRICK_META);
+                                } else {
+                                    // Walls/ceiling: mix of stone brick variants
+                                    int brickType = random.nextInt(3);
+                                    int meta = brickType == 0 ? STONE_BRICK_META : (brickType == 1 ? MOSSY_STONE_BRICK_META : CRACKED_STONE_BRICK_META);
+                                    world.setTypeIdAndData(k1, l1, i2, Block.STONE_BRICK.id, meta);
+                                }
                             } else {
-                                world.setTypeId(k1, l1, i2, Block.COBBLESTONE.id);
+                                // Regular dungeon: cobblestone and mossy cobblestone
+                                if (l1 == j - 1 && random.nextInt(4) != 0) {
+                                    world.setTypeId(k1, l1, i2, Block.MOSSY_COBBLESTONE.id);
+                                } else {
+                                    world.setTypeId(k1, l1, i2, Block.COBBLESTONE.id);
+                                }
                             }
                         }
                     }
@@ -97,6 +141,13 @@ public class WorldGenDungeons extends WorldGenerator {
                                     world.setTypeId(i2, j, j2, Block.CHEST.id);
                                     TileEntityChest tileentitychest = (TileEntityChest) world.getTileEntity(i2, j, j2);
 
+                                    // Use loot table based on dungeon variant
+                                    if (lootTable != null) {
+                                        lootTable.fillInventory(tileentitychest, random);
+                                        break label204;
+                                    }
+                                    
+                                    // Fallback to legacy loot generation
                                     for (int l2 = 0; l2 < 8; ++l2) {
                                         ItemStack itemstack = this.a(random);
 
@@ -121,7 +172,12 @@ public class WorldGenDungeons extends WorldGenerator {
             world.setTypeId(i, j, k, Block.MOB_SPAWNER.id);
             TileEntityMobSpawner tileentitymobspawner = (TileEntityMobSpawner) world.getTileEntity(i, j, k);
 
-            tileentitymobspawner.a(this.b(random));
+            // Use structure type to pick spawner mob
+            if (dungeonType != null) {
+                tileentitymobspawner.a(dungeonType.pickSpawnerMob(random));
+            } else {
+                tileentitymobspawner.a(this.b(random));
+            }
             return true;
         } else {
             return false;

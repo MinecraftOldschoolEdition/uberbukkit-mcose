@@ -131,6 +131,8 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
             }
         } else if (entity instanceof EntityPainting) {
             return new CraftPainting(server, (EntityPainting) entity);
+        } else if (entity instanceof EntityMapHanging) {
+            return new CraftMapHanging(server, (EntityMapHanging) entity);
         } else if (entity instanceof EntitySnowball) {
             return new CraftSnowball(server, (EntitySnowball) entity);
         } else if (entity instanceof EntityTNTPrimed) {

@@ -20,19 +20,29 @@ public class ConsoleLogManager {
     public ConsoleLogManager() {
     }
 
+    // Track if already initialized to prevent duplicate handlers on restart
+    private static boolean initialized = false;
+    
     // CraftBukkit - change of method signature!
     public static void init(MinecraftServer server) {
         ConsoleLogFormatter consolelogformatter = new ConsoleLogFormatter();
 
         a.setUseParentHandlers(false);
+        a.setLevel(Level.ALL);
+        
+        // Only add console handlers on first init to prevent duplicates
+        if (initialized) {
+            return;
+        }
+        initialized = true;
+        
         // CraftBukkit start
         ConsoleHandler consolehandler = new TerminalConsoleHandler(server.reader);
-
-        for (Handler handler : global.getHandlers()) {
-            global.removeHandler(handler);
-        }
-
+        consolehandler.setLevel(Level.ALL);
         consolehandler.setFormatter(new ShortConsoleLogFormatter(server));
+        
+        // Don't clear handlers - preserve any GUI handlers already attached
+        // Just add our console handler
         global.addHandler(consolehandler);
         // CraftBukkit end
 

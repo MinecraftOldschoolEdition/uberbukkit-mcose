@@ -201,6 +201,10 @@ public abstract class NetHandler {
         this.a((Packet) packet25entitypainting);
     }
 
+    public void a(Packet26EntityMapHanging packet26entitymaphanging) {
+        this.a((Packet) packet26entitymaphanging);
+    }
+
     public void a(Packet54PlayNoteBlock packet54playnoteblock) {
         this.a((Packet) packet54playnoteblock);
     }
@@ -260,5 +264,10 @@ public abstract class NetHandler {
     // Player list info (Tab overlay)
     public void a(Packet201PlayerInfo packet201playerinfo) {
         this.a((Packet) packet201playerinfo);
+    }
+    
+    // Custom payload (plugin channels)
+    public void a(Packet250CustomPayload packet250custompayload) {
+        this.a((Packet) packet250custompayload);
     }
 }

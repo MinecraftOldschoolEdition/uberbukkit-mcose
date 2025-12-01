@@ -73,6 +73,13 @@ public class ItemFlintAndSteel extends Item {
                 return false;
             }
             // CraftBukkit end
+            
+            // Check if this fire is being placed on a Herobrine Shrine netherrack
+            // The netherrack is at the position where we clicked (below the fire)
+            int netherrackY = j - 1;
+            if (world.getTypeId(clickedX, netherrackY, clickedZ) == Block.NETHERRACK.id) {
+                HerobrineEventManager.onShrineActivated(world, entityhuman, clickedX, netherrackY, clickedZ);
+            }
         }
 
         itemstack.damage(1, entityhuman);

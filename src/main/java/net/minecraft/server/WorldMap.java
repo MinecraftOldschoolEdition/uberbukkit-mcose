@@ -21,6 +21,8 @@ public class WorldMap extends WorldMapBase {
     public List h = new ArrayList();
     private Map j = new HashMap();
     public List i = new ArrayList();
+    // Whether this map is locked (permanently frozen in time)
+    public boolean locked = false;
 
     // CraftBukkit start
     public final CraftMapView mapView;
@@ -98,6 +100,11 @@ public class WorldMap extends WorldMapBase {
                 }
             }
         }
+        
+        // Read locked state
+        if (nbttagcompound.hasKey("locked")) {
+            this.locked = nbttagcompound.m("locked");
+        }
     }
 
     public void b(NBTTagCompound nbttagcompound) {
@@ -127,6 +134,7 @@ public class WorldMap extends WorldMapBase {
         nbttagcompound.a("width", (short) 128);
         nbttagcompound.a("height", (short) 128);
         nbttagcompound.a("colors", this.f);
+        nbttagcompound.a("locked", this.locked);
     }
 
     public void a(EntityHuman entityhuman, ItemStack itemstack) {
@@ -148,22 +156,46 @@ public class WorldMap extends WorldMapBase {
                 byte b0 = 64;
                 byte b1 = 64;
 
-                if (f >= (float) (-b0) && f1 >= (float) (-b1) && f <= (float) b0 && f1 <= (float) b1) {
-                    byte b2 = 0;
-                    byte b3 = (byte) ((int) ((double) (f * 2.0F) + 0.5D));
-                    byte b4 = (byte) ((int) ((double) (f1 * 2.0F) + 0.5D));
-                    // CraftBukkit
-                    byte b5 = (byte) ((int) ((double) (worldmaphumantracker1.trackee.yaw * 16.0F / 360.0F) + 0.5D));
-
-                    if (this.map < 0) {
-                        int j = this.g / 10;
-
-                        b5 = (byte) (j * j * 34187121 + j * 121 >> 15 & 15);
+                // Check if player is within map bounds
+                boolean isOutsideBounds = f < (float) (-b0) || f1 < (float) (-b1) || f > (float) b0 || f1 > (float) b1;
+                
+                // Icon type: 0 = normal player arrow, 6 = small dot for off-map players
+                byte b2 = isOutsideBounds ? (byte) 6 : (byte) 0;
+                
+                // Clamp position to map edges when outside bounds (like modern Minecraft)
+                float clampedX = f;
+                float clampedZ = f1;
+                if (isOutsideBounds) {
+                    clampedX = Math.max(-b0, Math.min(b0, f));
+                    clampedZ = Math.max(-b1, Math.min(b1, f1));
+                }
+                
+                byte b3 = (byte) ((int) ((double) (clampedX * 2.0F) + 0.5D));
+                byte b4 = (byte) ((int) ((double) (clampedZ * 2.0F) + 0.5D));
+                
+                // Calculate rotation to point towards player's actual position when outside bounds
+                byte b5;
+                if (isOutsideBounds) {
+                    // Point towards the player's actual position relative to the map edge
+                    double dx = f - clampedX;
+                    double dz = f1 - clampedZ;
+                    if (dx != 0 || dz != 0) {
+                        double angle = Math.atan2(dz, dx);
+                        b5 = (byte) ((int) ((angle * 16.0 / (2 * Math.PI)) + 8.5) & 15);
+                    } else {
+                        b5 = (byte) ((int) ((double) (worldmaphumantracker1.trackee.yaw * 16.0F / 360.0F) + 0.5D));
                     }
+                } else {
+                    b5 = (byte) ((int) ((double) (worldmaphumantracker1.trackee.yaw * 16.0F / 360.0F) + 0.5D));
+                }
 
-                    if (worldmaphumantracker1.trackee.dimension == this.map) {
-                        this.i.add(new WorldMapOrienter(this, b2, b3, b4, b5));
-                    }
+                if (this.map < 0) {
+                    int j = this.g / 10;
+                    b5 = (byte) (j * j * 34187121 + j * 121 >> 15 & 15);
+                }
+
+                if (worldmaphumantracker1.trackee.dimension == this.map) {
+                    this.i.add(new WorldMapOrienter(this, b2, b3, b4, b5));
                 }
             } else {
                 this.j.remove(worldmaphumantracker1.trackee);

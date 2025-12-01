@@ -51,11 +51,21 @@ public interface MapView {
 
     /**
      * Get the ID of this map item. Corresponds to the damage value of a map
-     * in an inventory.
+     * in an inventory. Now supports extended IDs up to ~2 billion.
      *
      * @return The ID of the map.
      */
-    public short getId();
+    public int getId();
+
+    /**
+     * Get the ID of this map item as a short.
+     * @deprecated Use {@link #getId()} instead for extended map ID support.
+     * @return The ID of the map as a short (may overflow for large IDs).
+     */
+    @Deprecated
+    public default short getIdShort() {
+        return (short) getId();
+    }
 
     /**
      * Check whether this map is virtual. A map is virtual if its lowermost
@@ -145,5 +155,20 @@ public interface MapView {
      * @return True if the renderer was successfully removed.
      */
     public boolean removeRenderer(MapRenderer renderer);
+
+    /**
+     * Check whether this map is locked (frozen in time).
+     * A locked map will no longer update with terrain changes.
+     *
+     * @return Whether the map is locked.
+     */
+    public boolean isLocked();
+
+    /**
+     * Lock this map. Once locked, a map cannot be unlocked.
+     * A locked map will no longer update with terrain changes,
+     * preserving it as a snapshot in time.
+     */
+    public void setLocked();
 
 }

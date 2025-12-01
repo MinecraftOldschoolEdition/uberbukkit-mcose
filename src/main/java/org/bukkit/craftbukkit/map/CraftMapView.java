@@ -22,11 +22,11 @@ public final class CraftMapView implements MapView {
         addRenderer(new CraftMapRenderer(this, worldMap));
     }
 
-    public short getId() {
+    public int getId() {
         String text = worldMap.a;
         if (text.startsWith("map_")) {
             try {
-                return Short.parseShort(text.substring("map_".length()));
+                return Integer.parseInt(text.substring("map_".length()));
             } catch (NumberFormatException ex) {
                 throw new IllegalStateException("Map has non-numeric ID");
             }
@@ -150,6 +150,17 @@ public final class CraftMapView implements MapView {
         }
 
         return render;
+    }
+
+    public boolean isLocked() {
+        return worldMap.locked;
+    }
+
+    public void setLocked() {
+        if (!worldMap.locked) {
+            worldMap.locked = true;
+            worldMap.a(); // Mark dirty to save
+        }
     }
 
 }

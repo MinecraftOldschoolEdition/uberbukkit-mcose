@@ -13,6 +13,43 @@ public class ItemWorldMap extends ItemWorldMapBase {
         this.c(1);
     }
 
+    /**
+     * Called when the player right-clicks a block with a map.
+     * Places the map on the block face if valid.
+     */
+    public boolean a(ItemStack itemstack, EntityHuman entityhuman, World world, int x, int y, int z, int face) {
+        // Only allow placing on walls (sides of blocks), not top/bottom
+        if (face == 0 || face == 1) {
+            return false;
+        }
+
+        // Convert face direction to map direction
+        // face: 2=north, 3=south, 4=west, 5=east
+        // direction: 0=south, 1=west, 2=north, 3=east
+        int direction = 0;
+        if (face == 4) {
+            direction = 1; // west
+        } else if (face == 2) {
+            direction = 2; // north
+        } else if (face == 5) {
+            direction = 3; // east
+        }
+        // face == 3 (south) -> direction = 0 (default)
+
+        int mapId = itemstack.getData();
+        EntityMapHanging mapHanging = new EntityMapHanging(world, x, y, z, direction, mapId);
+
+        if (mapHanging.isValidPosition()) {
+            if (!world.isStatic) {
+                world.addEntity(mapHanging);
+            }
+            --itemstack.count;
+            return true;
+        }
+
+        return false;
+    }
+
     public WorldMap a(ItemStack itemstack, World world) {
         WorldMap worldmap = (WorldMap) world.a(WorldMap.class, "map_" + itemstack.getData());
         if (worldmap == null) {
@@ -210,15 +247,24 @@ public class ItemWorldMap extends ItemWorldMapBase {
             WorldMap worldmap = this.a(itemstack, world);
             // First selection: if not stamped yet, stamp center/scale/dimension now
             if (worldmap.e == 0 && worldmap.b == 0 && worldmap.c == 0 && worldmap.map == 0) {
+                int playerX, playerZ;
                 if (entity instanceof EntityHuman) {
                     EntityHuman entityhuman = (EntityHuman) entity;
-                    worldmap.b = MathHelper.floor(entityhuman.locX);
-                    worldmap.c = MathHelper.floor(entityhuman.locZ);
+                    playerX = MathHelper.floor(entityhuman.locX);
+                    playerZ = MathHelper.floor(entityhuman.locZ);
                 } else {
-                    worldmap.b = world.q().c();
-                    worldmap.c = world.q().e();
+                    playerX = world.q().c();
+                    playerZ = world.q().e();
                 }
-                worldmap.e = 3;
+                
+                // Use scale 3 (1:8) by default - each map covers 1024x1024 blocks
+                byte scale = 3;
+                
+                // Snap to grid so maps tile perfectly when placed side by side
+                int[] gridCenter = snapToMapGrid(playerX, playerZ, scale);
+                worldmap.b = gridCenter[0];
+                worldmap.c = gridCenter[1];
+                worldmap.e = scale;
                 worldmap.map = (byte) ((WorldServer) world).dimension;
                 worldmap.a();
             }
@@ -226,8 +272,37 @@ public class ItemWorldMap extends ItemWorldMapBase {
                 EntityHuman entityhuman = (EntityHuman) entity;
                 worldmap.a(entityhuman, itemstack);
             }
+            
+            // Don't update terrain data if map is locked
+            if (worldmap.locked) {
+                return;
+            }
+            
             this.a(world, entity, worldmap);
         }
+    }
+
+    /**
+     * Snaps coordinates to a map grid based on scale.
+     * This ensures maps tile perfectly when placed side by side.
+     * @param x Player X coordinate
+     * @param z Player Z coordinate
+     * @param scale Map scale (0-4)
+     * @return int[] with [centerX, centerZ] for the grid cell
+     */
+    private static int[] snapToMapGrid(int x, int z, byte scale) {
+        // Map size at this scale: 128 pixels * (2^scale) blocks per pixel
+        int mapSize = 128 * (1 << scale);
+        
+        // Find which grid cell the player is in
+        int gridX = (int) Math.floor((double) x / mapSize);
+        int gridZ = (int) Math.floor((double) z / mapSize);
+        
+        // Center of that grid cell
+        int centerX = gridX * mapSize + mapSize / 2;
+        int centerZ = gridZ * mapSize + mapSize / 2;
+        
+        return new int[] { centerX, centerZ };
     }
 
     public void c(ItemStack itemstack, World world, EntityHuman entityhuman) {
@@ -241,6 +316,7 @@ public class ItemWorldMap extends ItemWorldMapBase {
     public Packet b(ItemStack itemstack, World world, EntityHuman entityhuman) {
         byte[] abyte = this.a(itemstack, world).a(itemstack, world, entityhuman);
 
-        return abyte == null ? null : new Packet131((short) Item.MAP.id, (short) itemstack.getData(), abyte);
+        // Use int mapId constructor for extended format support (up to ~2 billion maps)
+        return abyte == null ? null : new Packet131((short) Item.MAP.id, itemstack.getData(), abyte);
     }
 }
