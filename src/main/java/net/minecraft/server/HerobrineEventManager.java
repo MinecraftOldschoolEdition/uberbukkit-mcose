@@ -45,6 +45,12 @@ public class HerobrineEventManager {
     // Players affected by this event (within render distance of Herobrine/event center)
     private Set<EntityHuman> affectedPlayers = new HashSet<EntityHuman>();
     
+    // Sound and timeout tracking
+    private long lastAmbientSoundTime = 0;
+    private long lastPlayerApproachTime = 0;
+    private double lastPlayerDistance = Double.MAX_VALUE;
+    private Random random = new Random();
+    
     // Constants
     private static final float MIN_FOG_DISTANCE = 20.0F;
     private static final float RETREAT_FOG_DISTANCE = 5.0F;
@@ -53,6 +59,8 @@ public class HerobrineEventManager {
     private static final long FOG_RETURN_DURATION = 8000;
     private static final long RETREAT_FOG_CLOSE_DURATION = 2000;
     private static final long MAX_STALK_DURATION = 60000;
+    private static final long APPROACH_TIMEOUT = 45000; // End event if player doesn't approach within 45 seconds
+    private static final long AMBIENT_SOUND_INTERVAL = 8000; // Play ambient sound every 8 seconds
     private static final double CLOSE_DISTANCE = 8.0;
     private static final double DESPAWN_DISTANCE = 15.0;
     private static final double AFFECTED_RADIUS = 64.0; // Players within this distance are affected
@@ -91,8 +99,11 @@ public class HerobrineEventManager {
         this.currentState = STATE_FOG_CLOSING;
         this.herobrineSpawnedThisEvent = false;
         this.herobrine = null;
+        this.lastPlayerApproachTime = this.eventStartTime;
+        this.lastPlayerDistance = Double.MAX_VALUE;
+        this.lastAmbientSoundTime = 0;
         
-        // Play ambient sound for nearby players
+        // Play initial creepy ambient sound for nearby players
         world.makeSound(triggerPlayer.locX, triggerPlayer.locY, triggerPlayer.locZ, 
             "ambient.cave.cave", 0.7F, 0.5F);
         
@@ -355,6 +366,7 @@ public class HerobrineEventManager {
     
     private void updateHerobrineStalking(long stateElapsed) {
         long totalElapsed = System.currentTimeMillis() - eventStartTime;
+        long currentTime = System.currentTimeMillis();
         float fogProgress = Math.min(1.0F, (float)totalElapsed / FOG_CLOSE_DURATION);
         this.currentFogDistance = lerp(originalFogDistance, targetFogDistance, easeInOut(fogProgress));
         
@@ -372,6 +384,28 @@ public class HerobrineEventManager {
         double dx = herobrine.locX - primaryTarget.locX;
         double dz = herobrine.locZ - primaryTarget.locZ;
         double distance = Math.sqrt(dx * dx + dz * dz);
+        
+        // Play creepy ambient sounds periodically
+        if (currentTime - lastAmbientSoundTime >= AMBIENT_SOUND_INTERVAL) {
+            playCreepyAmbientSound();
+            lastAmbientSoundTime = currentTime;
+        }
+        
+        // Track if player is approaching
+        if (distance < lastPlayerDistance - 1.0) {
+            lastPlayerApproachTime = currentTime;
+        }
+        lastPlayerDistance = distance;
+        
+        // Timeout if player isn't approaching
+        if (lastPlayerApproachTime > 0 && currentTime - lastPlayerApproachTime > APPROACH_TIMEOUT) {
+            System.out.println("[Herobrine] Player not approaching - ending event");
+            if (herobrine != null) {
+                herobrine.setShouldDespawn(true);
+            }
+            startFogReturn();
+            return;
+        }
         
         if (distance < CLOSE_DISTANCE || herobrine.getAIState() == EntityHerobrine.AI_RETREATING) {
             System.out.println("[Herobrine] Too close! Retreating...");
@@ -407,6 +441,37 @@ public class HerobrineEventManager {
             herobrine.setAIState(EntityHerobrine.AI_RETREATING);
             System.out.println("[Herobrine] Retreating into the fog...");
         }
+    }
+    
+    /**
+     * Play creepy ambient sounds for all affected players
+     */
+    private void playCreepyAmbientSound() {
+        String[] creepySounds = {
+            "ambient.cave.cave",
+            "mob.endermen.stare", 
+            "mob.ghast.moan"
+        };
+        
+        String sound = creepySounds[random.nextInt(creepySounds.length)];
+        float pitch = 0.4F + random.nextFloat() * 0.3F;
+        float volume = 0.6F + random.nextFloat() * 0.3F;
+        
+        double soundX, soundY, soundZ;
+        if (herobrine != null && !herobrine.dead) {
+            soundX = herobrine.locX;
+            soundY = herobrine.locY;
+            soundZ = herobrine.locZ;
+        } else if (primaryTarget != null) {
+            soundX = primaryTarget.locX;
+            soundY = primaryTarget.locY;
+            soundZ = primaryTarget.locZ;
+        } else {
+            return;
+        }
+        
+        // Use world.makeSound which broadcasts to all players in range
+        world.makeSound(soundX, soundY, soundZ, sound, volume, pitch);
     }
     
     private void updateHerobrineApproaching(long stateElapsed) {

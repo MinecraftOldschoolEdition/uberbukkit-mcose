@@ -44,8 +44,10 @@ public class EntityHerobrine extends EntityLiving {
     // Jump state
     private boolean isJumping = false;
     private int jumpTicks = 0;
-    private static final double JUMP_VELOCITY = 0.42;
+    private static final double JUMP_VELOCITY = 0.5; // Slightly higher than player for reliability
     private static final double GRAVITY = 0.08;
+    private static final double AIR_FRICTION = 0.91; // Horizontal movement friction in air
+    private double jumpTargetX, jumpTargetZ; // Where we're trying to jump to
     
     // Retreat trigger tracking - retreat from ANY player who gets close
     private EntityHuman nearestThreat = null;
@@ -78,7 +80,7 @@ public class EntityHerobrine extends EntityLiving {
         this.health = 100;
         this.length = 1.8F; // Same height as player
         this.width = 0.6F;
-        this.bs = 0.5F; // stepHeight
+        this.bs = 1.0F; // stepHeight - can auto-step up 1 block like players
     }
     
     protected void b() {
@@ -116,13 +118,28 @@ public class EntityHerobrine extends EntityLiving {
         // Pathfinding cooldown
         if (pathfindCooldown > 0) pathfindCooldown--;
         
-        // Handle jumping
+        // Handle jumping - improved vertical movement
         if (isJumping) {
             jumpTicks++;
-            if (this.onGround && jumpTicks > 3) {
+            
+            // While airborne, maintain horizontal momentum towards target
+            if (!this.onGround && jumpTicks > 1) {
+                double dx = jumpTargetX - this.locX;
+                double dz = jumpTargetZ - this.locZ;
+                double dist = Math.sqrt(dx * dx + dz * dz);
+                if (dist > 0.1) {
+                    // Apply gentle air control towards target
+                    this.motX = (dx / dist) * moveSpeed * 0.8;
+                    this.motZ = (dz / dist) * moveSpeed * 0.8;
+                }
+            }
+            
+            // Land detection - must be on ground AND have fallen (motY was negative)
+            if (this.onGround && jumpTicks > 5) {
                 isJumping = false;
                 jumpTicks = 0;
-            } else if (jumpTicks > 40) {
+            } else if (jumpTicks > 60) {
+                // Timeout - took too long, reset jump state
                 isJumping = false;
                 jumpTicks = 0;
             }
@@ -202,11 +219,8 @@ public class EntityHerobrine extends EntityLiving {
     private void doStalkingBehavior() {
         if (targetPlayer == null) return;
         
-        // Stay JUST inside the visible fog - at 70% of fog distance
-        this.targetDistance = currentFogDistance * 0.70F;
-        
-        // Always face the player
-        faceEntity(targetPlayer);
+        // Always face the player while stalking
+        faceEntitySmooth(targetPlayer);
         
         // Ensure we're on solid ground
         snapToGround();
@@ -216,53 +230,55 @@ public class EntityHerobrine extends EntityLiving {
         double dz = this.locZ - targetPlayer.locZ;
         double currentDist = Math.sqrt(dx * dx + dz * dz);
         
-        // Direction FROM player TO us (for moving away)
-        double dirAwayX = dx / Math.max(0.1, currentDist);
-        double dirAwayZ = dz / Math.max(0.1, currentDist);
+        // Stalking behavior: Stand still and watch
+        // Only walk TOWARDS player if they get too far away (beyond visible range)
+        float visibleRange = currentFogDistance * 0.75F;
         
-        // Calculate ideal position (at targetDistance from player, in our current direction)
-        double idealX = targetPlayer.locX + dirAwayX * targetDistance;
-        double idealZ = targetPlayer.locZ + dirAwayZ * targetDistance;
-        
-        // How far are we from ideal position?
-        double toIdealX = idealX - this.locX;
-        double toIdealZ = idealZ - this.locZ;
-        double toIdealDist = Math.sqrt(toIdealX * toIdealX + toIdealZ * toIdealZ);
-        
-        // Debug every 2 seconds
         if (debugTickCounter == 0) {
-            System.out.println("[Herobrine STALK] currentDist=" + String.format("%.1f", currentDist) + 
-                " targetDist=" + String.format("%.1f", targetDistance) +
-                " toIdealDist=" + String.format("%.1f", toIdealDist));
+            System.out.println("[Herobrine STALK] dist=" + String.format("%.1f", currentDist) + 
+                " visibleRange=" + String.format("%.1f", visibleRange));
         }
         
-        // Move towards ideal position if we're more than 1 block away from it
-        if (toIdealDist > 1.0) {
-            double moveX = (toIdealX / toIdealDist) * moveSpeed;
-            double moveZ = (toIdealZ / toIdealDist) * moveSpeed;
+        // If player moves too far away, slowly walk towards them
+        if (currentDist > visibleRange + 5) {
+            // Walk towards player to stay in visible range
+            double dirToPlayerX = -dx / Math.max(0.1, currentDist);
+            double dirToPlayerZ = -dz / Math.max(0.1, currentDist);
+            
+            // Use slow, creepy movement
+            double slowSpeed = moveSpeed * 0.5;
+            smoothMove(dirToPlayerX * slowSpeed, dirToPlayerZ * slowSpeed);
+            
             if (debugTickCounter == 0) {
-                System.out.println("[Herobrine STALK] Moving towards ideal! moveX=" + String.format("%.3f", moveX) + 
-                    " moveZ=" + String.format("%.3f", moveZ));
+                System.out.println("[Herobrine STALK] Walking towards player (too far)");
             }
-            tryMove(moveX, moveZ);
         }
+        // Otherwise, just stand still and stare
     }
     
     private void doApproachingBehavior() {
         if (targetPlayer == null) return;
         
+        // Face player smoothly
+        faceEntitySmooth(targetPlayer);
+        
         double dx = targetPlayer.locX - this.locX;
         double dz = targetPlayer.locZ - this.locZ;
         double dist = Math.sqrt(dx * dx + dz * dz);
         
-        if (dist > 0.1) {
+        // Walk towards player to get into visible range
+        float visibleRange = currentFogDistance * 0.65F;
+        
+        if (dist > visibleRange && dist > 0.1) {
             dx /= dist;
             dz /= dist;
             
-            double moveX = dx * moveSpeed;
-            double moveZ = dz * moveSpeed;
-            tryMove(moveX, moveZ);
-            faceEntity(targetPlayer);
+            // Slow, deliberate approach
+            double approachSpeed = moveSpeed * 0.7;
+            smoothMove(dx * approachSpeed, dz * approachSpeed);
+        } else {
+            // Close enough - stop and stare, then event manager will trigger retreat
+            // Just stand still
         }
     }
     
@@ -287,22 +303,15 @@ public class EntityHerobrine extends EntityLiving {
                 " stuckTicks=" + totallyStuckTicks);
         }
         
+        // Walk backwards (facing player while retreating)
+        faceEntitySmooth(retreatFrom);
+        
         if (dist > 0.1) {
             dx /= dist;
             dz /= dist;
             
-            double moveX = dx * retreatSpeed;
-            double moveZ = dz * retreatSpeed;
-            
-            if (debugTickCounter == 0) {
-                System.out.println("[Herobrine RETREAT] Moving! moveX=" + String.format("%.3f", moveX) + 
-                    " moveZ=" + String.format("%.3f", moveZ));
-            }
-            tryMove(moveX, moveZ);
-            
-            // Face walking direction (away from player)
-            float awayYaw = (float)(Math.atan2(dz, dx) * 180.0 / Math.PI) - 90.0F;
-            smoothRotateTo(awayYaw);
+            // Smooth backward movement
+            smoothMove(dx * retreatSpeed, dz * retreatSpeed);
         }
     }
     
@@ -365,11 +374,24 @@ public class EntityHerobrine extends EntityLiving {
                 this.motY = JUMP_VELOCITY;
                 isJumping = true;
                 jumpTicks = 0;
-            } else if (path.type == PathType.GAP && path.gapSize <= 3) {
-                // Need to jump over a gap
-                this.motY = JUMP_VELOCITY * (1.0 + path.gapSize * 0.15);
+                jumpTargetX = this.locX + moveX * 3; // Where we're trying to land
+                jumpTargetZ = this.locZ + moveZ * 3;
+                
+                // Give initial horizontal boost
+                this.motX = moveX * 1.2;
+                this.motZ = moveZ * 1.2;
+            } else if (path.type == PathType.GAP && path.gapSize <= 4) {
+                // Need to jump over a gap - stronger jump for larger gaps
+                double gapBoost = 1.0 + path.gapSize * 0.2;
+                this.motY = JUMP_VELOCITY * gapBoost;
                 isJumping = true;
                 jumpTicks = 0;
+                jumpTargetX = this.locX + moveX * (path.gapSize + 2);
+                jumpTargetZ = this.locZ + moveZ * (path.gapSize + 2);
+                
+                // Strong horizontal boost for gap jumping
+                this.motX = moveX * (1.5 + path.gapSize * 0.3);
+                this.motZ = moveZ * (1.5 + path.gapSize * 0.3);
             } else if (path.type == PathType.WALL) {
                 // Wall - try to go around
                 consecutiveBlockedTicks++;
@@ -564,8 +586,12 @@ public class EntityHerobrine extends EntityLiving {
                 
                 if (canStepUp(targetBlockX, currentY, targetBlockZ)) {
                     this.motY = JUMP_VELOCITY;
+                    this.motX = newDirX * speed * 1.2;
+                    this.motZ = newDirZ * speed * 1.2;
                     isJumping = true;
                     jumpTicks = 0;
+                    jumpTargetX = testX;
+                    jumpTargetZ = testZ;
                     return true;
                 }
             }
@@ -734,8 +760,12 @@ public class EntityHerobrine extends EntityLiving {
                     int targetBlockZ = MathHelper.floor(testZ);
                     if (canStepUp(targetBlockX, currentY, targetBlockZ)) {
                         this.motY = JUMP_VELOCITY;
+                        this.motX = moveX * 0.5;
+                        this.motZ = moveZ * 0.5;
                         isJumping = true;
                         jumpTicks = 0;
+                        jumpTargetX = testX;
+                        jumpTargetZ = testZ;
                         return;
                     }
                 }
@@ -764,9 +794,14 @@ public class EntityHerobrine extends EntityLiving {
                     if (!isBlockSolid(checkX, yCheck, checkZ) &&
                         !isBlockSolid(checkX, yCheck + 1, checkZ) &&
                         isBlockSolid(checkX, yCheck - 1, checkZ)) {
+                        // Strong jump to escape stuck position
                         this.motY = JUMP_VELOCITY * 1.5;
+                        this.motX = jumpX * 0.5;
+                        this.motZ = jumpZ * 0.5;
                         isJumping = true;
                         jumpTicks = 0;
+                        jumpTargetX = this.locX + jumpX;
+                        jumpTargetZ = this.locZ + jumpZ;
                         return;
                     }
                 }
@@ -838,6 +873,61 @@ public class EntityHerobrine extends EntityLiving {
         this.yaw += diff;
         this.aA = this.yaw;
         this.pitch = 0;
+    }
+    
+    /**
+     * Smoothly turn to face an entity (creepy slow head turn)
+     */
+    private void faceEntitySmooth(Entity entity) {
+        double dx = entity.locX - this.locX;
+        double dy = entity.locY - this.locY;
+        double dz = entity.locZ - this.locZ;
+        double horizontalDist = Math.sqrt(dx * dx + dz * dz);
+        
+        float targetYaw = (float)(Math.atan2(dz, dx) * 180.0 / Math.PI) - 90.0F;
+        float targetPitch = (float)(-(Math.atan2(dy, horizontalDist) * 180.0 / Math.PI));
+        
+        // Smooth rotation - turn slowly for creepy effect
+        float yawDiff = targetYaw - this.yaw;
+        while (yawDiff > 180) yawDiff -= 360;
+        while (yawDiff < -180) yawDiff += 360;
+        
+        float pitchDiff = targetPitch - this.pitch;
+        
+        // Slow turn speed for creepy effect
+        float maxTurnSpeed = 5.0F;
+        if (yawDiff > maxTurnSpeed) yawDiff = maxTurnSpeed;
+        if (yawDiff < -maxTurnSpeed) yawDiff = -maxTurnSpeed;
+        if (pitchDiff > maxTurnSpeed) pitchDiff = maxTurnSpeed;
+        if (pitchDiff < -maxTurnSpeed) pitchDiff = -maxTurnSpeed;
+        
+        this.yaw += yawDiff;
+        this.pitch += pitchDiff;
+        this.lastYaw = this.yaw;
+        this.lastPitch = this.pitch;
+        this.aA = this.yaw;
+        this.aB = this.yaw;
+    }
+    
+    /**
+     * Smooth movement with velocity interpolation
+     */
+    private void smoothMove(double targetMotX, double targetMotZ) {
+        // Smoothly interpolate velocity for fluid movement
+        double smoothFactor = 0.3;
+        this.motX = this.motX * (1.0 - smoothFactor) + targetMotX * smoothFactor;
+        this.motZ = this.motZ * (1.0 - smoothFactor) + targetMotZ * smoothFactor;
+        
+        // Apply gravity
+        if (!this.onGround) {
+            this.motY -= GRAVITY;
+            if (this.motY < -3.0) this.motY = -3.0;
+        } else if (!isJumping) {
+            this.motY = 0;
+        }
+        
+        // Execute movement
+        this.move(this.motX, this.motY, this.motZ);
     }
     
     private boolean isBlockSolid(int x, int y, int z) {
@@ -935,6 +1025,10 @@ public class EntityHerobrine extends EntityLiving {
     
     public boolean shouldDespawn() {
         return shouldDespawn;
+    }
+    
+    public void setShouldDespawn(boolean value) {
+        shouldDespawn = value;
     }
     
     public void clearDespawnFlag() {

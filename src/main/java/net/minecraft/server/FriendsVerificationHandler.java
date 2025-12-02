@@ -5,21 +5,36 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.io.File;
+import java.io.FileReader;
+import java.io.FileWriter;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 
+import org.json.simple.JSONObject;
+import org.json.simple.JSONArray;
+import org.json.simple.parser.JSONParser;
+
 /**
- * Handles server-side friend verification when both players are on the same
- * online-mode=true server. This saves API costs by verifying friendships locally
- * when possible.
+ * Handles server-side friend verification for online-mode servers.
+ * 
+ * This system allows verification WITHOUT using the web API when possible:
+ * 1. Both players on same server → Instant mutual verification
+ * 2. One player on server, other in menu → Menu player can ping this server directly
+ * 3. Neither on a server → Fall back to web API (client-side)
+ * 
+ * Friend claims are persisted so verification can happen even if players
+ * aren't online at the same time.
  * 
  * Protocol:
  * - MCOSE|FQUERY: Client asks if a friend UUID is online on this server
  * - MCOSE|FONLINE: Server responds with online status and player info
  * - MCOSE|FVERIFY: Client requests mutual verification with another player
- * - MCOSE|FCONFIRM: Server confirms both players have each other as friends
+ * - MCOSE|FCONFIRM: Server confirms verification result
+ * - MCOSE|FCLAIM: Client registers their friend claim with the server
+ * - MCOSE|FCHECK: Client checks if their friend has claimed them (for external clients)
  */
 public class FriendsVerificationHandler {
     
@@ -30,18 +45,23 @@ public class FriendsVerificationHandler {
     public static final String CHANNEL_ONLINE = "MCOSE|FONLINE";  // Response: friend online status
     public static final String CHANNEL_VERIFY = "MCOSE|FVERIFY";  // Request mutual verification
     public static final String CHANNEL_CONFIRM = "MCOSE|FCONFIRM"; // Confirmation of mutual friendship
-    
-    // Track pending verification requests: requesterUUID -> targetUUID
-    private static final Map<String, String> pendingVerifications = new ConcurrentHashMap<String, String>();
+    public static final String CHANNEL_CLAIM = "MCOSE|FCLAIM";    // Register a friend claim
+    public static final String CHANNEL_CHECK = "MCOSE|FCHECK";    // Check if friend has claimed us
     
     // Track which players have added which friends (for mutual verification)
-    // playerUUID -> Map<friendUUID, timestamp>
-    private static final Map<String, Map<String, Long>> friendClaims = new ConcurrentHashMap<String, Map<String, Long>>();
+    // playerUUID -> Map<friendUUID, claimData>
+    private final Map<String, Map<String, FriendClaim>> friendClaims = new ConcurrentHashMap<String, Map<String, FriendClaim>>();
     
     private final MinecraftServer server;
+    private final File claimsFile;
+    private long lastSaveTime = 0;
+    private static final long SAVE_INTERVAL = 60000; // Save every 60 seconds if dirty
+    private boolean dirty = false;
     
     public FriendsVerificationHandler(MinecraftServer server) {
         this.server = server;
+        this.claimsFile = new File("friends_claims.json");
+        loadClaims();
     }
     
     /**
@@ -64,11 +84,41 @@ public class FriendsVerificationHandler {
                     return handleFriendQuery(player, packet.data);
                 case CHANNEL_VERIFY:
                     return handleVerifyRequest(player, packet.data);
+                case CHANNEL_CLAIM:
+                    return handleClaimRequest(player, packet.data);
+                case CHANNEL_CHECK:
+                    return handleCheckRequest(player, packet.data);
                 default:
                     return false;
             }
         } catch (Exception e) {
             log.warning("[FriendsVerify] Error handling packet: " + e.getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * Handle unauthenticated verification request (from players not fully logged in).
+     * This allows players in the menu to verify against this server.
+     */
+    public boolean handleUnauthenticatedPacket(NetworkManager networkManager, Packet250CustomPayload packet) {
+        if (packet.channel == null || packet.data == null) {
+            return false;
+        }
+        
+        if (!server.onlineMode) {
+            return false;
+        }
+        
+        try {
+            switch (packet.channel) {
+                case CHANNEL_CHECK:
+                    return handleUnauthenticatedCheck(networkManager, packet.data);
+                default:
+                    return false;
+            }
+        } catch (Exception e) {
+            log.warning("[FriendsVerify] Error handling unauthenticated packet: " + e.getMessage());
             return false;
         }
     }
@@ -80,9 +130,7 @@ public class FriendsVerificationHandler {
         DataInputStream in = new DataInputStream(new ByteArrayInputStream(data));
         String friendUuid = in.readUTF();
         
-        // Normalize UUID (remove dashes, lowercase)
         friendUuid = normalizeUuid(friendUuid);
-        String requesterUuid = normalizeUuid(getPlayerUuid(requester));
         
         // Find the friend on this server
         EntityPlayer friend = findPlayerByUuid(friendUuid);
@@ -94,7 +142,7 @@ public class FriendsVerificationHandler {
         out.writeBoolean(friend != null);
         
         if (friend != null) {
-            out.writeUTF(friend.name); // Their current username
+            out.writeUTF(friend.name);
         }
         
         Packet250CustomPayload response = new Packet250CustomPayload(CHANNEL_ONLINE, baos.toByteArray());
@@ -104,14 +152,61 @@ public class FriendsVerificationHandler {
     }
     
     /**
-     * Handle FVERIFY: Client requesting mutual verification with another player
-     * The client sends their friend claim, and we check if the other player also has them
+     * Handle FCLAIM: Client registering their friend claim with this server
+     */
+    private boolean handleClaimRequest(EntityPlayer requester, byte[] data) throws IOException {
+        DataInputStream in = new DataInputStream(new ByteArrayInputStream(data));
+        String friendUuid = in.readUTF();
+        String signature = in.readUTF();
+        long addedAt = in.readLong();
+        String publicKey = in.readUTF();
+        
+        String requesterUuid = normalizeUuid(getPlayerUuid(requester));
+        friendUuid = normalizeUuid(friendUuid);
+        
+        if (requesterUuid == null) {
+            return false;
+        }
+        
+        // Store the claim
+        FriendClaim claim = new FriendClaim(requesterUuid, friendUuid, requester.name, signature, addedAt, publicKey);
+        
+        Map<String, FriendClaim> claims = friendClaims.get(requesterUuid);
+        if (claims == null) {
+            claims = new ConcurrentHashMap<String, FriendClaim>();
+            friendClaims.put(requesterUuid, claims);
+        }
+        claims.put(friendUuid, claim);
+        dirty = true;
+        
+        log.info("[FriendsVerify] Stored claim: " + requester.name + " -> " + friendUuid);
+        
+        // Check if we can verify immediately (friend has also claimed us)
+        checkAndNotifyMutual(requesterUuid, friendUuid, requester);
+        
+        return true;
+    }
+    
+    /**
+     * Handle FVERIFY: Client requesting mutual verification
      */
     private boolean handleVerifyRequest(EntityPlayer requester, byte[] data) throws IOException {
         DataInputStream in = new DataInputStream(new ByteArrayInputStream(data));
         String friendUuid = in.readUTF();
         
-        // Normalize UUIDs
+        // Check if there's additional claim data
+        String signature = "";
+        long addedAt = System.currentTimeMillis();
+        String publicKey = "";
+        
+        try {
+            signature = in.readUTF();
+            addedAt = in.readLong();
+            publicKey = in.readUTF();
+        } catch (Exception e) {
+            // Old protocol without claim data
+        }
+        
         friendUuid = normalizeUuid(friendUuid);
         String requesterUuid = normalizeUuid(getPlayerUuid(requester));
         
@@ -119,63 +214,174 @@ public class FriendsVerificationHandler {
             return false;
         }
         
-        // Record that this player claims this friend
-        Map<String, Long> claims = friendClaims.get(requesterUuid);
-        if (claims == null) {
-            claims = new ConcurrentHashMap<String, Long>();
-            friendClaims.put(requesterUuid, claims);
-        }
-        claims.put(friendUuid, System.currentTimeMillis());
-        
-        // Check if the friend is online and has also claimed the requester
-        EntityPlayer friend = findPlayerByUuid(friendUuid);
-        boolean mutuallyVerified = false;
-        
-        if (friend != null) {
-            Map<String, Long> friendsClaims = friendClaims.get(friendUuid);
-            if (friendsClaims != null && friendsClaims.containsKey(requesterUuid)) {
-                // Both players have each other as friends!
-                mutuallyVerified = true;
-                
-                // Notify both players of the mutual verification
-                sendVerificationConfirm(requester, friendUuid, friend.name, true);
-                sendVerificationConfirm(friend, requesterUuid, requester.name, true);
-                
-                log.info("[FriendsVerify] Mutual verification: " + requester.name + " <-> " + friend.name);
-            } else {
-                // Friend is online but hasn't added requester yet
-                // Store pending verification
-                pendingVerifications.put(requesterUuid, friendUuid);
-                
-                // Tell requester: friend is online but not verified yet
-                sendVerificationConfirm(requester, friendUuid, friend.name, false);
+        // Store/update the claim if we got claim data
+        if (!signature.isEmpty()) {
+            FriendClaim claim = new FriendClaim(requesterUuid, friendUuid, requester.name, signature, addedAt, publicKey);
+            Map<String, FriendClaim> claims = friendClaims.get(requesterUuid);
+            if (claims == null) {
+                claims = new ConcurrentHashMap<String, FriendClaim>();
+                friendClaims.put(requesterUuid, claims);
             }
-        } else {
-            // Friend not online - tell requester
-            sendVerificationConfirm(requester, friendUuid, null, false);
+            claims.put(friendUuid, claim);
+            dirty = true;
+        }
+        
+        // Check for mutual verification
+        checkAndNotifyMutual(requesterUuid, friendUuid, requester);
+        
+        return true;
+    }
+    
+    /**
+     * Handle FCHECK: Client checking if a friend has claimed them
+     */
+    private boolean handleCheckRequest(EntityPlayer requester, byte[] data) throws IOException {
+        DataInputStream in = new DataInputStream(new ByteArrayInputStream(data));
+        String friendUuid = in.readUTF();
+        
+        friendUuid = normalizeUuid(friendUuid);
+        String requesterUuid = normalizeUuid(getPlayerUuid(requester));
+        
+        if (requesterUuid == null) {
+            return false;
+        }
+        
+        // Check if friend has claimed requester
+        FriendClaim friendsClaim = getClaimFromTo(friendUuid, requesterUuid);
+        
+        sendCheckResponse(requester, friendUuid, friendsClaim);
+        
+        return true;
+    }
+    
+    /**
+     * Handle unauthenticated check - for players verifying without fully joining
+     */
+    private boolean handleUnauthenticatedCheck(NetworkManager networkManager, byte[] data) throws IOException {
+        DataInputStream in = new DataInputStream(new ByteArrayInputStream(data));
+        String requesterUuid = in.readUTF();
+        String friendUuid = in.readUTF();
+        
+        requesterUuid = normalizeUuid(requesterUuid);
+        friendUuid = normalizeUuid(friendUuid);
+        
+        // Check if friend has claimed requester
+        FriendClaim friendsClaim = getClaimFromTo(friendUuid, requesterUuid);
+        
+        // Check if requester has claimed friend (they might have sent claim data too)
+        FriendClaim requestersClaim = getClaimFromTo(requesterUuid, friendUuid);
+        
+        boolean mutual = friendsClaim != null && requestersClaim != null;
+        
+        // Send response directly through network manager
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        DataOutputStream out = new DataOutputStream(baos);
+        out.writeUTF(friendUuid);
+        out.writeBoolean(mutual);
+        out.writeBoolean(friendsClaim != null); // Friend has claimed us
+        
+        if (friendsClaim != null) {
+            out.writeUTF(friendsClaim.claimerName);
+            out.writeUTF(friendsClaim.signature);
+            out.writeLong(friendsClaim.addedAt);
+            out.writeUTF(friendsClaim.publicKey);
+        }
+        
+        Packet250CustomPayload response = new Packet250CustomPayload(CHANNEL_CONFIRM, baos.toByteArray());
+        networkManager.queue(response);
+        
+        if (mutual) {
+            log.info("[FriendsVerify] Unauthenticated mutual verification: " + requesterUuid + " <-> " + friendUuid);
         }
         
         return true;
     }
     
     /**
+     * Check if two players have mutual claims and notify them
+     */
+    private void checkAndNotifyMutual(String playerAUuid, String playerBUuid, EntityPlayer playerA) {
+        FriendClaim aClaimsB = getClaimFromTo(playerAUuid, playerBUuid);
+        FriendClaim bClaimsA = getClaimFromTo(playerBUuid, playerAUuid);
+        
+        boolean mutual = aClaimsB != null && bClaimsA != null;
+        
+        // Find if friend is online
+        EntityPlayer playerB = findPlayerByUuid(playerBUuid);
+        
+        // Notify player A
+        sendVerificationConfirm(playerA, playerBUuid, 
+            playerB != null ? playerB.name : (bClaimsA != null ? bClaimsA.claimerName : null),
+            mutual, bClaimsA);
+        
+        // Notify player B if online
+        if (playerB != null && mutual) {
+            sendVerificationConfirm(playerB, playerAUuid, playerA.name, true, aClaimsB);
+            log.info("[FriendsVerify] Mutual verification: " + playerA.name + " <-> " + playerB.name);
+        }
+    }
+    
+    /**
+     * Get a claim from one player to another
+     */
+    private FriendClaim getClaimFromTo(String fromUuid, String toUuid) {
+        Map<String, FriendClaim> claims = friendClaims.get(normalizeUuid(fromUuid));
+        if (claims == null) return null;
+        return claims.get(normalizeUuid(toUuid));
+    }
+    
+    /**
      * Send verification confirmation to a player
      */
-    private void sendVerificationConfirm(EntityPlayer player, String friendUuid, String friendName, boolean verified) {
+    private void sendVerificationConfirm(EntityPlayer player, String friendUuid, String friendName, 
+            boolean verified, FriendClaim friendsClaim) {
         try {
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             DataOutputStream out = new DataOutputStream(baos);
             out.writeUTF(friendUuid);
             out.writeBoolean(verified);
-            out.writeBoolean(friendName != null); // Is friend online?
+            out.writeBoolean(friendName != null); // Is friend known?
+            
             if (friendName != null) {
                 out.writeUTF(friendName);
+            }
+            
+            // Include friend's claim data if available
+            out.writeBoolean(friendsClaim != null);
+            if (friendsClaim != null) {
+                out.writeUTF(friendsClaim.signature);
+                out.writeLong(friendsClaim.addedAt);
+                out.writeUTF(friendsClaim.publicKey);
             }
             
             Packet250CustomPayload packet = new Packet250CustomPayload(CHANNEL_CONFIRM, baos.toByteArray());
             player.netServerHandler.sendPacket(packet);
         } catch (IOException e) {
             log.warning("[FriendsVerify] Failed to send confirm: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Send check response to a player
+     */
+    private void sendCheckResponse(EntityPlayer player, String friendUuid, FriendClaim friendsClaim) {
+        try {
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            DataOutputStream out = new DataOutputStream(baos);
+            out.writeUTF(friendUuid);
+            out.writeBoolean(friendsClaim != null); // Friend has claimed us
+            
+            if (friendsClaim != null) {
+                out.writeUTF(friendsClaim.claimerName);
+                out.writeUTF(friendsClaim.signature);
+                out.writeLong(friendsClaim.addedAt);
+                out.writeUTF(friendsClaim.publicKey);
+            }
+            
+            Packet250CustomPayload response = new Packet250CustomPayload(CHANNEL_CONFIRM, baos.toByteArray());
+            player.netServerHandler.sendPacket(response);
+        } catch (IOException e) {
+            log.warning("[FriendsVerify] Failed to send check response: " + e.getMessage());
         }
     }
     
@@ -188,32 +394,36 @@ public class FriendsVerificationHandler {
         String playerUuid = normalizeUuid(getPlayerUuid(player));
         if (playerUuid == null) return;
         
-        // Check if anyone was waiting to verify with this player
-        for (Map.Entry<String, String> pending : pendingVerifications.entrySet()) {
-            if (pending.getValue().equals(playerUuid)) {
-                String requesterUuid = pending.getKey();
-                EntityPlayer requester = findPlayerByUuid(requesterUuid);
-                
-                if (requester != null) {
-                    // Notify requester that their friend is now online
-                    sendVerificationConfirm(requester, playerUuid, player.name, false);
+        // Check if any stored claims can now be verified
+        Map<String, FriendClaim> playersClaims = friendClaims.get(playerUuid);
+        if (playersClaims != null) {
+            for (String friendUuid : playersClaims.keySet()) {
+                EntityPlayer friend = findPlayerByUuid(friendUuid);
+                if (friend != null) {
+                    // Friend is online, check for mutual
+                    checkAndNotifyMutual(playerUuid, friendUuid, player);
+                }
+            }
+        }
+        
+        // Also check if anyone has claimed this player
+        for (Map.Entry<String, Map<String, FriendClaim>> entry : friendClaims.entrySet()) {
+            String claimerUuid = entry.getKey();
+            if (entry.getValue().containsKey(playerUuid)) {
+                EntityPlayer claimer = findPlayerByUuid(claimerUuid);
+                if (claimer != null) {
+                    checkAndNotifyMutual(claimerUuid, playerUuid, claimer);
                 }
             }
         }
     }
     
     /**
-     * Called when a player leaves - clean up their data
+     * Called when a player leaves
      */
     public void onPlayerLeave(EntityPlayer player) {
-        String playerUuid = normalizeUuid(getPlayerUuid(player));
-        if (playerUuid == null) return;
-        
-        // Remove pending verifications
-        pendingVerifications.remove(playerUuid);
-        
-        // Don't remove friend claims immediately - they might rejoin
-        // Claims will be cleaned up periodically or on server restart
+        // Claims persist - no cleanup needed
+        saveClaimsIfNeeded();
     }
     
     /**
@@ -234,15 +444,13 @@ public class FriendsVerificationHandler {
     }
     
     /**
-     * Get a player's UUID from their session
+     * Get a player's UUID
      */
     private String getPlayerUuid(EntityPlayer player) {
-        // Try to get UUID from the player's entity UUID first
         if (player.uniqueId != null) {
             return player.uniqueId.toString();
         }
         
-        // Fallback: try to get from CraftPlayer
         try {
             if (player.getBukkitEntity() instanceof org.bukkit.craftbukkit.entity.CraftPlayer) {
                 org.bukkit.craftbukkit.entity.CraftPlayer cp = 
@@ -258,34 +466,149 @@ public class FriendsVerificationHandler {
         return null;
     }
     
-    /**
-     * Normalize UUID to lowercase without dashes
-     */
     private String normalizeUuid(String uuid) {
         if (uuid == null) return null;
         return uuid.replace("-", "").toLowerCase();
     }
     
-    /**
-     * Check if this server supports friends verification (online-mode only)
-     */
     public boolean isSupported() {
         return server.onlineMode;
     }
     
     /**
-     * Clean up old friend claims (older than 24 hours)
-     * Should be called periodically
+     * Save claims periodically
      */
-    public void cleanupOldClaims() {
-        long cutoff = System.currentTimeMillis() - (24 * 60 * 60 * 1000); // 24 hours
+    public void saveClaimsIfNeeded() {
+        if (!dirty) return;
         
-        for (Map<String, Long> claims : friendClaims.values()) {
-            claims.entrySet().removeIf(entry -> entry.getValue() < cutoff);
+        long now = System.currentTimeMillis();
+        if (now - lastSaveTime < SAVE_INTERVAL) return;
+        
+        saveClaims();
+    }
+    
+    /**
+     * Save claims to disk
+     */
+    @SuppressWarnings("unchecked")
+    public void saveClaims() {
+        try {
+            JSONObject root = new JSONObject();
+            JSONArray claimsArray = new JSONArray();
+            
+            for (Map.Entry<String, Map<String, FriendClaim>> playerClaims : friendClaims.entrySet()) {
+                for (FriendClaim claim : playerClaims.getValue().values()) {
+                    JSONObject claimJson = new JSONObject();
+                    claimJson.put("claimer", claim.claimerUuid);
+                    claimJson.put("friend", claim.friendUuid);
+                    claimJson.put("name", claim.claimerName);
+                    claimJson.put("signature", claim.signature);
+                    claimJson.put("addedAt", claim.addedAt);
+                    claimJson.put("publicKey", claim.publicKey);
+                    claimJson.put("timestamp", claim.timestamp);
+                    claimsArray.add(claimJson);
+                }
+            }
+            
+            root.put("claims", claimsArray);
+            root.put("savedAt", System.currentTimeMillis());
+            
+            try (FileWriter writer = new FileWriter(claimsFile)) {
+                writer.write(root.toJSONString());
+            }
+            
+            dirty = false;
+            lastSaveTime = System.currentTimeMillis();
+            log.info("[FriendsVerify] Saved " + claimsArray.size() + " friend claims");
+        } catch (Exception e) {
+            log.warning("[FriendsVerify] Failed to save claims: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Load claims from disk
+     */
+    private void loadClaims() {
+        if (!claimsFile.exists()) {
+            return;
         }
         
-        // Remove empty claim maps
+        try {
+            JSONParser parser = new JSONParser();
+            JSONObject root = (JSONObject) parser.parse(new FileReader(claimsFile));
+            JSONArray claimsArray = (JSONArray) root.get("claims");
+            
+            if (claimsArray == null) return;
+            
+            int loaded = 0;
+            long cutoff = System.currentTimeMillis() - (7 * 24 * 60 * 60 * 1000); // 7 days
+            
+            for (Object obj : claimsArray) {
+                JSONObject claimJson = (JSONObject) obj;
+                
+                long timestamp = ((Number) claimJson.getOrDefault("timestamp", 0L)).longValue();
+                if (timestamp < cutoff) continue; // Skip old claims
+                
+                String claimer = (String) claimJson.get("claimer");
+                String friend = (String) claimJson.get("friend");
+                String name = (String) claimJson.get("name");
+                String signature = (String) claimJson.get("signature");
+                long addedAt = ((Number) claimJson.get("addedAt")).longValue();
+                String publicKey = (String) claimJson.get("publicKey");
+                
+                FriendClaim claim = new FriendClaim(claimer, friend, name, signature, addedAt, publicKey);
+                claim.timestamp = timestamp;
+                
+                Map<String, FriendClaim> claims = friendClaims.get(claimer);
+                if (claims == null) {
+                    claims = new ConcurrentHashMap<String, FriendClaim>();
+                    friendClaims.put(claimer, claims);
+                }
+                claims.put(friend, claim);
+                loaded++;
+            }
+            
+            log.info("[FriendsVerify] Loaded " + loaded + " friend claims");
+        } catch (Exception e) {
+            log.warning("[FriendsVerify] Failed to load claims: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Clean up old claims (older than 7 days)
+     */
+    public void cleanupOldClaims() {
+        long cutoff = System.currentTimeMillis() - (7 * 24 * 60 * 60 * 1000); // 7 days
+        
+        for (Map<String, FriendClaim> claims : friendClaims.values()) {
+            claims.entrySet().removeIf(entry -> entry.getValue().timestamp < cutoff);
+        }
+        
         friendClaims.entrySet().removeIf(entry -> entry.getValue().isEmpty());
+        dirty = true;
+    }
+    
+    /**
+     * Inner class to hold friend claim data
+     */
+    private static class FriendClaim {
+        final String claimerUuid;
+        final String friendUuid;
+        final String claimerName;
+        final String signature;
+        final long addedAt;
+        final String publicKey;
+        long timestamp;
+        
+        FriendClaim(String claimerUuid, String friendUuid, String claimerName, 
+                String signature, long addedAt, String publicKey) {
+            this.claimerUuid = claimerUuid;
+            this.friendUuid = friendUuid;
+            this.claimerName = claimerName;
+            this.signature = signature;
+            this.addedAt = addedAt;
+            this.publicKey = publicKey;
+            this.timestamp = System.currentTimeMillis();
+        }
     }
 }
-
