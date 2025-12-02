@@ -33,6 +33,8 @@ import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import net.minecraft.server.threading.ThreadingManager;
+
 // CraftBukkit start
 //import com.projectposeidon.johnymuffin.UUIDCacheFile;
 // CraftBukkit end
@@ -81,10 +83,14 @@ public class MinecraftServer implements Runnable, ICommandListener {
     
     // GUI mode flag - when true, don't call System.exit() on stop
     public static boolean guiMode = false;
+    
+    // Friends verification handler for P2P verification on online-mode servers
+    public final FriendsVerificationHandler friendsVerificationHandler;
 
     public MinecraftServer(OptionSet options) { // CraftBukkit - adds argument OptionSet
         new ThreadSleepForever(this);
         this.chatRoomManager = new VoiceChatRoomManager(this);
+        this.friendsVerificationHandler = new FriendsVerificationHandler(this);
 
         // CraftBukkit start
         this.options = options;
@@ -448,6 +454,9 @@ public class MinecraftServer implements Runnable, ICommandListener {
             this.server.getPluginManager().callEvent(new WorldLoadEvent(world.getWorld()));
         }
         // CraftBukkit end
+        
+        // Initialize async threading systems
+        ThreadingManager.getInstance().initialize(this);
 
         this.e();
     }
@@ -505,6 +514,9 @@ public class MinecraftServer implements Runnable, ICommandListener {
         if (this.serverConfigurationManager != null) {
             this.serverConfigurationManager.savePlayers();
         }
+        
+        // Shutdown async threading systems
+        ThreadingManager.getInstance().shutdown();
 
         // CraftBukkit start - multiworld is handled in saveChunks() already.
         WorldServer worldserver = this.worlds.get(0);
@@ -748,6 +760,9 @@ public class MinecraftServer implements Runnable, ICommandListener {
         } catch (Exception exception) {
             log.log(Level.WARNING, "Unexpected exception while parsing console command", exception);
         }
+        
+        // Process async threading results
+        ThreadingManager.getInstance().processTick();
     }
 
     public void issueCommand(String s, ICommandListener icommandlistener) {

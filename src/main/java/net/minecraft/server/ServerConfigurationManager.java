@@ -138,6 +138,11 @@ public class ServerConfigurationManager {
             Packet201PlayerInfo joinInfo = new Packet201PlayerInfo(entityplayer.name, true, initialPing);
             this.sendAll(joinInfo);
         } catch (Throwable ignore) {}
+        
+        // Notify friends verification handler of player join
+        if (this.server.friendsVerificationHandler != null) {
+            this.server.friendsVerificationHandler.onPlayerJoin(entityplayer);
+        }
 
         // Poseidon Start
         // Notify staff of Poseidon update if they are op or have poseidon.update permission
@@ -198,6 +203,11 @@ public class ServerConfigurationManager {
         this.server.getWorldServer(entityplayer.dimension).kill(entityplayer);
         this.players.remove(entityplayer);
         this.getPlayerManager(entityplayer.dimension).removePlayer(entityplayer);
+
+        // Notify friends verification handler of player leave
+        if (this.server.friendsVerificationHandler != null) {
+            this.server.friendsVerificationHandler.onPlayerLeave(entityplayer);
+        }
 
         // Broadcast player leave for Tab overlay
         try {

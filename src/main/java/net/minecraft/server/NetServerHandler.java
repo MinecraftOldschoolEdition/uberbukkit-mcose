@@ -1727,4 +1727,25 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             }
         }
     }
+    
+    /**
+     * Handle custom payload packets (plugin channels).
+     * Includes friends verification for online-mode servers.
+     */
+    @Override
+    public void a(Packet250CustomPayload packet250custompayload) {
+        if (packet250custompayload.channel == null) {
+            return;
+        }
+        
+        // Try friends verification handler first (for MCOSE|F* channels)
+        if (packet250custompayload.channel.startsWith("MCOSE|F")) {
+            if (minecraftServer.friendsVerificationHandler.handlePacket(this.player, packet250custompayload)) {
+                return; // Handled
+            }
+        }
+        
+        // Handle other custom channels here if needed
+        // (Voice chat, Herobrine events, etc. are handled by their own systems)
+    }
 }

@@ -1,6 +1,9 @@
 package net.minecraft.server;
 
 import com.legacyminecraft.poseidon.PoseidonConfig;
+import net.minecraft.server.threading.AsyncChunkGenerator;
+import net.minecraft.server.threading.ChunkGenerationData;
+import net.minecraft.server.threading.ThreadingManager;
 import org.bukkit.craftbukkit.CraftChunk;
 import org.bukkit.craftbukkit.util.LongHashset;
 import org.bukkit.craftbukkit.util.LongHashtable;
@@ -64,7 +67,28 @@ public class ChunkProviderServer implements IChunkProvider {
                 if (this.chunkProvider == null) {
                     chunk = this.emptyChunk;
                 } else {
-                    chunk = this.chunkProvider.getOrCreateChunk(i, j);
+                    // Try async generation first (uses thread-safe generators)
+                    AsyncChunkGenerator asyncGen = ThreadingManager.getInstance().getChunkGenerator(this.world);
+                    if (asyncGen != null) {
+                        // Check if async generation already completed
+                        ChunkGenerationData asyncData = asyncGen.pollCompletedChunk(i, j);
+                        if (asyncData != null) {
+                            // Create chunk from async-generated data using the byte[] constructor
+                            chunk = new Chunk(this.world, asyncData.blocks, i, j);
+                            asyncGen.applyDataToChunk(chunk, asyncData);
+                        } else if (!asyncGen.isChunkPending(i, j)) {
+                            // Request async generation for future chunks nearby
+                            // But generate this one synchronously since player needs it now
+                            asyncGen.requestChunkAsync(i, j);
+                            chunk = this.chunkProvider.getOrCreateChunk(i, j);
+                        } else {
+                            // Chunk is pending - generate synchronously to avoid blocking
+                            chunk = this.chunkProvider.getOrCreateChunk(i, j);
+                        }
+                    } else {
+                        // Fallback to sync generation
+                        chunk = this.chunkProvider.getOrCreateChunk(i, j);
+                    }
                 }
                 newChunk = true; // CraftBukkit
             }
