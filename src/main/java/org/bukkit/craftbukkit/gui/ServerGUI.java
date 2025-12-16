@@ -96,6 +96,15 @@ public class ServerGUI extends JFrame {
     private JCheckBox whiteListCheck;
     private JButton savePropertiesButton;
     
+    // Threading configuration UI components
+    private JCheckBox asyncChunkGenCheck;
+    private JSpinner chunkGenThreadsSpinner;
+    private JCheckBox asyncLightingCheck;
+    private JSpinner lightingThreadsSpinner;
+    private JCheckBox asyncEntityCheck;
+    private JSpinner entityThreadsSpinner;
+    private JButton saveThreadingButton;
+    
     // Log storage for filtering
     private List<LogEntry> allLogs = new ArrayList<>();
     private String currentFilter = "All";
@@ -331,17 +340,45 @@ public class ServerGUI extends JFrame {
         restartButton.addActionListener(e -> {
             if (serverStarted) {
                 appendLog("[GUI] Restarting server...", LogType.INFO);
+                restartButton.setEnabled(false);
+                startButton.setEnabled(false);
                 stopServer();
-                // Wait a moment then restart
+                // Wait for server to actually stop, then restart
                 new Thread(() -> {
                     try {
-                        Thread.sleep(2000);
+                        // Wait for serverStarted to become false (max 30 seconds)
+                        int waitCount = 0;
+                        while (serverStarted && waitCount < 60) {
+                            Thread.sleep(500);
+                            waitCount++;
+                        }
+                        
+                        if (serverStarted) {
+                            // Server didn't stop in time
+                            SwingUtilities.invokeLater(() -> {
+                                appendLog("[GUI] Server did not stop in time for restart", LogType.ERROR);
+                                restartButton.setEnabled(true);
+                                startButton.setEnabled(true);
+                            });
+                            return;
+                        }
+                        
+                        // Wait a bit more for cleanup
+                        Thread.sleep(1000);
+                        
                         SwingUtilities.invokeLater(() -> {
                             startServer();
                             startButton.setText("Stop Server");
                             styleButton(startButton, ERROR_COLOR, Color.WHITE);
+                            restartButton.setEnabled(true);
+                            startButton.setEnabled(true);
                         });
-                    } catch (InterruptedException ex) {}
+                    } catch (InterruptedException ex) {
+                        SwingUtilities.invokeLater(() -> {
+                            restartButton.setEnabled(true);
+                            startButton.setEnabled(true);
+                        });
+                    }
                 }).start();
             } else {
                 appendLog("[GUI] Server is not running", LogType.INFO);
@@ -1065,7 +1102,7 @@ public class ServerGUI extends JFrame {
         gbc.gridx = 0; gbc.gridy = row; gbc.weightx = 0;
         propsGrid.add(createLabel("Gamemode:"), gbc);
         gbc.gridx = 1; gbc.weightx = 1;
-        gamemodeCombo = createComboBox(new String[]{"Survival", "Creative"});
+        gamemodeCombo = createComboBox(new String[]{"Survival", "Creative", "Hardcore"});
         propsGrid.add(gamemodeCombo, gbc);
         
         // Difficulty
@@ -1155,6 +1192,100 @@ public class ServerGUI extends JFrame {
         
         // Load server properties
         loadServerProperties();
+        
+        // Threading Configuration section
+        JPanel threadingSection = createSection("Threading Configuration");
+        threadingSection.setMaximumSize(new Dimension(Integer.MAX_VALUE, 200));
+        
+        JPanel threadingGrid = new JPanel(new GridBagLayout());
+        threadingGrid.setBackground(BG_PANEL);
+        GridBagConstraints tgbc = new GridBagConstraints();
+        tgbc.insets = new Insets(3, 5, 3, 10);
+        tgbc.anchor = GridBagConstraints.WEST;
+        tgbc.fill = GridBagConstraints.HORIZONTAL;
+        
+        int trow = 0;
+        
+        // Async Chunk Generation
+        tgbc.gridx = 0; tgbc.gridy = trow; tgbc.weightx = 0;
+        asyncChunkGenCheck = createCheckBox("Async Chunk Generation", true);
+        asyncChunkGenCheck.setToolTipText("Generate terrain on background threads (safe, improves performance)");
+        threadingGrid.add(asyncChunkGenCheck, tgbc);
+        
+        tgbc.gridx = 1; tgbc.weightx = 0;
+        threadingGrid.add(createLabel("Threads:"), tgbc);
+        
+        tgbc.gridx = 2; tgbc.weightx = 0;
+        int defaultThreads = Math.max(1, Runtime.getRuntime().availableProcessors() / 4);
+        chunkGenThreadsSpinner = new JSpinner(new SpinnerNumberModel(defaultThreads, 1, 16, 1));
+        chunkGenThreadsSpinner.setPreferredSize(new Dimension(60, 25));
+        styleSpinner(chunkGenThreadsSpinner);
+        threadingGrid.add(chunkGenThreadsSpinner, tgbc);
+        
+        trow++;
+        
+        // Async Lighting (experimental)
+        tgbc.gridx = 0; tgbc.gridy = trow; tgbc.weightx = 0;
+        asyncLightingCheck = createCheckBox("Async Lighting (Experimental)", false);
+        asyncLightingCheck.setToolTipText("Process lighting updates on background threads (may cause visual glitches)");
+        threadingGrid.add(asyncLightingCheck, tgbc);
+        
+        tgbc.gridx = 1; tgbc.weightx = 0;
+        threadingGrid.add(createLabel("Threads:"), tgbc);
+        
+        tgbc.gridx = 2; tgbc.weightx = 0;
+        lightingThreadsSpinner = new JSpinner(new SpinnerNumberModel(defaultThreads, 1, 16, 1));
+        lightingThreadsSpinner.setPreferredSize(new Dimension(60, 25));
+        styleSpinner(lightingThreadsSpinner);
+        threadingGrid.add(lightingThreadsSpinner, tgbc);
+        
+        trow++;
+        
+        // Async Entity Processing (experimental)
+        tgbc.gridx = 0; tgbc.gridy = trow; tgbc.weightx = 0;
+        asyncEntityCheck = createCheckBox("Async Entity Processing (Experimental)", false);
+        asyncEntityCheck.setToolTipText("Process entity AI on background threads (may cause AI issues)");
+        threadingGrid.add(asyncEntityCheck, tgbc);
+        
+        tgbc.gridx = 1; tgbc.weightx = 0;
+        threadingGrid.add(createLabel("Threads:"), tgbc);
+        
+        tgbc.gridx = 2; tgbc.weightx = 0;
+        entityThreadsSpinner = new JSpinner(new SpinnerNumberModel(defaultThreads, 1, 16, 1));
+        entityThreadsSpinner.setPreferredSize(new Dimension(60, 25));
+        styleSpinner(entityThreadsSpinner);
+        threadingGrid.add(entityThreadsSpinner, tgbc);
+        
+        trow++;
+        
+        // Save button row
+        JPanel threadingSaveRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 5));
+        threadingSaveRow.setBackground(BG_PANEL);
+        
+        saveThreadingButton = new JButton("Save Threading Config");
+        styleButton(saveThreadingButton, SUCCESS_COLOR, Color.WHITE);
+        saveThreadingButton.addActionListener(e -> saveThreadingConfig());
+        threadingSaveRow.add(saveThreadingButton);
+        
+        JButton reloadThreadingButton = new JButton("Reload");
+        styleButton(reloadThreadingButton, ACCENT_COLOR, Color.WHITE);
+        reloadThreadingButton.addActionListener(e -> loadThreadingConfig());
+        threadingSaveRow.add(reloadThreadingButton);
+        
+        JLabel threadingNote = new JLabel("  (Server restart required for changes)");
+        threadingNote.setForeground(new Color(150, 150, 150));
+        threadingNote.setFont(new Font("Segoe UI", Font.ITALIC, 11));
+        threadingSaveRow.add(threadingNote);
+        
+        tgbc.gridx = 0; tgbc.gridy = trow; tgbc.gridwidth = 3;
+        threadingGrid.add(threadingSaveRow, tgbc);
+        
+        threadingSection.add(threadingGrid);
+        optionsContent.add(threadingSection);
+        optionsContent.add(Box.createVerticalStrut(10));
+        
+        // Load threading config
+        loadThreadingConfig();
         
         // Server info section
         JPanel infoSection = createSection("Server Information");
@@ -1279,9 +1410,15 @@ public class ServerGUI extends JFrame {
                 }
             }
             
-            // Gamemode
-            String gamemode = props.getProperty("gamemode", "0");
-            gamemodeCombo.setSelectedIndex("1".equals(gamemode) ? 1 : 0);
+            // Gamemode (0/survival, 1/creative, 2/hardcore)
+            String gamemode = props.getProperty("gamemode", "survival").toLowerCase();
+            if (gamemode.equals("1") || gamemode.equals("creative") || gamemode.equals("c")) {
+                gamemodeCombo.setSelectedIndex(1); // Creative
+            } else if (gamemode.equals("2") || gamemode.equals("hardcore") || gamemode.equals("h")) {
+                gamemodeCombo.setSelectedIndex(2); // Hardcore
+            } else {
+                gamemodeCombo.setSelectedIndex(0); // Survival (default)
+            }
             
             // Difficulty
             try {
@@ -1324,7 +1461,9 @@ public class ServerGUI extends JFrame {
             props.setProperty("max-players", maxPlayersField.getText().trim());
             props.setProperty("motd", motdField.getText());
             props.setProperty("level-type", (String) levelTypeCombo.getSelectedItem());
-            props.setProperty("gamemode", String.valueOf(gamemodeCombo.getSelectedIndex()));
+            // Save gamemode as string (survival, creative, hardcore)
+            String[] gamemodes = {"survival", "creative", "hardcore"};
+            props.setProperty("gamemode", gamemodes[gamemodeCombo.getSelectedIndex()]);
             props.setProperty("difficulty", String.valueOf(difficultyCombo.getSelectedIndex()));
             
             // Online mode controls authentication (modern Mojang auth when true, no auth when false)
@@ -1381,6 +1520,90 @@ public class ServerGUI extends JFrame {
             levelSeedField.setText("");
             maxPlayersField.setText("20");
             motdField.setText("A Minecraft Server");
+        }
+    }
+    
+    private void styleSpinner(JSpinner spinner) {
+        spinner.getEditor().getComponent(0).setBackground(BG_INPUT);
+        spinner.getEditor().getComponent(0).setForeground(TEXT_COLOR);
+        ((JSpinner.DefaultEditor) spinner.getEditor()).getTextField().setCaretColor(TEXT_COLOR);
+    }
+    
+    private void loadThreadingConfig() {
+        File configFile = new File("threading.properties");
+        
+        if (!configFile.exists()) {
+            // Set defaults
+            int defaultThreads = Math.max(1, Runtime.getRuntime().availableProcessors() / 4);
+            asyncChunkGenCheck.setSelected(true);
+            chunkGenThreadsSpinner.setValue(defaultThreads);
+            asyncLightingCheck.setSelected(false);
+            lightingThreadsSpinner.setValue(defaultThreads);
+            asyncEntityCheck.setSelected(false);
+            entityThreadsSpinner.setValue(defaultThreads);
+            return;
+        }
+        
+        try {
+            Properties props = new Properties();
+            FileInputStream fis = new FileInputStream(configFile);
+            props.load(fis);
+            fis.close();
+            
+            int defaultThreads = Math.max(1, Runtime.getRuntime().availableProcessors() / 4);
+            
+            asyncChunkGenCheck.setSelected(Boolean.parseBoolean(props.getProperty("async.chunk-generation.enabled", "true")));
+            chunkGenThreadsSpinner.setValue(Integer.parseInt(props.getProperty("async.chunk-generation.threads", String.valueOf(defaultThreads))));
+            
+            asyncLightingCheck.setSelected(Boolean.parseBoolean(props.getProperty("async.lighting.enabled", "false")));
+            lightingThreadsSpinner.setValue(Integer.parseInt(props.getProperty("async.lighting.threads", String.valueOf(defaultThreads))));
+            
+            asyncEntityCheck.setSelected(Boolean.parseBoolean(props.getProperty("async.entity-processing.enabled", "false")));
+            entityThreadsSpinner.setValue(Integer.parseInt(props.getProperty("async.entity-processing.threads", String.valueOf(defaultThreads))));
+            
+        } catch (Exception e) {
+            appendLog("[GUI] Error loading threading.properties: " + e.getMessage(), LogType.ERROR);
+        }
+    }
+    
+    private void saveThreadingConfig() {
+        File configFile = new File("threading.properties");
+        
+        try {
+            Properties props = new Properties();
+            
+            // Load existing properties first to preserve any we don't manage
+            if (configFile.exists()) {
+                FileInputStream fis = new FileInputStream(configFile);
+                props.load(fis);
+                fis.close();
+            }
+            
+            props.setProperty("async.chunk-generation.enabled", String.valueOf(asyncChunkGenCheck.isSelected()));
+            props.setProperty("async.chunk-generation.threads", String.valueOf(chunkGenThreadsSpinner.getValue()));
+            
+            props.setProperty("async.lighting.enabled", String.valueOf(asyncLightingCheck.isSelected()));
+            props.setProperty("async.lighting.threads", String.valueOf(lightingThreadsSpinner.getValue()));
+            
+            props.setProperty("async.entity-processing.enabled", String.valueOf(asyncEntityCheck.isSelected()));
+            props.setProperty("async.entity-processing.threads", String.valueOf(entityThreadsSpinner.getValue()));
+            
+            // Preserve max-tasks-per-tick if it exists, otherwise set default
+            if (!props.containsKey("threading.max-tasks-per-tick")) {
+                props.setProperty("threading.max-tasks-per-tick", "100");
+            }
+            
+            FileOutputStream fos = new FileOutputStream(configFile);
+            props.store(fos, "Server Threading Configuration\n" +
+                "WARNING: Async features are experimental!\n" +
+                "Async chunk generation is generally safe.\n" +
+                "Async lighting and entity processing may cause issues.");
+            fos.close();
+            
+            appendLog("[GUI] Threading configuration saved successfully.", LogType.INFO);
+            
+        } catch (IOException e) {
+            appendLog("[GUI] Error saving threading.properties: " + e.getMessage(), LogType.ERROR);
         }
     }
     

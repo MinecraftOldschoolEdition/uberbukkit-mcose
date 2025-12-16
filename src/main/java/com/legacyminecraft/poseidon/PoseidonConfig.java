@@ -122,6 +122,16 @@ public class PoseidonConfig extends Configuration {
         generateConfigOption("settings.statistics.key", UUID.randomUUID().toString());
         generateConfigOption("settings.statistics.enabled", true);
 
+        //Hardcore Mode
+        generateConfigOption("world-settings.hardcore.enabled", false);
+        generateConfigOption("world-settings.hardcore.info", "When enabled, players are banned from the server upon death. This can be overridden per-world using the world's level.dat hardcore setting.");
+        generateConfigOption("world-settings.hardcore.ban-message", "You died! Game over, man, game over!");
+        generateConfigOption("world-settings.hardcore.death-kick-message", "\u00A7cYou have been banned from this hardcore server!");
+
+        // Death Messages
+        generateConfigOption("settings.death-messages.enabled", true);
+        generateConfigOption("settings.death-messages.info", "When enabled, death messages are broadcast to all players like in modern Minecraft (e.g., 'Player was slain by Zombie').");
+
         //World Settings
         generateConfigOption("world-settings.optimized-explosions", false);
         generateConfigOption("world-settings.send-explosion-velocity", true);
@@ -202,6 +212,20 @@ public class PoseidonConfig extends Configuration {
         //UberBukkit
         generateConfigOption("fix.optimize-sponges.enabled", true);
         generateConfigOption("fix.optimize-sponges.info", "Optimizes sponges by removing unnecessary block updates. This can also prevent some block duplication methods.");
+
+        // Entity Tracking Settings - for smoother mob movement
+        generateConfigOption("settings.entity-tracking.info", "These settings control how frequently entity positions are sent to clients. Lower values = smoother movement but more bandwidth/CPU. Vanilla b1.7.3 uses 3 for mobs.");
+        generateConfigOption("settings.entity-tracking.enabled", true);
+        generateConfigOption("settings.entity-tracking.mob-update-frequency", 2);
+        generateConfigOption("settings.entity-tracking.mob-update-frequency-info", "How often (in ticks) mob positions are sent to clients. 2 = smoother than vanilla, 3 = vanilla b1.7.3. Default: 2");
+        generateConfigOption("settings.entity-tracking.player-update-frequency", 2);
+        generateConfigOption("settings.entity-tracking.player-update-frequency-info", "How often (in ticks) player positions are sent to other players. Default: 2 (vanilla)");
+        generateConfigOption("settings.entity-tracking.vehicle-update-frequency", 2);
+        generateConfigOption("settings.entity-tracking.vehicle-update-frequency-info", "How often (in ticks) minecart/boat positions are sent to clients. Default: 2");
+        generateConfigOption("settings.entity-tracking.projectile-update-frequency", 3);
+        generateConfigOption("settings.entity-tracking.projectile-update-frequency-info", "How often (in ticks) arrows/snowballs/eggs/fireballs are sent to clients. Default: 3");
+        generateConfigOption("settings.entity-tracking.item-update-frequency", 10);
+        generateConfigOption("settings.entity-tracking.item-update-frequency-info", "How often (in ticks) dropped item positions are sent to clients. Default: 10");
 
         //Tree Leave Destroy Blacklist
         if (Boolean.valueOf(String.valueOf(getConfigOption("world.settings.block-tree-growth.enabled", true)))) {

@@ -1,6 +1,7 @@
 package org.bukkit.command;
 
 import org.bukkit.plugin.Plugin;
+import java.util.List;
 
 /**
  * Represents a {@link Command} belonging to a plugin
@@ -8,6 +9,7 @@ import org.bukkit.plugin.Plugin;
 public final class PluginCommand extends Command {
     private final Plugin owningPlugin;
     private CommandExecutor executor;
+    private TabCompleter tabCompleter;
 
     protected PluginCommand(String name, Plugin owner) {
         super(name);
@@ -75,5 +77,58 @@ public final class PluginCommand extends Command {
      */
     public Plugin getPlugin() {
         return owningPlugin;
+    }
+    
+    /**
+     * Sets the {@link TabCompleter} to run when tab-completing this command.
+     * <p>
+     * If no TabCompleter is specified, the command executor will be used
+     * if it implements {@link TabCompleter}.
+     *
+     * @param completer New tab completer to use
+     */
+    public void setTabCompleter(TabCompleter completer) {
+        this.tabCompleter = completer;
+    }
+    
+    /**
+     * Gets the {@link TabCompleter} associated with this command.
+     *
+     * @return TabCompleter object linked to this command, or null if not set
+     */
+    public TabCompleter getTabCompleter() {
+        return tabCompleter;
+    }
+    
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Delegates to the tab completer if one is set. Otherwise, if the
+     * executor implements {@link TabCompleter}, it will be used.
+     */
+    @Override
+    public List<String> tabComplete(CommandSender sender, String alias, String[] args) {
+        if (!owningPlugin.isEnabled()) {
+            return java.util.Collections.emptyList();
+        }
+        
+        // First try the dedicated tab completer
+        if (tabCompleter != null) {
+            List<String> completions = tabCompleter.onTabComplete(sender, this, alias, args);
+            if (completions != null) {
+                return completions;
+            }
+        }
+        
+        // Fall back to executor if it implements TabCompleter
+        if (executor instanceof TabCompleter) {
+            List<String> completions = ((TabCompleter) executor).onTabComplete(sender, this, alias, args);
+            if (completions != null) {
+                return completions;
+            }
+        }
+        
+        // Default: return empty list
+        return java.util.Collections.emptyList();
     }
 }

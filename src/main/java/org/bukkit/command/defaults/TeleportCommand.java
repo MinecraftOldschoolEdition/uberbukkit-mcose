@@ -113,4 +113,20 @@ public class TeleportCommand extends VanillaCommand {
     public boolean matches(String input) {
         return input.startsWith("tp ");
     }
+    
+    @Override
+    public java.util.List<String> tabComplete(org.bukkit.command.CommandSender sender, String alias, String[] args) {
+        java.util.List<String> completions = new java.util.ArrayList<String>();
+        String prefix = args.length > 0 ? args[args.length - 1].toLowerCase() : "";
+        
+        // Complete player names for first two arguments
+        if (args.length <= 2) {
+            for (Player p : Bukkit.getOnlinePlayers()) {
+                if (p.getName().toLowerCase().startsWith(prefix)) {
+                    completions.add(p.getName());
+                }
+            }
+        }
+        return completions;
+    }
 }

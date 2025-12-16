@@ -49,6 +49,19 @@ public abstract class Command {
     public abstract boolean execute(CommandSender sender, String commandLabel, String[] args);
 
     /**
+     * Executed on tab completion for this command, returning a list of options
+     * the player can tab through.
+     *
+     * @param sender       Source object which is executing this command
+     * @param alias        The alias used
+     * @param args         All arguments passed to the command, split via ' '
+     * @return A List of possible completions for the final argument, or an empty list
+     */
+    public List<String> tabComplete(CommandSender sender, String alias, String[] args) {
+        return new ArrayList<String>();
+    }
+
+    /**
      * Returns the name of this command
      *
      * @return Name of this command

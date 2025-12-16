@@ -92,4 +92,27 @@ public class GiveCommand extends VanillaCommand {
     public boolean matches(String input) {
         return input.startsWith("give ");
     }
+    
+    @Override
+    public java.util.List<String> tabComplete(org.bukkit.command.CommandSender sender, String alias, String[] args) {
+        java.util.List<String> completions = new java.util.ArrayList<String>();
+        if (args.length == 1) {
+            // Complete player names
+            String prefix = args[0].toLowerCase();
+            for (Player p : Bukkit.getOnlinePlayers()) {
+                if (p.getName().toLowerCase().startsWith(prefix)) {
+                    completions.add(p.getName());
+                }
+            }
+        } else if (args.length == 2) {
+            // Complete item names
+            String prefix = args[1].toLowerCase();
+            for (Material mat : Material.values()) {
+                if (mat.name().toLowerCase().startsWith(prefix)) {
+                    completions.add(mat.name().toLowerCase());
+                }
+            }
+        }
+        return completions;
+    }
 }

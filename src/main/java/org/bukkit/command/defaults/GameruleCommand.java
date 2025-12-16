@@ -48,6 +48,8 @@ public class GameruleCommand extends VanillaCommand {
                 sender.sendMessage(args[0] + " = " + worldData.getMobGriefing());
             } else if (ruleName.equals("doweathercycle")) {
                 sender.sendMessage(args[0] + " = " + worldData.getDoWeatherCycle());
+            } else if (ruleName.equals("showdeathmessages")) {
+                sender.sendMessage(args[0] + " = " + worldData.getShowDeathMessages());
             } else {
                 sender.sendMessage(ChatColor.RED + "Unknown game rule: " + args[0]);
                 return false;
@@ -88,6 +90,12 @@ public class GameruleCommand extends VanillaCommand {
                 if (!(sender instanceof org.bukkit.command.ConsoleCommandSender)) {
                     Bukkit.getLogger().info("User " + sender.getName() + " set game rule " + args[0] + " to " + value);
                 }
+            } else if (ruleName.equals("showdeathmessages")) {
+                worldData.setShowDeathMessages(value);
+                sender.sendMessage("Game rule " + args[0] + " has been set to " + value);
+                if (!(sender instanceof org.bukkit.command.ConsoleCommandSender)) {
+                    Bukkit.getLogger().info("User " + sender.getName() + " set game rule " + args[0] + " to " + value);
+                }
             } else {
                 sender.sendMessage(ChatColor.RED + "Unknown game rule: " + args[0]);
                 return false;
@@ -106,6 +114,27 @@ public class GameruleCommand extends VanillaCommand {
         String lowerInput = input.toLowerCase();
         return lowerInput.startsWith("gamerule ") || lowerInput.equals("gamerule");
     }
+    
+    @Override
+    public java.util.List<String> tabComplete(org.bukkit.command.CommandSender sender, String alias, String[] args) {
+        java.util.List<String> completions = new java.util.ArrayList<String>();
+        if (args.length == 1) {
+            String prefix = args[0].toLowerCase();
+            String[] rules = {"doDayNightCycle", "tntexplodes", "mobGriefing", "doWeatherCycle", "showDeathMessages"};
+            for (String rule : rules) {
+                if (rule.toLowerCase().startsWith(prefix)) {
+                    completions.add(rule);
+                }
+            }
+        } else if (args.length == 2) {
+            String prefix = args[1].toLowerCase();
+            String[] values = {"true", "false"};
+            for (String val : values) {
+                if (val.startsWith(prefix)) {
+                    completions.add(val);
+                }
+            }
+        }
+        return completions;
+    }
 }
-
-

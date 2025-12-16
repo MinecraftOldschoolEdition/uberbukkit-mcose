@@ -105,6 +105,12 @@ public abstract class Entity {
     public boolean bK;
     public boolean airBorne;
     public UUID uniqueId = UUID.randomUUID(); // CraftBukkit
+    
+    // UberBukkit - Track player-caused damage for death messages
+    public EntityPlayer lastPlayerAttacker; // Last player who damaged this entity
+    public long lastPlayerAttackerTime; // World tick when player last attacked (for timeout)
+    public EntityPlayer fireSource; // Player who set this entity on fire
+    public static final long PLAYER_ATTACKER_TIMEOUT = 100; // 5 seconds in ticks
 
     public Entity(World world) {
         this.id = entityCount++;

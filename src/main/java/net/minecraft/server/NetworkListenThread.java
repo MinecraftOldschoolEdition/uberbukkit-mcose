@@ -2,6 +2,7 @@ package net.minecraft.server;
 
 import java.io.IOException;
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.util.ArrayList;
 import java.util.logging.Level;
@@ -20,8 +21,13 @@ public class NetworkListenThread {
 
     public NetworkListenThread(MinecraftServer minecraftserver, InetAddress inetaddress, int i) throws IOException {
         this.c = minecraftserver;
-        this.d = new ServerSocket(i, 0, inetaddress);
+        // Create unbound socket first so we can set options before binding
+        this.d = new ServerSocket();
+        // Allow immediate rebind after server restart (avoids "Address already in use")
+        this.d.setReuseAddress(true);
         this.d.setPerformancePreferences(0, 2, 1);
+        // Now bind to the address and port
+        this.d.bind(new InetSocketAddress(inetaddress, i), 0);
         this.b = true;
         this.e = new NetworkAcceptThread(this, "Listen thread", minecraftserver);
         this.e.start();
@@ -93,5 +99,21 @@ public class NetworkListenThread {
 
     static void a(NetworkListenThread networklistenthread, NetLoginHandler netloginhandler) {
         networklistenthread.a(netloginhandler);
+    }
+    
+    /**
+     * Closes the server socket and stops accepting new connections.
+     * This should be called during server shutdown to release the port.
+     */
+    public void closeSocket() {
+        this.b = false; // Stop accepting new connections
+        try {
+            if (this.d != null && !this.d.isClosed()) {
+                this.d.close();
+                a.info("Server socket closed");
+            }
+        } catch (IOException e) {
+            a.log(Level.WARNING, "Error closing server socket", e);
+        }
     }
 }

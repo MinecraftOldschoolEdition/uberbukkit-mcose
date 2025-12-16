@@ -104,7 +104,39 @@ public class ServerConfigurationManager {
     }
 
     public void b(EntityPlayer entityplayer) {
+        // Check if player data file exists before loading (to detect new players)
+        boolean isNewPlayer = !this.playerHasData(entityplayer.name);
+        
         this.playerFileData.b(entityplayer);
+        
+        // Apply default gamemode from server.properties for new players only
+        if (isNewPlayer && this.server.defaultGameMode != 0) {
+            entityplayer.gameMode = this.server.defaultGameMode;
+            if (this.server.defaultGameMode == 2) {
+                a.info("[Hardcore] New player " + entityplayer.name + " will be in hardcore mode");
+            }
+        }
+        
+        // UberBukkit - Award "Open Inventory" achievement on first join
+        // This is normally triggered client-side but we track it server-side too
+        if (entityplayer.playerStatistics != null && !entityplayer.playerStatistics.hasAchievement(AchievementList.openInventory)) {
+            entityplayer.a(AchievementList.openInventory, 1);
+        }
+        
+        // UberBukkit - Record player join in server-wide statistics
+        ServerStatistics.getInstance().recordPlayerJoin(entityplayer.name);
+    }
+    
+    /**
+     * Check if a player has existing save data
+     */
+    private boolean playerHasData(String playerName) {
+        if (this.playerFileData instanceof PlayerNBTManager) {
+            PlayerNBTManager nbtManager = (PlayerNBTManager) this.playerFileData;
+            NBTTagCompound data = nbtManager.a(playerName);
+            return data != null;
+        }
+        return false;
     }
 
     public void c(EntityPlayer entityplayer) {

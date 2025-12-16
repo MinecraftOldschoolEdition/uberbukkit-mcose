@@ -190,6 +190,10 @@ public class EntityArrow extends Entity {
                         if (event.isCancelled()) {
                             stick = !projectile.doesBounce();
                         } else {
+                            // UberBukkit - Track fire source if arrow is on fire
+                            if (this.fireTicks > 0 && this.shooter instanceof EntityPlayer) {
+                                movingobjectposition.entity.fireSource = (EntityPlayer) this.shooter;
+                            }
                             // this function returns if the arrow should stick in or not, i.e. !bounce
                             stick = movingobjectposition.entity.damageEntity(this, event.getDamage());
                         }

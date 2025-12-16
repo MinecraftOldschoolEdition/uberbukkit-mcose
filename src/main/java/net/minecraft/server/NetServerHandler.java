@@ -1567,6 +1567,17 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         if (event.isCancelled()) return;
 
         if (this.player.health <= 0) {
+            // Hardcore mode: prevent respawn, ban and kick instead
+            if (this.player.isHardcoreMode()) {
+                String banMessage = PoseidonConfig.getInstance().getConfigString("world-settings.hardcore.ban-message");
+                String kickMessage = PoseidonConfig.getInstance().getConfigString("world-settings.hardcore.death-kick-message");
+                // Ban the player (in case it wasn't already done in die())
+                this.minecraftServer.serverConfigurationManager.a(this.player.name);
+                // Kick with the hardcore death message
+                this.disconnect(kickMessage != null ? kickMessage : "You died in hardcore mode!");
+                return;
+            }
+
             this.player = this.minecraftServer.serverConfigurationManager.moveToWorld(this.player, 0);
 
             this.getPlayer().setHandle(this.player); // CraftBukkit
@@ -1747,5 +1758,87 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         
         // Handle other custom channels here if needed
         // (Voice chat, Herobrine events, etc. are handled by their own systems)
+    }
+    
+    /**
+     * Handle tab completion requests from the client.
+     * Parses the partial command and returns possible completions.
+     */
+    @Override
+    public void a(Packet203TabComplete packet203tabcomplete) {
+        if (packet203tabcomplete.text == null || packet203tabcomplete.text.isEmpty()) {
+            return;
+        }
+        
+        String text = packet203tabcomplete.text;
+        java.util.List<String> completions = new java.util.ArrayList<String>();
+        
+        // If it's a command (starts with /)
+        if (text.startsWith("/")) {
+            String commandText = text.substring(1); // Remove leading /
+            String[] parts = commandText.split(" ", -1); // -1 to preserve trailing empty strings
+            
+            if (parts.length == 0) {
+                parts = new String[]{""};
+            }
+            
+            String commandName = parts[0].toLowerCase();
+            
+            // Get all registered commands
+            org.bukkit.command.SimpleCommandMap commandMap = (org.bukkit.command.SimpleCommandMap) this.server.getCommandMap();
+            
+            if (parts.length == 1) {
+                // Completing command name
+                String prefix = commandName;
+                for (org.bukkit.command.Command cmd : commandMap.getCommands()) {
+                    if (cmd.getName().toLowerCase().startsWith(prefix)) {
+                        if (cmd.getPermission() == null || this.getPlayer().hasPermission(cmd.getPermission())) {
+                            completions.add(cmd.getName());
+                        }
+                    }
+                    // Also check aliases
+                    for (String alias : cmd.getAliases()) {
+                        if (alias.toLowerCase().startsWith(prefix)) {
+                            if (cmd.getPermission() == null || this.getPlayer().hasPermission(cmd.getPermission())) {
+                                completions.add(alias);
+                            }
+                        }
+                    }
+                }
+            } else {
+                // Completing command arguments
+                org.bukkit.command.Command cmd = commandMap.getCommand(commandName);
+                if (cmd != null) {
+                    // Check permission
+                    if (cmd.getPermission() == null || this.getPlayer().hasPermission(cmd.getPermission())) {
+                        String[] args = new String[parts.length - 1];
+                        System.arraycopy(parts, 1, args, 0, args.length);
+                        
+                        java.util.List<String> cmdCompletions = cmd.tabComplete(this.getPlayer(), commandName, args);
+                        if (cmdCompletions != null) {
+                            completions.addAll(cmdCompletions);
+                        }
+                    }
+                }
+            }
+        } else {
+            // Regular chat - complete player names
+            String[] words = text.split(" ", -1);
+            String lastWord = words.length > 0 ? words[words.length - 1].toLowerCase() : "";
+            
+            for (org.bukkit.entity.Player p : this.server.getOnlinePlayers()) {
+                if (p.getName().toLowerCase().startsWith(lastWord)) {
+                    completions.add(p.getName());
+                }
+            }
+        }
+        
+        // Sort and remove duplicates
+        java.util.Set<String> uniqueCompletions = new java.util.TreeSet<String>(String.CASE_INSENSITIVE_ORDER);
+        uniqueCompletions.addAll(completions);
+        
+        // Send response
+        String[] responseArray = uniqueCompletions.toArray(new String[0]);
+        this.sendPacket(new Packet203TabComplete(responseArray));
     }
 }

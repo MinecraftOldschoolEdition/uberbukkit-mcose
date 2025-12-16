@@ -54,6 +54,15 @@ public final class Bukkit {
         Bukkit.server = server;
         server.getLogger().info("This server is running " + getName() + " version " + getVersion() + " - A fork of CB1060-1092");
     }
+    
+    /**
+     * Resets the server singleton to allow reinitialization.
+     * This is only used for GUI restart functionality.
+     * WARNING: This should only be called during a clean server shutdown!
+     */
+    public static void resetServer() {
+        Bukkit.server = null;
+    }
 
     public static String getName() {
         return server.getName();

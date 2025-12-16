@@ -38,7 +38,11 @@ class NetworkAcceptThread extends Thread {
                     }
                 }
             } catch (IOException ioexception) {
-                ioexception.printStackTrace();
+                // Only log if we're still supposed to be running (not shutdown)
+                if (this.b.b) {
+                    ioexception.printStackTrace();
+                }
+                // If b.b is false, socket was closed for shutdown - exit gracefully
             }
         }
     }

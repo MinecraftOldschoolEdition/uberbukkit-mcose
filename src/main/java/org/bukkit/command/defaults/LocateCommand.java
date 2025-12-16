@@ -94,5 +94,19 @@ public class LocateCommand extends VanillaCommand {
     public boolean matches(String input) {
         return input.startsWith("locate ");
     }
+    
+    @Override
+    public java.util.List<String> tabComplete(org.bukkit.command.CommandSender sender, String alias, String[] args) {
+        java.util.List<String> completions = new java.util.ArrayList<String>();
+        if (args.length == 1) {
+            String prefix = args[0].toLowerCase();
+            String[] structures = {"dungeon", "herobrine_shrine", "shrine"};
+            for (String s : structures) {
+                if (s.startsWith(prefix)) {
+                    completions.add(s);
+                }
+            }
+        }
+        return completions;
+    }
 }
-

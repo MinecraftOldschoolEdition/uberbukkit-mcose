@@ -73,6 +73,7 @@ public class MinecraftServer implements Runnable, ICommandListener {
     public ConsoleReader reader;
     public static int currentTick;
     public String configuredLevelType; // Added for server.properties level-type
+    public int defaultGameMode = 0; // 0=survival, 1=creative, 2=hardcore
     // CraftBukkit end
 
     //Poseidon Start
@@ -105,10 +106,14 @@ public class MinecraftServer implements Runnable, ICommandListener {
 
     private boolean init() throws UnknownHostException { // CraftBukkit - added throws UnknownHostException
         this.consoleCommandHandler = new ConsoleCommandHandler(this);
-        ThreadCommandReader threadcommandreader = new ThreadCommandReader(this);
-
-        threadcommandreader.setDaemon(true);
-        threadcommandreader.start();
+        
+        // Only start the console reader thread if NOT in GUI mode
+        // In GUI mode, commands come from the GUI text field, not stdin
+        if (!guiMode) {
+            ThreadCommandReader threadcommandreader = new ThreadCommandReader(this);
+            threadcommandreader.setDaemon(true);
+            threadcommandreader.start();
+        }
         ConsoleLogManager.init(this); // CraftBukkit
 
         // CraftBukkit start
@@ -155,6 +160,24 @@ public class MinecraftServer implements Runnable, ICommandListener {
             log.info("Voice chat broadcasting enabled");
         }
         this.configuredLevelType = this.propertyManager.getString("level-type", "DEFAULT").toUpperCase(); // Added
+        
+        // Parse default gamemode from server.properties (survival, creative, or hardcore)
+        String gamemodeStr = this.propertyManager.getString("gamemode", "survival").toLowerCase();
+        if (gamemodeStr.equals("creative") || gamemodeStr.equals("c") || gamemodeStr.equals("1")) {
+            this.defaultGameMode = 1;
+            log.info("Default game mode: Creative");
+        } else if (gamemodeStr.equals("hardcore") || gamemodeStr.equals("h") || gamemodeStr.equals("2")) {
+            this.defaultGameMode = 2;
+            log.info("Default game mode: HARDCORE - Death is permanent!");
+        } else {
+            this.defaultGameMode = 0;
+            if (!gamemodeStr.equals("survival") && !gamemodeStr.equals("s") && !gamemodeStr.equals("0")) {
+                log.warning("Unknown gamemode '" + gamemodeStr + "' in server.properties. Defaulting to survival.");
+            } else {
+                log.info("Default game mode: Survival");
+            }
+        }
+        
         InetAddress inetaddress = null;
 
         if (s.length() > 0) {
@@ -233,6 +256,11 @@ public class MinecraftServer implements Runnable, ICommandListener {
         // CraftBukkit start
         long elapsed = System.nanoTime() - j;
         String time = String.format("%.3fs", elapsed / 10000000000.0D);
+        
+        // UberBukkit - Initialize server-wide statistics tracking
+        ServerStatistics.getInstance();
+        log.info("[ServerStats] Server-wide statistics tracking initialized");
+        
         log.info("Done (" + time + ")! For help, type \"help\" or \"?\"");
 
         // log rotator process start.
@@ -497,6 +525,18 @@ public class MinecraftServer implements Runnable, ICommandListener {
 
     public void stop() { // CraftBukkit - private -> public
         log.info("Stopping server");
+        
+        // UberBukkit - Save server-wide statistics on shutdown
+        try {
+            ServerStatistics.getInstance().shutdown();
+        } catch (Exception e) {
+            log.warning("[ServerStats] Error saving server statistics: " + e.getMessage());
+        }
+        
+        // Close the network socket first to release the port
+        if (this.networkListenThread != null) {
+            this.networkListenThread.closeSocket();
+        }
 
         //Project Poseidon Start
 
@@ -574,6 +614,12 @@ public class MinecraftServer implements Runnable, ICommandListener {
             }
         }
         // Poseidon End
+        
+        // Reset singletons to allow restart in GUI mode
+        if (guiMode) {
+            org.bukkit.Bukkit.resetServer();
+            com.legacyminecraft.poseidon.Poseidon.resetServer();
+        }
     }
 
     public void a() {

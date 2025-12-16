@@ -40,6 +40,11 @@ public class NBTTagCompound extends NBTBase {
     public Collection c() {
         return this.a.values();
     }
+    
+    // UberBukkit - Get all keys for iteration
+    public java.util.Set<String> getKeys() {
+        return this.a.keySet();
+    }
 
     public byte a() {
         return (byte) 10;

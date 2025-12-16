@@ -128,6 +128,25 @@ public class SummonCommand extends VanillaCommand {
     public boolean matches(String input) {
         return input.startsWith("summon ");
     }
+    
+    @Override
+    public java.util.List<String> tabComplete(org.bukkit.command.CommandSender sender, String alias, String[] args) {
+        java.util.List<String> completions = new java.util.ArrayList<String>();
+        if (args.length == 1) {
+            String prefix = args[0].toLowerCase();
+            // Get entity types from registry
+            for (net.minecraft.server.util.ResourceLocation key : net.minecraft.server.registry.EntityTypeRegistry.primaryKeys()) {
+                Class<?> c = net.minecraft.server.registry.EntityTypeRegistry.get(key);
+                if (c == null) continue;
+                // Skip non-summonable entities
+                if (c == net.minecraft.server.EntityItem.class) continue;
+                if (c == net.minecraft.server.EntityPainting.class) continue;
+                String path = key.getPath();
+                if (path.startsWith(prefix)) {
+                    completions.add(path);
+                }
+            }
+        }
+        return completions;
+    }
 }
-
-

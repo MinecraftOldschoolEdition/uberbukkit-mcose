@@ -42,6 +42,8 @@ public class SimpleCommandMap implements CommandMap {
         fallbackCommands.add(new WeatherCommand());
         fallbackCommands.add(new GameruleCommand());
         fallbackCommands.add(new GameModeCommand());
+        fallbackCommands.add(new DifficultyCommand());
+        fallbackCommands.add(new ServerStatsCommand());
         fallbackCommands.add(new SummonCommand());
         fallbackCommands.add(new LocateCommand());
         fallbackCommands.add(new HerobrineCommand());
@@ -209,6 +211,15 @@ public class SimpleCommandMap implements CommandMap {
 
     public Command getCommand(String name) {
         return knownCommands.get(name.toLowerCase());
+    }
+    
+    /**
+     * Gets a collection of all registered commands.
+     * @return Collection of all commands
+     */
+    public java.util.Collection<Command> getCommands() {
+        // Return unique commands only (exclude aliases pointing to same command)
+        return new java.util.HashSet<Command>(knownCommands.values());
     }
 
     public void registerServerAliases() {

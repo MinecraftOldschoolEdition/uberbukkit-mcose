@@ -77,12 +77,18 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
         // CraftBukkit start
         this.displayName = this.name;
         this.playerUUID = PoseidonUUID.getPlayerGracefulUUID(this.name); //Project Poseidon
+        
+        // UberBukkit - Initialize server-side statistics tracking
+        this.playerStatistics = new PlayerStatistics(this);
     }
 
     public String displayName;
     public UUID playerUUID; //Project Poseidon
     public org.bukkit.Location compassTarget;
     // CraftBukkit end
+    
+    // UberBukkit - Server-side statistics and achievements tracking
+    public PlayerStatistics playerStatistics;
     // Project Poseidon - Update container for creative/survival mode switch
     public void updateContainer() {
         this.defaultContainer = new ContainerPlayer(this.inventory, !this.world.isStatic);
@@ -199,6 +205,16 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
         CraftWorld bworld = this.world.getWorld();
 
         PlayerDeathEvent event = new PlayerDeathEvent(bukkitEntity, loot);
+        
+        // UberBukkit - Generate death message like modern Minecraft
+        // Check both config option and gamerule - both must be enabled
+        boolean configEnabled = PoseidonConfig.getInstance().getConfigBoolean("settings.death-messages.enabled", true);
+        boolean gameruleEnabled = this.world.worldData != null ? this.world.worldData.getShowDeathMessages() : true;
+        if (configEnabled && gameruleEnabled) {
+            String deathMessage = DeathMessageHelper.getDeathMessage(this, entity);
+            event.setDeathMessage(deathMessage);
+        }
+        
         this.world.getServer().getPluginManager().callEvent(event);
 
         if (event.getDeathMessage() != null && !event.getDeathMessage().trim().isEmpty()) {
@@ -223,7 +239,33 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
         }
 
         this.y();
+
+        // Hardcore mode: ban player on death
+        if (this.isHardcoreMode()) {
+            String banMessage = PoseidonConfig.getInstance().getConfigString("world-settings.hardcore.ban-message");
+            String kickMessage = PoseidonConfig.getInstance().getConfigString("world-settings.hardcore.death-kick-message");
+            // Ban the player
+            this.b.serverConfigurationManager.a(this.name);
+            // Kick with the hardcore death message
+            if (this.netServerHandler != null) {
+                this.netServerHandler.disconnect(kickMessage != null ? kickMessage : "You died in hardcore mode!");
+            }
+        }
         // CraftBukkit end
+    }
+
+    /**
+     * Check if hardcore mode is enabled for this player.
+     * Player's personal gameMode takes priority - if they're in creative (1) or survival (0),
+     * they are NOT in hardcore mode, even if the server default is hardcore.
+     * Only gameMode 2 means hardcore for the player.
+     */
+    public boolean isHardcoreMode() {
+        // Player's personal gameMode is the primary check
+        // gameMode 2 = hardcore, 1 = creative, 0 = survival
+        // If player is in survival or creative, they are NOT hardcore
+        // (their mode was explicitly set via /gamemode or from saved data)
+        return this.gameMode == 2;
     }
 
     public boolean damageEntity(Entity entity, int i) {
@@ -711,4 +753,28 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
         return super.toString() + "(" + this.name + " at " + this.locX + "," + this.locY + "," + this.locZ + ")";
     }
     // CraftBukkit end
+    
+    // UberBukkit - Override NBT load to include statistics
+    @Override
+    public void a(NBTTagCompound nbttagcompound) {
+        super.a(nbttagcompound);
+        
+        // Load player statistics
+        if (this.playerStatistics != null && nbttagcompound.hasKey("PlayerStats")) {
+            this.playerStatistics.loadFromNBT(nbttagcompound.k("PlayerStats"));
+        }
+    }
+    
+    // UberBukkit - Override NBT save to include statistics
+    @Override
+    public void b(NBTTagCompound nbttagcompound) {
+        super.b(nbttagcompound);
+        
+        // Save player statistics
+        if (this.playerStatistics != null) {
+            NBTTagCompound statsNbt = new NBTTagCompound();
+            this.playerStatistics.saveToNBT(statsNbt);
+            nbttagcompound.a("PlayerStats", statsNbt);
+        }
+    }
 }

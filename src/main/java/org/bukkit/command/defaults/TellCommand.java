@@ -51,4 +51,18 @@ public class TellCommand extends VanillaCommand {
     public boolean matches(String input) {
         return input.startsWith("tell ");
     }
+    
+    @Override
+    public java.util.List<String> tabComplete(org.bukkit.command.CommandSender sender, String alias, String[] args) {
+        java.util.List<String> completions = new java.util.ArrayList<String>();
+        if (args.length == 1) {
+            String prefix = args[0].toLowerCase();
+            for (Player p : Bukkit.getOnlinePlayers()) {
+                if (p.getName().toLowerCase().startsWith(prefix)) {
+                    completions.add(p.getName());
+                }
+            }
+        }
+        return completions;
+    }
 }

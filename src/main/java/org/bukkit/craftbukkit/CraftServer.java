@@ -635,6 +635,10 @@ public final class CraftServer implements Server {
     public ConsoleReader getReader() {
         return console.reader;
     }
+    
+    public SimpleCommandMap getCommandMap() {
+        return commandMap;
+    }
 
     public PluginCommand getPluginCommand(String name) {
         Command command = commandMap.getCommand(name);

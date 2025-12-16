@@ -30,6 +30,13 @@ public final class Poseidon {
 
         Poseidon.server = server;
     }
-
-
+    
+    /**
+     * Resets the server singleton to allow reinitialization.
+     * This is only used for GUI restart functionality.
+     * WARNING: This should only be called during a clean server shutdown!
+     */
+    public static void resetServer() {
+        Poseidon.server = null;
+    }
 }

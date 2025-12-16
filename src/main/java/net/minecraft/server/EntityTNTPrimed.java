@@ -13,6 +13,7 @@ public class EntityTNTPrimed extends Entity {
     public int fuseTicks;
     public float yield = 4; // CraftBukkit
     public boolean isIncendiary = false; // CraftBukkit
+    public EntityLiving source; // UberBukkit - Track who ignited this TNT
 
     public EntityTNTPrimed(World world) {
         super(world);

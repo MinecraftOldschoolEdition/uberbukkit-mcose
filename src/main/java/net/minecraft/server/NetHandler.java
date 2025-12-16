@@ -266,6 +266,11 @@ public abstract class NetHandler {
         this.a((Packet) packet201playerinfo);
     }
     
+    // Tab completion
+    public void a(Packet203TabComplete packet203tabcomplete) {
+        this.a((Packet) packet203tabcomplete);
+    }
+    
     // Custom payload (plugin channels)
     public void a(Packet250CustomPayload packet250custompayload) {
         this.a((Packet) packet250custompayload);

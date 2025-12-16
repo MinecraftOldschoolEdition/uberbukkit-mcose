@@ -24,6 +24,10 @@ public class WorldData {
     // UberBukkit: terrain type and alpha snow flag
     private int terrainType = 0; // 0=DEFAULT,1=ALPHA,2=FLAT,3=SKY,5=ALPHA_SNOW
     private boolean alphaSnow = false;
+    // Hardcore mode
+    private boolean hardcore = false;
+    // Difficulty: 0=peaceful, 1=easy, 2=normal, 3=hard
+    private int difficulty = 1;
 
     public WorldData(NBTTagCompound nbttagcompound) {
         this.a = nbttagcompound.getLong("RandomSeed");
@@ -49,11 +53,18 @@ public class WorldData {
         if (nbttagcompound.hasKey("AlphaSnow")) {
             this.alphaSnow = nbttagcompound.m("AlphaSnow");
         }
+        if (nbttagcompound.hasKey("Hardcore")) {
+            this.hardcore = nbttagcompound.m("Hardcore");
+        }
+        if (nbttagcompound.hasKey("Difficulty")) {
+            this.difficulty = nbttagcompound.e("Difficulty");
+        }
         // Load gamerules, defaulting to true if not present
         if (nbttagcompound.hasKey("DoDayNightCycle")) this.doDayNightCycle = nbttagcompound.m("DoDayNightCycle");
         if (nbttagcompound.hasKey("TNTExplodes")) this.tntexplodes = nbttagcompound.m("TNTExplodes");
         if (nbttagcompound.hasKey("MobGriefing")) this.mobGriefing = nbttagcompound.m("MobGriefing");
         if (nbttagcompound.hasKey("DoWeatherCycle")) this.doWeatherCycle = nbttagcompound.m("DoWeatherCycle");
+        if (nbttagcompound.hasKey("ShowDeathMessages")) this.showDeathMessages = nbttagcompound.m("ShowDeathMessages");
     }
 
     public WorldData(long i, String s) {
@@ -79,6 +90,8 @@ public class WorldData {
         this.n = worlddata.n;
         this.terrainType = worlddata.terrainType;
         this.alphaSnow = worlddata.alphaSnow;
+        this.hardcore = worlddata.hardcore;
+        this.difficulty = worlddata.difficulty;
     }
 
     public NBTTagCompound a() {
@@ -125,10 +138,13 @@ public class WorldData {
         }
         nbttagcompound.a("TerrainType", this.terrainType);
         nbttagcompound.a("AlphaSnow", this.alphaSnow);
+        nbttagcompound.a("Hardcore", this.hardcore);
+        nbttagcompound.a("Difficulty", this.difficulty);
         nbttagcompound.a("DoDayNightCycle", this.doDayNightCycle);
         nbttagcompound.a("TNTExplodes", this.tntexplodes);
         nbttagcompound.a("MobGriefing", this.mobGriefing);
         nbttagcompound.a("DoWeatherCycle", this.doWeatherCycle);
+        nbttagcompound.a("ShowDeathMessages", this.showDeathMessages);
     }
 
     public long getSeed() {
@@ -229,11 +245,20 @@ public class WorldData {
     public boolean isSnowWorld() { return this.alphaSnow; }
     public void setSnowWorld(boolean flag) { this.alphaSnow = flag; }
 
+    // Hardcore mode support
+    public boolean isHardcore() { return this.hardcore; }
+    public void setHardcore(boolean flag) { this.hardcore = flag; }
+
+    // Difficulty support: 0=peaceful, 1=easy, 2=normal, 3=hard
+    public int getDifficulty() { return this.difficulty; }
+    public void setDifficulty(int d) { this.difficulty = Math.max(0, Math.min(3, d)); }
+
     // Gamerules
     private boolean doDayNightCycle = true;
     private boolean tntexplodes = true;
     private boolean mobGriefing = true;
     private boolean doWeatherCycle = true;
+    private boolean showDeathMessages = true;
 
     // Poseidon gamerule compatibility: default to true if absent
     public boolean getDoDayNightCycle() { return this.doDayNightCycle; }
@@ -244,4 +269,6 @@ public class WorldData {
     public void setMobGriefing(boolean v) { this.mobGriefing = v; }
     public boolean getDoWeatherCycle() { return this.doWeatherCycle; }
     public void setDoWeatherCycle(boolean v) { this.doWeatherCycle = v; }
+    public boolean getShowDeathMessages() { return this.showDeathMessages; }
+    public void setShowDeathMessages(boolean v) { this.showDeathMessages = v; }
 }

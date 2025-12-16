@@ -314,6 +314,13 @@ public class NetLoginHandler extends NetHandler {
                 }
                 netserverhandler.sendPacket(new Packet70Bed(13));
                 this.server.chatRoomManager.sendSnapshot(entityplayer);
+                
+                // Send hardcore mode indicator to client for heart display
+                if (entityplayer.isHardcoreMode()) {
+                    netserverhandler.sendPacket(new Packet70Bed(17)); // Hardcore mode enabled
+                } else {
+                    netserverhandler.sendPacket(new Packet70Bed(18)); // Hardcore mode disabled
+                }
             } catch (Throwable ignore) {}
         }
 

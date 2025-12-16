@@ -353,6 +353,12 @@ public abstract class EntityLiving extends Entity {
             if (this.health <= 0) {
                 return false;
             } else {
+                // UberBukkit - Track last player attacker for death messages
+                if (entity instanceof EntityPlayer) {
+                    this.lastPlayerAttacker = (EntityPlayer) entity;
+                    this.lastPlayerAttackerTime = this.world.getTime();
+                }
+                
                 this.ao = 1.5F;
                 boolean flag = true;
 

@@ -79,6 +79,19 @@ public class WeatherCommand extends VanillaCommand {
     public boolean matches(String input) {
         return input.startsWith("weather ") || input.equals("weather") || input.equals("toggledownfall");
     }
+    
+    @Override
+    public java.util.List<String> tabComplete(org.bukkit.command.CommandSender sender, String alias, String[] args) {
+        java.util.List<String> completions = new java.util.ArrayList<String>();
+        if (args.length == 1) {
+            String prefix = args[0].toLowerCase();
+            String[] types = {"clear", "rain", "thunder"};
+            for (String type : types) {
+                if (type.startsWith(prefix)) {
+                    completions.add(type);
+                }
+            }
+        }
+        return completions;
+    }
 }
-
-

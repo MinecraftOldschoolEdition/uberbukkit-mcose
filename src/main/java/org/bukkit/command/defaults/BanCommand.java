@@ -31,4 +31,18 @@ public class BanCommand extends VanillaCommand {
     public boolean matches(String input) {
         return input.startsWith("ban ");
     }
+    
+    @Override
+    public java.util.List<String> tabComplete(org.bukkit.command.CommandSender sender, String alias, String[] args) {
+        java.util.List<String> completions = new java.util.ArrayList<String>();
+        if (args.length == 1) {
+            String prefix = args[0].toLowerCase();
+            for (org.bukkit.entity.Player p : Bukkit.getOnlinePlayers()) {
+                if (p.getName().toLowerCase().startsWith(prefix)) {
+                    completions.add(p.getName());
+                }
+            }
+        }
+        return completions;
+    }
 }

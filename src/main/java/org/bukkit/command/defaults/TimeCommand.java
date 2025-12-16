@@ -74,4 +74,27 @@ public class TimeCommand extends VanillaCommand {
     public boolean matches(String input) {
         return input.startsWith("time ");
     }
+    
+    @Override
+    public java.util.List<String> tabComplete(org.bukkit.command.CommandSender sender, String alias, String[] args) {
+        java.util.List<String> completions = new java.util.ArrayList<String>();
+        if (args.length == 1) {
+            String prefix = args[0].toLowerCase();
+            String[] subcommands = {"set", "add", "query"};
+            for (String sub : subcommands) {
+                if (sub.startsWith(prefix)) {
+                    completions.add(sub);
+                }
+            }
+        } else if (args.length == 2 && args[0].equalsIgnoreCase("set")) {
+            String prefix = args[1].toLowerCase();
+            String[] times = {"day", "noon", "night", "midnight", "sunrise", "sunset"};
+            for (String time : times) {
+                if (time.startsWith(prefix)) {
+                    completions.add(time);
+                }
+            }
+        }
+        return completions;
+    }
 }
