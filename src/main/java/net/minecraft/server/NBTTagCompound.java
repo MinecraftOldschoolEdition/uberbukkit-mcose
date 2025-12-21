@@ -97,6 +97,14 @@ public class NBTTagCompound extends NBTBase {
     public boolean hasKey(String s) {
         return this.a.containsKey(s);
     }
+    
+    /**
+     * Get the raw NBTBase tag for a key.
+     * Useful for type-safe reading when the type might vary.
+     */
+    public NBTBase b(String s) {
+        return (NBTBase) this.a.get(s);
+    }
 
     public byte c(String s) {
         return !this.a.containsKey(s) ? 0 : ((NBTTagByte) this.a.get(s)).a;

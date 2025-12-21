@@ -1,8 +1,12 @@
 package net.minecraft.server;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.util.zip.GZIPInputStream;
+import java.util.zip.GZIPOutputStream;
 
 public class Packet15Place extends Packet {
 
@@ -43,6 +47,27 @@ public class Packet15Place extends Packet {
                 }
 
                 this.itemstack = new ItemStack(short1, b0, short2);
+                
+                // Read NBT data if present (MCOSE protocol extension, pvn >= 14)
+                if (this.pvn >= 14) {
+                    short nbtLength = datainputstream.readShort();
+                    if (nbtLength > 0) {
+                        byte[] nbtBytes = new byte[nbtLength];
+                        datainputstream.readFully(nbtBytes);
+                        try {
+                            ByteArrayInputStream bais = new ByteArrayInputStream(nbtBytes);
+                            GZIPInputStream gzis = new GZIPInputStream(bais);
+                            DataInputStream nbtIn = new DataInputStream(gzis);
+                            NBTBase nbtBase = NBTBase.b(nbtIn);
+                            nbtIn.close();
+                            if (nbtBase instanceof NBTTagCompound) {
+                                this.itemstack.tag = (NBTTagCompound) nbtBase;
+                            }
+                        } catch (Exception ex) {
+                            // Ignore NBT read errors
+                        }
+                    }
+                }
             } else {
                 this.itemstack = null;
             }
@@ -73,6 +98,26 @@ public class Packet15Place extends Packet {
                     dataoutputstream.writeShort(this.itemstack.getData());
                 } else {
                     dataoutputstream.writeByte(this.itemstack.getData());
+                }
+                
+                // Write NBT data if present (MCOSE protocol extension, pvn >= 14)
+                if (this.pvn >= 14) {
+                    if (this.itemstack.tag != null) {
+                        try {
+                            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                            GZIPOutputStream gzos = new GZIPOutputStream(baos);
+                            DataOutputStream nbtOut = new DataOutputStream(gzos);
+                            NBTBase.a(this.itemstack.tag, nbtOut);
+                            nbtOut.close();
+                            byte[] nbtBytes = baos.toByteArray();
+                            dataoutputstream.writeShort(nbtBytes.length);
+                            dataoutputstream.write(nbtBytes);
+                        } catch (Exception ex) {
+                            dataoutputstream.writeShort(-1);
+                        }
+                    } else {
+                        dataoutputstream.writeShort(-1);
+                    }
                 }
             }
         }

@@ -10,6 +10,7 @@ public class Packet130UpdateSign extends Packet {
     public int y;
     public int z;
     public String[] lines;
+    public int color = 0x000000; // MCOSE: text color (default black)
 
     public Packet130UpdateSign() {
         this.k = true;
@@ -37,6 +38,9 @@ public class Packet130UpdateSign extends Packet {
                 this.lines[i] = datainputstream.readUTF();
             }
         }
+        
+        // MCOSE: Sign color is NOT sent over Packet130UpdateSign
+        // Color is synced separately via MC|SignDye custom payload
     }
 
     public void a(DataOutputStream dataoutputstream) throws IOException {
@@ -52,6 +56,9 @@ public class Packet130UpdateSign extends Packet {
                 dataoutputstream.writeUTF(this.lines[i]);
             }
         }
+        
+        // MCOSE: Sign color is NOT sent over Packet130UpdateSign
+        // Color is synced separately via MC|SignDye custom payload
     }
 
     public void a(NetHandler nethandler) {
@@ -70,6 +77,8 @@ public class Packet130UpdateSign extends Packet {
 
     @Override
     public Packet clone() {
-        return new Packet130UpdateSign(this.x, this.y, this.z, this.lines);
+        Packet130UpdateSign packet = new Packet130UpdateSign(this.x, this.y, this.z, this.lines);
+        packet.color = this.color;
+        return packet;
     }
 }

@@ -10,7 +10,7 @@ public class KickCommand extends VanillaCommand {
     public KickCommand() {
         super("kick");
         this.description = "Removes the specified player from the server";
-        this.usageMessage = "/kick <player>";
+        this.usageMessage = "/kick <player> [reason]";
         this.setPermission("bukkit.command.kick");
     }
 
@@ -25,8 +25,21 @@ public class KickCommand extends VanillaCommand {
         Player player = Bukkit.getPlayerExact(args[0]);
 
         if (player != null) {
-            Command.broadcastCommandMessage(sender, "Kicking " + player.getName());
-            player.kickPlayer("Kicked by admin");
+            // Build the reason from remaining arguments
+            String reason;
+            if (args.length > 1) {
+                StringBuilder sb = new StringBuilder();
+                for (int i = 1; i < args.length; i++) {
+                    if (i > 1) sb.append(" ");
+                    sb.append(args[i]);
+                }
+                reason = sb.toString();
+            } else {
+                reason = "Kicked by an operator.";
+            }
+            
+            Command.broadcastCommandMessage(sender, "Kicking " + player.getName() + ": " + reason);
+            player.kickPlayer(reason);
         } else {
             sender.sendMessage("Can't find user " + args[0] + ". No kick.");
         }

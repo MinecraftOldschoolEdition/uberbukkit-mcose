@@ -30,6 +30,21 @@ public interface OfflinePlayer extends ServerOperator {
      * @param banned true if banned
      */
     public void setBanned(boolean banned);
+    
+    /**
+     * Bans this player with a reason
+     *
+     * @param banned true if banned
+     * @param reason the reason for the ban
+     */
+    public void setBanned(boolean banned, String reason);
+    
+    /**
+     * Gets the ban reason for this player
+     *
+     * @return the ban reason, or null if not banned or no reason set
+     */
+    public String getBanReason();
 
     /**
      * Checks if this player is whitelisted or not

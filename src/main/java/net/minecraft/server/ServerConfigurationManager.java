@@ -26,6 +26,8 @@ public class ServerConfigurationManager {
     public int maxPlayers; // CraftBukkit - private -> public
     public Set banByName = new HashSet(); // CraftBukkit - private -> public
     public Set banByIP = new HashSet(); // CraftBukkit - private -> public
+    public Map<String, String> banReasons = new HashMap<String, String>(); // MCOSE: Ban reasons by name (lowercase)
+    public Map<String, String> banIPReasons = new HashMap<String, String>(); // MCOSE: Ban reasons by IP
     private Set h = new HashSet();
     private Set i = new HashSet();
     private File j;
@@ -138,6 +140,29 @@ public class ServerConfigurationManager {
         }
         return false;
     }
+    
+    /**
+     * Check if the player's feet or head are inside solid blocks
+     */
+    private boolean isPlayerInsideSolidBlock(WorldServer world, EntityPlayer player) {
+        int x = MathHelper.floor(player.locX);
+        int y = MathHelper.floor(player.locY);
+        int z = MathHelper.floor(player.locZ);
+        
+        // Check block at feet level
+        int blockIdFeet = world.getTypeId(x, y, z);
+        if (blockIdFeet > 0 && Block.byId[blockIdFeet] != null && Block.byId[blockIdFeet].material.isSolid()) {
+            return true;
+        }
+        
+        // Check block at head level (Y + 1)
+        int blockIdHead = world.getTypeId(x, y + 1, z);
+        if (blockIdHead > 0 && Block.byId[blockIdHead] != null && Block.byId[blockIdHead].material.isSolid()) {
+            return true;
+        }
+        
+        return false;
+    }
 
     public void c(EntityPlayer entityplayer) {
         this.players.add(entityplayer);
@@ -147,8 +172,17 @@ public class ServerConfigurationManager {
         worldserver.chunkProviderServer.getChunkAt((int) entityplayer.locX >> 4, (int) entityplayer.locZ >> 4);
 
         if ((boolean) PoseidonConfig.getInstance().getConfigOption("world-settings.teleport-to-highest-safe-block")) {
+            // Check for entity collisions
             while (worldserver.getEntities(entityplayer, entityplayer.boundingBox).size() != 0) {
                 entityplayer.setPosition(entityplayer.locX, entityplayer.locY + 1.0D, entityplayer.locZ);
+            }
+            
+            // Check for block collisions - ensure player isn't stuck inside solid blocks
+            int maxAttempts = 20;
+            int attempts = 0;
+            while (attempts < maxAttempts && isPlayerInsideSolidBlock(worldserver, entityplayer)) {
+                entityplayer.setPosition(entityplayer.locX, entityplayer.locY + 1.0D, entityplayer.locZ);
+                attempts++;
             }
         }
 
@@ -266,7 +300,29 @@ public class ServerConfigurationManager {
 
         PlayerLoginEvent.Result result = this.banByName.contains(s.trim().toLowerCase()) ? PlayerLoginEvent.Result.KICK_BANNED : this.banByIP.contains(s1) ? PlayerLoginEvent.Result.KICK_BANNED_IP : !this.isWhitelisted(s) ? PlayerLoginEvent.Result.KICK_WHITELIST : this.players.size() >= this.maxPlayers ? PlayerLoginEvent.Result.KICK_FULL : PlayerLoginEvent.Result.ALLOWED;
 
-        String kickMessage = result.equals(PlayerLoginEvent.Result.KICK_BANNED) ? this.msgKickBanned : result.equals(PlayerLoginEvent.Result.KICK_BANNED_IP) ? this.msgKickIPBanned : result.equals(PlayerLoginEvent.Result.KICK_WHITELIST) ? this.msgKickWhitelist : result.equals(PlayerLoginEvent.Result.KICK_FULL) ? msgKickServerFull : s1;
+        // MCOSE: Build kick message with ban reason if available
+        String kickMessage;
+        if (result.equals(PlayerLoginEvent.Result.KICK_BANNED)) {
+            String banReason = this.getBanReason(s.trim());
+            if (banReason != null && !banReason.isEmpty()) {
+                kickMessage = this.msgKickBanned + "\n\u00A7cReason: " + banReason;
+            } else {
+                kickMessage = this.msgKickBanned;
+            }
+        } else if (result.equals(PlayerLoginEvent.Result.KICK_BANNED_IP)) {
+            String ipReason = this.banIPReasons.get(s1);
+            if (ipReason != null && !ipReason.isEmpty()) {
+                kickMessage = this.msgKickIPBanned + "\n\u00A7cReason: " + ipReason;
+            } else {
+                kickMessage = this.msgKickIPBanned;
+            }
+        } else if (result.equals(PlayerLoginEvent.Result.KICK_WHITELIST)) {
+            kickMessage = this.msgKickWhitelist;
+        } else if (result.equals(PlayerLoginEvent.Result.KICK_FULL)) {
+            kickMessage = this.msgKickServerFull;
+        } else {
+            kickMessage = s1;
+        }
 
         event.disallow(result, kickMessage);
 
@@ -477,9 +533,29 @@ public class ServerConfigurationManager {
         this.banByName.add(s.toLowerCase());
         this.h();
     }
+    
+    /**
+     * Ban a player with a reason.
+     */
+    public void banWithReason(String name, String reason) {
+        String lowername = name.toLowerCase();
+        this.banByName.add(lowername);
+        if (reason != null && !reason.isEmpty()) {
+            this.banReasons.put(lowername, reason);
+        }
+        this.h();
+    }
+    
+    /**
+     * Get the ban reason for a player, or null if not set.
+     */
+    public String getBanReason(String name) {
+        return this.banReasons.get(name.toLowerCase());
+    }
 
     public void b(String s) {
         this.banByName.remove(s.toLowerCase());
+        this.banReasons.remove(s.toLowerCase());
         this.h();
     }
 

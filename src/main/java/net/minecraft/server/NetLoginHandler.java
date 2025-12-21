@@ -252,6 +252,10 @@ public class NetLoginHandler extends NetHandler {
             netserverhandler.sendPacket(new Packet1Login("", entityplayer.id, worldserver.getSeed(), dim));
             netserverhandler.sendPacket(new Packet6SpawnPosition(chunkcoordinates.x, chunkcoordinates.y, chunkcoordinates.z));
 
+            // MCOSE: Send Uberbukkit NBT flag IMMEDIATELY after login, BEFORE any inventory packets
+            // This MUST be the first packet after login so client knows to expect NBT in all subsequent ItemStack packets
+            netserverhandler.sendPacket(new Packet70Bed(13));
+
             // Poseidon parity: signal client to enable special visuals for ALPHA/ALPHA_SNOW/SKY on overworld
             try {
                 int actualTerrainType = (worldserver.worldData != null ? worldserver.worldData.getTerrainType() : 0);
@@ -275,10 +279,13 @@ public class NetLoginHandler extends NetHandler {
             netserverhandler.a(entityplayer.locX, entityplayer.locY, entityplayer.locZ, entityplayer.yaw, entityplayer.pitch);
             this.server.networkListenThread.a(netserverhandler);
             netserverhandler.sendPacket(new Packet4UpdateTime(entityplayer.getPlayerTime())); // CraftBukkit - add support for player specific time
-            entityplayer.syncInventory();
 
             // Poseidon parity: apply saved gamemode visuals and containers on login
             try {
+                // Note: Packet70Bed(13) for Uberbukkit NBT flag is now sent immediately after login
+                // before serverConfigurationManager.a() which calls updateContainer()
+                
+                entityplayer.syncInventory();
                 entityplayer.updateContainer();
                 if (entityplayer.gameMode == 1) {
                     netserverhandler.sendPacket(new Packet70Bed(3)); // creative HUD/flight enable
@@ -312,7 +319,6 @@ public class NetLoginHandler extends NetHandler {
                 } else {
                     netserverhandler.sendPacket(new Packet70Bed(12));
                 }
-                netserverhandler.sendPacket(new Packet70Bed(13));
                 this.server.chatRoomManager.sendSnapshot(entityplayer);
                 
                 // Send hardcore mode indicator to client for heart display

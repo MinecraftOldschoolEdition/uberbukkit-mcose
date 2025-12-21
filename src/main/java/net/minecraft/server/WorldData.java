@@ -65,6 +65,8 @@ public class WorldData {
         if (nbttagcompound.hasKey("MobGriefing")) this.mobGriefing = nbttagcompound.m("MobGriefing");
         if (nbttagcompound.hasKey("DoWeatherCycle")) this.doWeatherCycle = nbttagcompound.m("DoWeatherCycle");
         if (nbttagcompound.hasKey("ShowDeathMessages")) this.showDeathMessages = nbttagcompound.m("ShowDeathMessages");
+        // Integer gamerules
+        if (nbttagcompound.hasKey("SpawnRadius")) this.spawnRadius = nbttagcompound.e("SpawnRadius");
     }
 
     public WorldData(long i, String s) {
@@ -145,6 +147,8 @@ public class WorldData {
         nbttagcompound.a("MobGriefing", this.mobGriefing);
         nbttagcompound.a("DoWeatherCycle", this.doWeatherCycle);
         nbttagcompound.a("ShowDeathMessages", this.showDeathMessages);
+        // Integer gamerules
+        nbttagcompound.a("SpawnRadius", this.spawnRadius);
     }
 
     public long getSeed() {
@@ -253,12 +257,15 @@ public class WorldData {
     public int getDifficulty() { return this.difficulty; }
     public void setDifficulty(int d) { this.difficulty = Math.max(0, Math.min(3, d)); }
 
-    // Gamerules
+    // Gamerules (boolean)
     private boolean doDayNightCycle = true;
     private boolean tntexplodes = true;
     private boolean mobGriefing = true;
     private boolean doWeatherCycle = true;
     private boolean showDeathMessages = true;
+    
+    // Gamerules (integer)
+    private int spawnRadius = 10; // Vanilla default spawn randomization radius
 
     // Poseidon gamerule compatibility: default to true if absent
     public boolean getDoDayNightCycle() { return this.doDayNightCycle; }
@@ -271,4 +278,8 @@ public class WorldData {
     public void setDoWeatherCycle(boolean v) { this.doWeatherCycle = v; }
     public boolean getShowDeathMessages() { return this.showDeathMessages; }
     public void setShowDeathMessages(boolean v) { this.showDeathMessages = v; }
+    
+    // Integer gamerules
+    public int getSpawnRadius() { return this.spawnRadius; }
+    public void setSpawnRadius(int v) { this.spawnRadius = Math.max(0, v); }
 }

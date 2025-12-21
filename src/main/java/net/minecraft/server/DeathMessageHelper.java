@@ -9,15 +9,12 @@ import org.bukkit.event.entity.EntityDamageEvent.DamageCause;
 /**
  * Generates death messages like modern Minecraft versions.
  * Messages follow the format: "PlayerName <death_message>"
- * Uses yellow color (\u00A7e) like vanilla Minecraft death messages.
+ * Uses all white text for clean visibility.
  */
 public class DeathMessageHelper {
     
-    // Color codes
-    private static final String YELLOW = "\u00A7e";
-    private static final String GRAY = "\u00A77";
+    // Color code - all white for clean death messages
     private static final String WHITE = "\u00A7f";
-    private static final String RED = "\u00A7c";
     
     /**
      * Generate a death message for a player.
@@ -27,7 +24,7 @@ public class DeathMessageHelper {
      * @return The formatted death message
      */
     public static String getDeathMessage(EntityPlayer player, net.minecraft.server.Entity killer) {
-        String playerName = WHITE + player.name + YELLOW;
+        String playerName = player.name;
         EntityDamageEvent lastDamage = player.getBukkitEntity().getLastDamageCause();
         
         // If we have a killer entity, prioritize that
@@ -42,7 +39,7 @@ public class DeathMessageHelper {
         }
         
         // Fallback generic message
-        return YELLOW + playerName + " died";
+        return WHITE + playerName + " died";
     }
     
     /**
@@ -62,7 +59,7 @@ public class DeathMessageHelper {
      * Generate a message when killed by an entity.
      */
     private static String getKillMessage(String playerName, EntityPlayer victim, org.bukkit.entity.Entity killer, EntityDamageEvent lastDamage) {
-        String killerName = WHITE + getEntityName(killer) + YELLOW;
+        String killerName = getEntityName(killer);
         
         // Check if killed by projectile (arrow, etc)
         if (lastDamage instanceof EntityDamageByProjectileEvent) {
@@ -72,13 +69,13 @@ public class DeathMessageHelper {
             
             if (shooter instanceof Player) {
                 // Player shot by another player with arrow
-                return YELLOW + playerName + " was shot by " + WHITE + ((Player) shooter).getName();
+                return WHITE + playerName + " was shot by " + ((Player) shooter).getName();
             } else if (projectile != null) {
                 String projectileType = getProjectileName(projectile);
                 if (shooter != null) {
-                    return YELLOW + playerName + " was shot by " + WHITE + getEntityName(shooter) + YELLOW + " using " + projectileType;
+                    return WHITE + playerName + " was shot by " + getEntityName(shooter) + " using " + projectileType;
                 }
-                return YELLOW + playerName + " was shot";
+                return WHITE + playerName + " was shot";
             }
         }
         
@@ -88,13 +85,13 @@ public class DeathMessageHelper {
             ItemStack weapon = ((EntityPlayer) ((org.bukkit.craftbukkit.entity.CraftPlayer) killerPlayer).getHandle()).inventory.getItemInHand();
             if (weapon != null && weapon.id != 0) {
                 String weaponName = getItemName(weapon);
-                return YELLOW + playerName + " was slain by " + WHITE + killerPlayer.getName() + YELLOW + " using " + GRAY + "[" + weaponName + "]";
+                return WHITE + playerName + " was slain by " + killerPlayer.getName() + " using [" + weaponName + "]";
             }
-            return YELLOW + playerName + " was slain by " + WHITE + killerPlayer.getName();
+            return WHITE + playerName + " was slain by " + killerPlayer.getName();
         }
         
         // Killed by mob or other entity
-        return YELLOW + playerName + " was slain by " + killerName;
+        return WHITE + playerName + " was slain by " + killerName;
     }
     
     /**
@@ -116,69 +113,69 @@ public class DeathMessageHelper {
             case FALL:
                 // Spleef detection: if a player recently damaged victim and they fell
                 if (recentAttacker != null) {
-                    return YELLOW + playerName + " was doomed to fall by " + WHITE + recentAttacker.name;
+                    return WHITE + playerName + " was doomed to fall by " + recentAttacker.name;
                 }
                 int fallDamage = event.getDamage();
                 if (fallDamage > 10) {
-                    return YELLOW + playerName + " fell from a high place";
+                    return WHITE + playerName + " fell from a high place";
                 } else if (fallDamage > 5) {
-                    return YELLOW + playerName + " hit the ground too hard";
+                    return WHITE + playerName + " hit the ground too hard";
                 }
-                return YELLOW + playerName + " fell to their death";
+                return WHITE + playerName + " fell to their death";
                 
             case DROWNING:
                 // Check if pushed into water by player
                 if (recentAttacker != null) {
-                    return YELLOW + playerName + " drowned whilst trying to escape " + WHITE + recentAttacker.name;
+                    return WHITE + playerName + " drowned whilst trying to escape " + recentAttacker.name;
                 }
-                return YELLOW + playerName + " drowned";
+                return WHITE + playerName + " drowned";
                 
             case FIRE:
                 // Check for player-caused fire (using fireSource or recent attacker)
                 if (victim.fireSource != null) {
-                    return YELLOW + playerName + " was set on fire by " + WHITE + victim.fireSource.name;
+                    return WHITE + playerName + " was set on fire by " + victim.fireSource.name;
                 }
                 if (recentAttacker != null) {
-                    return YELLOW + playerName + " walked into fire whilst fighting " + WHITE + recentAttacker.name;
+                    return WHITE + playerName + " walked into fire whilst fighting " + recentAttacker.name;
                 }
-                return YELLOW + playerName + " went up in flames";
+                return WHITE + playerName + " went up in flames";
                 
             case FIRE_TICK:
                 // Burning to death - check who set them on fire
                 if (victim.fireSource != null) {
-                    return YELLOW + playerName + " was burnt to a crisp whilst fighting " + WHITE + victim.fireSource.name;
+                    return WHITE + playerName + " was burnt to a crisp whilst fighting " + victim.fireSource.name;
                 }
                 if (recentAttacker != null) {
-                    return YELLOW + playerName + " was burnt to a crisp whilst fighting " + WHITE + recentAttacker.name;
+                    return WHITE + playerName + " was burnt to a crisp whilst fighting " + recentAttacker.name;
                 }
-                return YELLOW + playerName + " burned to death";
+                return WHITE + playerName + " burned to death";
                 
             case LAVA:
                 // Check if pushed into lava by player
                 if (recentAttacker != null) {
-                    return YELLOW + playerName + " tried to swim in lava to escape " + WHITE + recentAttacker.name;
+                    return WHITE + playerName + " tried to swim in lava to escape " + recentAttacker.name;
                 }
-                return YELLOW + playerName + " tried to swim in lava";
+                return WHITE + playerName + " tried to swim in lava";
                 
             case SUFFOCATION:
-                return YELLOW + playerName + " suffocated in a wall";
+                return WHITE + playerName + " suffocated in a wall";
                 
             case CONTACT:
                 // Cactus death
                 if (recentAttacker != null) {
-                    return YELLOW + playerName + " walked into a cactus whilst trying to escape " + WHITE + recentAttacker.name;
+                    return WHITE + playerName + " walked into a cactus whilst trying to escape " + recentAttacker.name;
                 }
-                return YELLOW + playerName + " was pricked to death";
+                return WHITE + playerName + " was pricked to death";
                 
             case VOID:
                 // Spleef into void
                 if (recentAttacker != null) {
-                    return YELLOW + playerName + " didn't want to live in the same world as " + WHITE + recentAttacker.name;
+                    return WHITE + playerName + " didn't want to live in the same world as " + recentAttacker.name;
                 }
-                return YELLOW + playerName + " fell out of the world";
+                return WHITE + playerName + " fell out of the world";
                 
             case BLOCK_EXPLOSION:
-                return YELLOW + playerName + " blew up";
+                return WHITE + playerName + " blew up";
                 
             case TNT_EXPLOSION:
             case ENTITY_EXPLOSION:
@@ -191,45 +188,45 @@ public class DeathMessageHelper {
                         if (nmsExploder instanceof EntityTNTPrimed) {
                             EntityTNTPrimed tnt = (EntityTNTPrimed) nmsExploder;
                             if (tnt.source instanceof EntityPlayer) {
-                                return YELLOW + playerName + " was blown up by " + WHITE + ((EntityPlayer) tnt.source).name;
+                                return WHITE + playerName + " was blown up by " + ((EntityPlayer) tnt.source).name;
                             }
                         }
-                        return YELLOW + playerName + " was blown up by " + WHITE + getEntityName(exploder);
+                        return WHITE + playerName + " was blown up by " + getEntityName(exploder);
                     }
                 }
-                return YELLOW + playerName + " blew up";
+                return WHITE + playerName + " blew up";
                 
             case BED_EXPLOSION:
-                return YELLOW + playerName + " was killed by " + GRAY + "[Intentional Game Design]";
+                return WHITE + playerName + " was killed by [Intentional Game Design]";
                 
             case LIGHTNING:
-                return YELLOW + playerName + " was struck by lightning";
+                return WHITE + playerName + " was struck by lightning";
                 
             case SUICIDE:
-                return YELLOW + playerName + " took their own life";
+                return WHITE + playerName + " took their own life";
                 
             case PROJECTILE:
                 if (event instanceof EntityDamageByProjectileEvent) {
                     org.bukkit.entity.Entity shooter = ((EntityDamageByProjectileEvent) event).getDamager();
                     if (shooter instanceof Player) {
-                        return YELLOW + playerName + " was shot by " + WHITE + ((Player) shooter).getName();
+                        return WHITE + playerName + " was shot by " + ((Player) shooter).getName();
                     }
                     if (shooter != null) {
-                        return YELLOW + playerName + " was shot by " + WHITE + getEntityName(shooter);
+                        return WHITE + playerName + " was shot by " + getEntityName(shooter);
                     }
                 }
-                return YELLOW + playerName + " was shot";
+                return WHITE + playerName + " was shot";
                 
             case ENTITY_ATTACK:
                 if (event instanceof EntityDamageByEntityEvent) {
                     org.bukkit.entity.Entity attacker = ((EntityDamageByEntityEvent) event).getDamager();
-                    return YELLOW + playerName + " was slain by " + WHITE + getEntityName(attacker);
+                    return WHITE + playerName + " was slain by " + getEntityName(attacker);
                 }
-                return YELLOW + playerName + " was killed";
+                return WHITE + playerName + " was killed";
                 
             case CUSTOM:
             default:
-                return YELLOW + playerName + " died";
+                return WHITE + playerName + " died";
         }
     }
     

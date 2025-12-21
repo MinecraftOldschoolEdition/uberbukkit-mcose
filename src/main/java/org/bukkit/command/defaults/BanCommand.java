@@ -4,25 +4,47 @@ import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Player;
+import org.bukkit.OfflinePlayer;
 
 public class BanCommand extends VanillaCommand {
     public BanCommand() {
         super("ban");
         this.description = "Prevents the specified player from using this server";
-        this.usageMessage = "/ban <player>";
+        this.usageMessage = "/ban <player> [reason]";
         this.setPermission("bukkit.command.ban.player");
     }
 
     @Override
     public boolean execute(CommandSender sender, String currentAlias, String[] args) {
         if (!testPermission(sender)) return true;
-        if (args.length != 1) {
+        if (args.length < 1) {
             sender.sendMessage(ChatColor.RED + "Usage: " + usageMessage);
             return false;
         }
 
-        Bukkit.getOfflinePlayer(args[0]).setBanned(true);
-        Command.broadcastCommandMessage(sender, "Banning " + args[0]);
+        // Build the reason from remaining arguments
+        String reason;
+        if (args.length > 1) {
+            StringBuilder sb = new StringBuilder();
+            for (int i = 1; i < args.length; i++) {
+                if (i > 1) sb.append(" ");
+                sb.append(args[i]);
+            }
+            reason = sb.toString();
+        } else {
+            reason = "Banned by an operator.";
+        }
+
+        OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(args[0]);
+        offlinePlayer.setBanned(true, reason);
+        Command.broadcastCommandMessage(sender, "Banning " + args[0] + ": " + reason);
+        
+        // If player is online, kick them with the ban reason
+        Player onlinePlayer = Bukkit.getPlayerExact(args[0]);
+        if (onlinePlayer != null) {
+            onlinePlayer.kickPlayer("You have been banned: " + reason);
+        }
 
         return true;
     }

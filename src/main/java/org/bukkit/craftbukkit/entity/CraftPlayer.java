@@ -400,6 +400,18 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
             server.getHandle().b(getName().toLowerCase());
         }
     }
+    
+    public void setBanned(boolean value, String reason) {
+        if (value) {
+            server.getHandle().banWithReason(getName().toLowerCase(), reason);
+        } else {
+            server.getHandle().b(getName().toLowerCase());
+        }
+    }
+    
+    public String getBanReason() {
+        return server.getHandle().getBanReason(getName().toLowerCase());
+    }
 
     public boolean isWhitelisted() {
         return server.getHandle().e().contains(getName().toLowerCase());

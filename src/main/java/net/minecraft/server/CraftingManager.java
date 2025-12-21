@@ -89,6 +89,8 @@ public class CraftingManager {
 
         this.registerShapedRecipe(new ItemStack(Item.PAPER, 3), new Object[] { "###", Character.valueOf('#'), Item.SUGAR_CANE });
         this.registerShapedRecipe(new ItemStack(Item.BOOK, 1), new Object[] { "#", "#", "#", Character.valueOf('#'), Item.PAPER });
+        // Book and Quill recipe: Book + Ink Sac + Feather
+        this.registerShapelessRecipe(new ItemStack(Item.WRITABLE_BOOK, 1), new Object[] { Item.BOOK, new ItemStack(Item.INK_SACK, 1, 0), Item.FEATHER });
         this.registerShapedRecipe(new ItemStack(Block.FENCE, 2), new Object[] { "###", "###", Character.valueOf('#'), Item.STICK });
         this.registerShapedRecipe(new ItemStack(Block.JUKEBOX, 1), new Object[] { "###", "#X#", "###", Character.valueOf('#'), Block.WOOD, Character.valueOf('X'), Item.DIAMOND });
         this.registerShapedRecipe(new ItemStack(Block.BOOKSHELF, 1), new Object[] { "###", "XXX", "###", Character.valueOf('#'), Block.WOOD, Character.valueOf('X'), Item.BOOK });

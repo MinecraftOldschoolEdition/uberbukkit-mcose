@@ -967,4 +967,19 @@ public abstract class EntityHuman extends EntityLiving {
             this.E = true;
         }
     }
+
+    /**
+     * MCOSE: Override void kill to apply void damage instead of instant death.
+     * Like modern Minecraft, creative players still take void damage so they
+     * don't fall infinitely. 4 damage per tick until death.
+     */
+    @Override
+    protected void Y() {
+        // Apply 4 damage per tick (bypasses creative invulnerability)
+        // This matches modern Minecraft behavior where even creative players die in void
+        this.health -= 4;
+        if (this.health <= 0) {
+            this.die();
+        }
+    }
 }

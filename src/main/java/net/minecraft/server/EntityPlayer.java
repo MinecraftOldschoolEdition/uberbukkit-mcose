@@ -680,13 +680,19 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
 
     public void a(Statistic statistic, int i) {
         if (statistic != null) {
-            if (!statistic.g) {
-                while (i > 100) {
+            // MCOSE: Track statistics and achievements server-side
+            if (this.playerStatistics != null) {
+                this.playerStatistics.addStatistic(statistic, i);
+            }
+            
+            // Send packet to client (for non-achievement stats)
+            if (!statistic.g && this.netServerHandler != null) {
+                int remaining = i;
+                while (remaining > 100) {
                     this.netServerHandler.sendPacket(new Packet200Statistic(statistic.e, 100));
-                    i -= 100;
+                    remaining -= 100;
                 }
-
-                this.netServerHandler.sendPacket(new Packet200Statistic(statistic.e, i));
+                this.netServerHandler.sendPacket(new Packet200Statistic(statistic.e, remaining));
             }
         }
     }

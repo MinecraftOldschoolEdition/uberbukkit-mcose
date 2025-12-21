@@ -10,6 +10,8 @@ public final class ItemStack {
     public int b;
     public int id;
     public int damage; // CraftBukkit - private -> public
+    /** NBT tag compound for extra item data (books, enchantments, etc.) */
+    public NBTTagCompound tag;
 
     public ItemStack(Block block) {
         this(block, 1);
@@ -49,7 +51,10 @@ public final class ItemStack {
 
     public ItemStack a(int i) {
         this.count -= i;
-        return new ItemStack(this.id, i, this.damage);
+        ItemStack newStack = new ItemStack(this.id, i, this.damage);
+        // Note: NBT tag is NOT copied when splitting stacks
+        // This is acceptable because items with NBT (like books) have maxStackSize=1
+        return newStack;
     }
 
     public Item getItem() {
@@ -78,6 +83,9 @@ public final class ItemStack {
         nbttagcompound.a("id", (short) this.id);
         nbttagcompound.a("Count", (byte) this.count);
         nbttagcompound.a("Damage", (short) this.damage);
+        if (this.tag != null) {
+            nbttagcompound.a("tag", this.tag);
+        }
         return nbttagcompound;
     }
 
@@ -85,6 +93,30 @@ public final class ItemStack {
         this.id = nbttagcompound.d("id");
         this.count = nbttagcompound.c("Count");
         this.damage = nbttagcompound.d("Damage");
+        if (nbttagcompound.hasKey("tag")) {
+            this.tag = nbttagcompound.k("tag");
+        }
+    }
+    
+    /**
+     * Returns true if this item stack has an NBT tag compound.
+     */
+    public boolean hasTag() {
+        return this.tag != null;
+    }
+    
+    /**
+     * Gets the NBT tag compound for this item stack.
+     */
+    public NBTTagCompound getTag() {
+        return this.tag;
+    }
+    
+    /**
+     * Sets the NBT tag compound for this item stack.
+     */
+    public void setTag(NBTTagCompound nbt) {
+        this.tag = nbt;
     }
 
     public int getMaxStackSize() {
@@ -181,7 +213,9 @@ public final class ItemStack {
     }
 
     public ItemStack cloneItemStack() {
-        return new ItemStack(this.id, this.count, this.damage);
+        ItemStack clone = new ItemStack(this.id, this.count, this.damage);
+        clone.tag = this.tag; // Shallow copy of tag reference
+        return clone;
     }
 
     public static boolean equals(ItemStack itemstack, ItemStack itemstack1) {

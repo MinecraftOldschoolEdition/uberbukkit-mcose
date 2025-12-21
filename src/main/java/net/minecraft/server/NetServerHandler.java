@@ -498,7 +498,18 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             d8 = d4 * d4 + d6 * d6 + d7 * d7;
             boolean flag1 = false;
 
-            if (d8 > 0.0625D && !this.player.isSleeping()) {
+            // MCOSE: Be more lenient with position checks for creative/flying players
+            // When landing from flight, there can be position discrepancies due to client/server desync
+            boolean isCreativeOrCanFly = this.player.gameMode == 1;
+            if (!isCreativeOrCanFly && isStaffExemptFromFlyKick) {
+                Player bukkitPlayer = (Player) this.player.getBukkitEntity();
+                isCreativeOrCanFly = bukkitPlayer.isOp() || bukkitPlayer.hasPermission("uberbukkit.fly");
+            }
+            
+            // Use a higher tolerance for flying players (1.0 vs 0.0625)
+            double movementTolerance = isCreativeOrCanFly ? 1.0D : 0.0625D;
+            
+            if (d8 > movementTolerance && !this.player.isSleeping()) {
                 flag1 = true;
                 a.warning(this.player.name + " moved wrongly!");
                 System.out.println("Got position " + d1 + ", " + d2 + ", " + d3);
@@ -513,7 +524,8 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             this.player.setLocation(d1, d2Adjusted, d3, f2, f3);
             boolean flag2 = worldserver.getEntities(this.player, this.player.boundingBox.clone().shrink((double) f4, (double) f4, (double) f4)).size() == 0;
 
-            if (flag && (flag1 || !flag2) && !this.player.isSleeping()) {
+            // MCOSE: Skip teleport-back for creative/flying players to allow smooth landings
+            if (flag && (flag1 || !flag2) && !this.player.isSleeping() && !isCreativeOrCanFly) {
                 this.a(this.x, this.y, this.z, f2, f3);
                 return;
             }
@@ -1679,7 +1691,17 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
                     flag = false;
                 } else {
                     for (i = 0; i < packet130updatesign.lines[j].length(); ++i) {
-                        if (FontAllowedCharacters.allowedCharacters.indexOf(packet130updatesign.lines[j].charAt(i)) < 0) {
+                        char c = packet130updatesign.lines[j].charAt(i);
+                        // Allow the section sign (§) for color codes, and color code characters (0-9, a-f, k-o, r)
+                        if (c == '\u00A7') {
+                            // Color code prefix - allowed
+                            continue;
+                        }
+                        if (i > 0 && packet130updatesign.lines[j].charAt(i - 1) == '\u00A7') {
+                            // This is a color code character following § - allowed
+                            continue;
+                        }
+                        if (FontAllowedCharacters.allowedCharacters.indexOf(c) < 0) {
                             flag = false;
                         }
                     }
@@ -1756,8 +1778,200 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             }
         }
         
+        // Handle book editing and signing
+        if ("MC|BEdit".equals(packet250custompayload.channel)) {
+            handleBookEdit(packet250custompayload);
+            return;
+        }
+        
+        if ("MC|BSign".equals(packet250custompayload.channel)) {
+            handleBookSign(packet250custompayload);
+            return;
+        }
+        
+        // MCOSE: Handle sign dye coloring
+        if ("MC|SignDye".equals(packet250custompayload.channel)) {
+            handleSignDye(packet250custompayload);
+            return;
+        }
+        
         // Handle other custom channels here if needed
         // (Voice chat, Herobrine events, etc. are handled by their own systems)
+    }
+    
+    /**
+     * Handle book edit packet (MC|BEdit).
+     * Updates the pages of the book in the player's hand.
+     */
+    private void handleBookEdit(Packet250CustomPayload packet) {
+        try {
+            if (packet.data == null || packet.data.length == 0) {
+                return;
+            }
+            
+            ItemStack heldItem = this.player.inventory.getItemInHand();
+            if (heldItem == null || heldItem.id != Item.WRITABLE_BOOK.id) {
+                return;
+            }
+            
+            // Read NBT data from packet
+            java.io.DataInputStream dis = new java.io.DataInputStream(
+                new java.io.ByteArrayInputStream(packet.data));
+            NBTBase nbt = NBTBase.b(dis);
+            
+            if (nbt instanceof NBTTagCompound) {
+                NBTTagCompound bookData = (NBTTagCompound) nbt;
+                
+                // Validate and apply the book data
+                if (bookData.hasKey("pages")) {
+                    NBTTagList pages = bookData.l("pages");
+                    
+                    // Limit page count and content length
+                    if (pages.c() <= 50) {
+                        // Set or create the tag on the item
+                        if (heldItem.tag == null) {
+                            heldItem.tag = new NBTTagCompound();
+                        }
+                        heldItem.tag.a("pages", pages);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("[NetServerHandler] Error handling book edit: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Handle book sign packet (MC|BSign).
+     * Converts a writable book to a written book with author and title.
+     */
+    private void handleBookSign(Packet250CustomPayload packet) {
+        try {
+            if (packet.data == null || packet.data.length == 0) {
+                return;
+            }
+            
+            ItemStack heldItem = this.player.inventory.getItemInHand();
+            if (heldItem == null || heldItem.id != Item.WRITABLE_BOOK.id) {
+                return;
+            }
+            
+            // Read NBT data from packet
+            java.io.DataInputStream dis = new java.io.DataInputStream(
+                new java.io.ByteArrayInputStream(packet.data));
+            NBTBase nbt = NBTBase.b(dis);
+            
+            if (nbt instanceof NBTTagCompound) {
+                NBTTagCompound bookData = (NBTTagCompound) nbt;
+                
+                // Validate the book data
+                if (bookData.hasKey("pages") && bookData.hasKey("title") && bookData.hasKey("author")) {
+                    String title = bookData.getString("title");
+                    String author = bookData.getString("author");
+                    NBTTagList pages = bookData.l("pages");
+                    
+                    // Validate title length
+                    if (title.length() > 16) {
+                        title = title.substring(0, 16);
+                    }
+                    
+                    // Validate author (should match player name)
+                    if (!author.equals(this.player.name)) {
+                        author = this.player.name;
+                    }
+                    
+                    // Limit page count
+                    if (pages.c() <= 50) {
+                        // Convert to written book
+                        heldItem.id = Item.WRITTEN_BOOK.id;
+                        
+                        // Set or create the tag on the item
+                        if (heldItem.tag == null) {
+                            heldItem.tag = new NBTTagCompound();
+                        }
+                        heldItem.tag.a("pages", pages);
+                        heldItem.tag.setString("title", title);
+                        heldItem.tag.setString("author", author);
+                        
+                        // Sync inventory back to client so they see the signed book
+                        this.player.updateInventory(this.player.activeContainer);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("[NetServerHandler] Error handling book sign: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+    
+    /**
+     * Handle sign dye packet (MC|SignDye).
+     * Changes the text color of a sign when right-clicked with dye.
+     */
+    private void handleSignDye(Packet250CustomPayload packet) {
+        try {
+            if (packet.data == null || packet.data.length < 13) { // 4+4+4+1 bytes minimum
+                return;
+            }
+            
+            java.io.DataInputStream dis = new java.io.DataInputStream(
+                new java.io.ByteArrayInputStream(packet.data));
+            int x = dis.readInt();
+            int y = dis.readInt();
+            int z = dis.readInt();
+            int dyeDamage = dis.readByte() & 0xFF;
+            
+            // Validate dye damage value
+            if (dyeDamage > 15) {
+                return;
+            }
+            
+            // Check distance (anti-cheat)
+            double dx = x - this.player.locX;
+            double dy = y - this.player.locY;
+            double dz = z - this.player.locZ;
+            if (dx * dx + dy * dy + dz * dz > 64) { // Max 8 blocks
+                return;
+            }
+            
+            // Verify player is holding the correct dye
+            ItemStack heldItem = this.player.inventory.getItemInHand();
+            if (heldItem == null || heldItem.id != Item.INK_SACK.id || heldItem.getData() != dyeDamage) {
+                return; // Invalid - player isn't holding the right dye
+            }
+            
+            // Get the sign tile entity
+            World world = this.player.world;
+            TileEntity te = world.getTileEntity(x, y, z);
+            if (te instanceof TileEntitySign) {
+                TileEntitySign sign = (TileEntitySign) te;
+                sign.setColorFromDye(dyeDamage);
+                
+                // Consume one dye from the player's hand (server-authoritative)
+                if (this.player.gameMode != 1) { // Don't consume in creative mode
+                    heldItem.count--;
+                    if (heldItem.count <= 0) {
+                        this.player.inventory.items[this.player.inventory.itemInHandIndex] = null;
+                    }
+                    // Sync inventory slot to client
+                    this.player.updateInventory(this.player.defaultContainer);
+                }
+                
+                // Broadcast the color update via custom payload to all players in range
+                // Format: x (int), y (int), z (int), color (int)
+                java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+                java.io.DataOutputStream dos = new java.io.DataOutputStream(baos);
+                dos.writeInt(x);
+                dos.writeInt(y);
+                dos.writeInt(z);
+                dos.writeInt(sign.textColor);
+                Packet250CustomPayload colorPacket = new Packet250CustomPayload("MC|SignCol", baos.toByteArray());
+                this.minecraftServer.serverConfigurationManager.sendPacketNearby(
+                    x, y, z, 64.0, this.player.dimension, colorPacket);
+            }
+        } catch (Exception e) {
+            System.err.println("[NetServerHandler] Error handling sign dye: " + e.getMessage());
+        }
     }
     
     /**

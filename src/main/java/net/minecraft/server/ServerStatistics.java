@@ -253,6 +253,32 @@ public class ServerStatistics {
     }
     
     /**
+     * Safely get a numeric value from NBT, handling both Long and Float types.
+     * This is needed for backwards compatibility with older data formats.
+     */
+    private long getNumericValue(NBTTagCompound nbt, String key) {
+        try {
+            NBTBase tag = nbt.b(key);
+            if (tag instanceof NBTTagLong) {
+                return ((NBTTagLong) tag).a;
+            } else if (tag instanceof NBTTagFloat) {
+                return (long) ((NBTTagFloat) tag).a;
+            } else if (tag instanceof NBTTagInt) {
+                return ((NBTTagInt) tag).a;
+            } else if (tag instanceof NBTTagDouble) {
+                return (long) ((NBTTagDouble) tag).a;
+            } else if (tag instanceof NBTTagShort) {
+                return ((NBTTagShort) tag).a;
+            } else if (tag instanceof NBTTagByte) {
+                return ((NBTTagByte) tag).a;
+            }
+        } catch (Exception e) {
+            // Fall through to default
+        }
+        return 0L;
+    }
+    
+    /**
      * Save statistics to file.
      */
     public synchronized void save() {
@@ -336,15 +362,15 @@ public class ServerStatistics {
             NBTTagCompound root = CompressedStreamTools.a(fis);
             fis.close();
             
-            // Load metadata
+            // Load metadata (use getNumericValue for backwards compatibility with older Float data)
             if (root.hasKey("ServerStartTime")) {
-                serverStartTime = root.getLong("ServerStartTime");
+                serverStartTime = getNumericValue(root, "ServerStartTime");
             }
             if (root.hasKey("TotalPlayersEverJoined")) {
-                totalPlayersEverJoined = root.getLong("TotalPlayersEverJoined");
+                totalPlayersEverJoined = getNumericValue(root, "TotalPlayersEverJoined");
             }
             if (root.hasKey("TotalUniquePlayersJoined")) {
-                totalUniquePlayersJoined = root.getLong("TotalUniquePlayersJoined");
+                totalUniquePlayersJoined = getNumericValue(root, "TotalUniquePlayersJoined");
             }
             
             // Load unique players
@@ -363,9 +389,9 @@ public class ServerStatistics {
                     if (key.startsWith("stat_")) {
                         try {
                             int statId = Integer.parseInt(key.substring(5));
-                            long value = statsNbt.getLong(key);
+                            long value = getNumericValue(statsNbt, key);
                             combinedStats.put(statId, value);
-                        } catch (NumberFormatException e) {
+                        } catch (Exception e) {
                             // Skip invalid entries
                         }
                     }
@@ -382,10 +408,10 @@ public class ServerStatistics {
                             NBTTagCompound statContrib = contribNbt.k(key);
                             Map<String, Long> contributions = new ConcurrentHashMap<String, Long>();
                             for (String playerName : statContrib.getKeys()) {
-                                contributions.put(playerName, statContrib.getLong(playerName));
+                                contributions.put(playerName, getNumericValue(statContrib, playerName));
                             }
                             playerContributions.put(statId, contributions);
-                        } catch (NumberFormatException e) {
+                        } catch (Exception e) {
                             // Skip invalid entries
                         }
                     }

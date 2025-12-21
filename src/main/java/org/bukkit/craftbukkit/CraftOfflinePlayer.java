@@ -49,6 +49,18 @@ public class CraftOfflinePlayer implements OfflinePlayer {
             server.getHandle().b(name.toLowerCase());
         }
     }
+    
+    public void setBanned(boolean value, String reason) {
+        if (value) {
+            server.getHandle().banWithReason(name.toLowerCase(), reason);
+        } else {
+            server.getHandle().b(name.toLowerCase());
+        }
+    }
+    
+    public String getBanReason() {
+        return server.getHandle().getBanReason(name.toLowerCase());
+    }
 
     public boolean isWhitelisted() {
         return server.getHandle().e().contains(name.toLowerCase());

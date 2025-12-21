@@ -111,6 +111,9 @@ public class Item {
     public static Item COOKIE = (new ItemCookie(101, 1, false, 8)).a(12, 5).a("cookie");
     public static ItemWorldMap MAP = (ItemWorldMap) (new ItemWorldMap(102)).a(12, 3).a("map");
     public static ItemShears SHEARS = (ItemShears) (new ItemShears(103)).a(13, 5).a("shears");
+    // Book and Quill (writable book) and Written Book
+    public static Item WRITABLE_BOOK = (new ItemWritableBook(104)).a("writingBook");
+    public static Item WRITTEN_BOOK = (new ItemWrittenBook(105)).a("writtenBook");
     public static Item GOLD_RECORD = (new ItemRecord(2000, "13")).a(0, 15).a("record");
     public static Item GREEN_RECORD = (new ItemRecord(2001, "cat")).a(1, 15).a("record");
     public static Item RECORD_BLOCKS = (new ItemRecord(2002, "blocks")).a(2, 15).a("record");

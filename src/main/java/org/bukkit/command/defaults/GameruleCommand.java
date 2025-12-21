@@ -8,11 +8,31 @@ import net.minecraft.server.WorldData;
 import net.minecraft.server.MinecraftServer;
 
 public class GameruleCommand extends VanillaCommand {
+    
+    // Boolean gamerules
+    private static final String[] BOOLEAN_RULES = {"doDayNightCycle", "tntexplodes", "mobGriefing", "doWeatherCycle", "showDeathMessages"};
+    // Integer gamerules
+    private static final String[] INTEGER_RULES = {"spawnRadius"};
+    
     public GameruleCommand() {
         super("gamerule");
         this.description = "Sets or queries a game rule.";
-        this.usageMessage = "/gamerule <rule name> [true|false]";
+        this.usageMessage = "/gamerule <rule name> [value]";
         this.setPermission("bukkit.command.gamerule");
+    }
+    
+    private boolean isBooleanRule(String name) {
+        for (String rule : BOOLEAN_RULES) {
+            if (rule.equalsIgnoreCase(name)) return true;
+        }
+        return false;
+    }
+    
+    private boolean isIntegerRule(String name) {
+        for (String rule : INTEGER_RULES) {
+            if (rule.equalsIgnoreCase(name)) return true;
+        }
+        return false;
     }
 
     @Override
@@ -22,8 +42,15 @@ public class GameruleCommand extends VanillaCommand {
         }
 
         if (args.length == 0) {
-            sender.sendMessage(ChatColor.RED + "Usage: " + usageMessage);
-            return false;
+            // List all gamerules
+            sender.sendMessage(ChatColor.YELLOW + "Available gamerules:");
+            for (String rule : BOOLEAN_RULES) {
+                sender.sendMessage("  " + rule + " (boolean)");
+            }
+            for (String rule : INTEGER_RULES) {
+                sender.sendMessage("  " + rule + " (integer)");
+            }
+            return true;
         }
 
         MinecraftServer mcServer = ((CraftServer) Bukkit.getServer()).getServer();
@@ -40,6 +67,7 @@ public class GameruleCommand extends VanillaCommand {
         String ruleName = args[0].toLowerCase();
 
         if (args.length == 1) {
+            // Query a gamerule value
             if (ruleName.equals("dodaynightcycle")) {
                 sender.sendMessage(args[0] + " = " + worldData.getDoDayNightCycle());
             } else if (ruleName.equals("tntexplodes")) {
@@ -50,48 +78,62 @@ public class GameruleCommand extends VanillaCommand {
                 sender.sendMessage(args[0] + " = " + worldData.getDoWeatherCycle());
             } else if (ruleName.equals("showdeathmessages")) {
                 sender.sendMessage(args[0] + " = " + worldData.getShowDeathMessages());
+            } else if (ruleName.equals("spawnradius")) {
+                sender.sendMessage(args[0] + " = " + worldData.getSpawnRadius());
             } else {
                 sender.sendMessage(ChatColor.RED + "Unknown game rule: " + args[0]);
                 return false;
             }
         } else if (args.length == 2) {
-            String valueStr = args[1].toLowerCase();
-            boolean value;
-            if (valueStr.equals("true")) {
-                value = true;
-            } else if (valueStr.equals("false")) {
-                value = false;
-            } else {
-                sender.sendMessage(ChatColor.RED + "Invalid value for game rule. Use 'true' or 'false'.");
-                return false;
-            }
+            String valueStr = args[1];
+            
+            // Handle integer gamerules
+            if (isIntegerRule(args[0])) {
+                int intValue;
+                try {
+                    intValue = Integer.parseInt(valueStr);
+                } catch (NumberFormatException e) {
+                    sender.sendMessage(ChatColor.RED + "Invalid value for game rule. Expected an integer.");
+                    return false;
+                }
+                
+                if (ruleName.equals("spawnradius")) {
+                    worldData.setSpawnRadius(intValue);
+                    sender.sendMessage("Game rule " + args[0] + " has been set to " + intValue);
+                    if (!(sender instanceof org.bukkit.command.ConsoleCommandSender)) {
+                        Bukkit.getLogger().info("User " + sender.getName() + " set game rule " + args[0] + " to " + intValue);
+                    }
+                } else {
+                    sender.sendMessage(ChatColor.RED + "Unknown game rule: " + args[0]);
+                    return false;
+                }
+            } else if (isBooleanRule(args[0])) {
+                // Handle boolean gamerules
+                boolean value;
+                if (valueStr.equalsIgnoreCase("true")) {
+                    value = true;
+                } else if (valueStr.equalsIgnoreCase("false")) {
+                    value = false;
+                } else {
+                    sender.sendMessage(ChatColor.RED + "Invalid value for game rule. Use 'true' or 'false'.");
+                    return false;
+                }
 
-            if (ruleName.equals("dodaynightcycle")) {
-                worldData.setDoDayNightCycle(value);
-                sender.sendMessage("Game rule " + args[0] + " has been set to " + value);
-                if (!(sender instanceof org.bukkit.command.ConsoleCommandSender)) {
-                    Bukkit.getLogger().info("User " + sender.getName() + " set game rule " + args[0] + " to " + value);
+                if (ruleName.equals("dodaynightcycle")) {
+                    worldData.setDoDayNightCycle(value);
+                } else if (ruleName.equals("tntexplodes")) {
+                    worldData.setTntexplodes(value);
+                } else if (ruleName.equals("mobgriefing")) {
+                    worldData.setMobGriefing(value);
+                } else if (ruleName.equals("doweathercycle")) {
+                    worldData.setDoWeatherCycle(value);
+                } else if (ruleName.equals("showdeathmessages")) {
+                    worldData.setShowDeathMessages(value);
+                } else {
+                    sender.sendMessage(ChatColor.RED + "Unknown game rule: " + args[0]);
+                    return false;
                 }
-            } else if (ruleName.equals("tntexplodes")) {
-                worldData.setTntexplodes(value);
-                sender.sendMessage("Game rule " + args[0] + " has been set to " + value);
-                if (!(sender instanceof org.bukkit.command.ConsoleCommandSender)) {
-                    Bukkit.getLogger().info("User " + sender.getName() + " set game rule " + args[0] + " to " + value);
-                }
-            } else if (ruleName.equals("mobgriefing")) {
-                worldData.setMobGriefing(value);
-                sender.sendMessage("Game rule " + args[0] + " has been set to " + value);
-                if (!(sender instanceof org.bukkit.command.ConsoleCommandSender)) {
-                    Bukkit.getLogger().info("User " + sender.getName() + " set game rule " + args[0] + " to " + value);
-                }
-            } else if (ruleName.equals("doweathercycle")) {
-                worldData.setDoWeatherCycle(value);
-                sender.sendMessage("Game rule " + args[0] + " has been set to " + value);
-                if (!(sender instanceof org.bukkit.command.ConsoleCommandSender)) {
-                    Bukkit.getLogger().info("User " + sender.getName() + " set game rule " + args[0] + " to " + value);
-                }
-            } else if (ruleName.equals("showdeathmessages")) {
-                worldData.setShowDeathMessages(value);
+                
                 sender.sendMessage("Game rule " + args[0] + " has been set to " + value);
                 if (!(sender instanceof org.bukkit.command.ConsoleCommandSender)) {
                     Bukkit.getLogger().info("User " + sender.getName() + " set game rule " + args[0] + " to " + value);
@@ -120,20 +162,29 @@ public class GameruleCommand extends VanillaCommand {
         java.util.List<String> completions = new java.util.ArrayList<String>();
         if (args.length == 1) {
             String prefix = args[0].toLowerCase();
-            String[] rules = {"doDayNightCycle", "tntexplodes", "mobGriefing", "doWeatherCycle", "showDeathMessages"};
-            for (String rule : rules) {
+            // Add all gamerules
+            for (String rule : BOOLEAN_RULES) {
+                if (rule.toLowerCase().startsWith(prefix)) {
+                    completions.add(rule);
+                }
+            }
+            for (String rule : INTEGER_RULES) {
                 if (rule.toLowerCase().startsWith(prefix)) {
                     completions.add(rule);
                 }
             }
         } else if (args.length == 2) {
-            String prefix = args[1].toLowerCase();
-            String[] values = {"true", "false"};
-            for (String val : values) {
-                if (val.startsWith(prefix)) {
-                    completions.add(val);
+            // Suggest true/false for boolean rules, nothing for integer rules
+            if (isBooleanRule(args[0])) {
+                String prefix = args[1].toLowerCase();
+                String[] values = {"true", "false"};
+                for (String val : values) {
+                    if (val.startsWith(prefix)) {
+                        completions.add(val);
+                    }
                 }
             }
+            // For integer rules, no suggestions (user types a number)
         }
         return completions;
     }
