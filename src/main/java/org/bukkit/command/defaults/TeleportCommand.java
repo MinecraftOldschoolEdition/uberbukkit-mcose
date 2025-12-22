@@ -18,11 +18,9 @@ public class TeleportCommand extends VanillaCommand {
     public boolean execute(CommandSender sender, String currentAlias, String[] args) {
         if (!testPermission(sender)) return true;
 
-        // Support relative coordinates with '~'
         try {
-            if (args.length == 2 && sender instanceof org.bukkit.entity.Player) {
-                // possibly player name or coords; fall through to existing logic
-            } else if ((args.length == 3 || args.length == 4)) {
+            // Support relative coordinates with '~'
+            if ((args.length == 3 || args.length == 4)) {
                 org.bukkit.entity.Player target;
                 org.bukkit.World world;
                 double baseX, baseY, baseZ;
@@ -30,7 +28,7 @@ public class TeleportCommand extends VanillaCommand {
                 if (args.length == 4) {
                     target = org.bukkit.Bukkit.getPlayerExact(args[0]);
                     if (target == null) {
-                        sender.sendMessage("§cPlayer not found: " + args[0]);
+                        sender.sendMessage(ChatColor.RED + "Player not found: " + args[0]);
                         return true;
                     }
                     world = target.getWorld();
@@ -40,7 +38,7 @@ public class TeleportCommand extends VanillaCommand {
                     idx = 1;
                 } else {
                     if (!(sender instanceof org.bukkit.entity.Player)) {
-                        sender.sendMessage("§cConsole must specify a player.");
+                        sender.sendMessage(ChatColor.RED + "Console must specify a player.");
                         return true;
                     }
                     target = (org.bukkit.entity.Player) sender;
@@ -50,51 +48,59 @@ public class TeleportCommand extends VanillaCommand {
                     baseZ = target.getLocation().getZ();
                 }
 
-                int x = parseCoord(args[idx], baseX);
-                int y = parseCoord(args[idx + 1], baseY);
-                int z = parseCoord(args[idx + 2], baseZ);
-                target.teleport(new org.bukkit.Location(world, x + 0.5, y, z + 0.5));
-                sender.sendMessage("§eTeleported to " + x + ", " + y + ", " + z);
+                try {
+                    int x = parseCoord(args[idx], baseX);
+                    int y = parseCoord(args[idx + 1], baseY);
+                    int z = parseCoord(args[idx + 2], baseZ);
+                    target.teleport(new org.bukkit.Location(world, x + 0.5, y, z + 0.5));
+                    sender.sendMessage(ChatColor.YELLOW + "Teleported to " + x + ", " + y + ", " + z);
+                } catch (NumberFormatException ex) {
+                    sender.sendMessage(ChatColor.RED + "Coordinates must be numbers (or use ~ for relative).");
+                }
                 return true;
             }
-        } catch (NumberFormatException ex) {
-            sender.sendMessage("§cCoordinates must be numbers (or use ~ for relative).");
+
+            // Fallback to vanilla tp behavior: tp <player> <target> or tp <target> (self)
+            if (args.length == 0) {
+                sender.sendMessage(ChatColor.RED + "Usage: " + usageMessage);
+                return true;
+            } else if (args.length == 1) {
+                if (!(sender instanceof Player)) {
+                    sender.sendMessage(ChatColor.RED + "Console must specify two players.");
+                    return true;
+                }
+                Player self = (Player) sender;
+                Player dest = Bukkit.getPlayerExact(args[0]);
+                if (dest == null) {
+                    sender.sendMessage(ChatColor.RED + "Player not found: " + args[0]);
+                    return true;
+                }
+                self.teleport(dest.getLocation());
+                sender.sendMessage(ChatColor.YELLOW + "Teleported to " + dest.getName());
+                return true;
+            } else if (args.length >= 2) {
+                Player src = Bukkit.getPlayerExact(args[0]);
+                Player dest = Bukkit.getPlayerExact(args[1]);
+                if (src == null) {
+                    sender.sendMessage(ChatColor.RED + "Player not found: " + args[0]);
+                    return true;
+                }
+                if (dest == null) {
+                    sender.sendMessage(ChatColor.RED + "Player not found: " + args[1]);
+                    return true;
+                }
+                src.teleport(dest.getLocation());
+                sender.sendMessage(ChatColor.YELLOW + "Teleported " + src.getName() + " to " + dest.getName());
+                return true;
+            }
+
+            sender.sendMessage(ChatColor.RED + "Usage: " + usageMessage);
+            return true;
+        } catch (Exception ex) {
+            sender.sendMessage(ChatColor.RED + "Error: " + ex.getMessage());
+            ex.printStackTrace();
             return true;
         }
-
-        // Fallback to vanilla tp behavior: tp <player> <target> or tp <target> (self)
-        if (args.length == 1) {
-            if (!(sender instanceof Player)) {
-                sender.sendMessage(ChatColor.RED + "Console must specify two players.");
-                return true;
-            }
-            Player self = (Player) sender;
-            Player dest = Bukkit.getPlayerExact(args[0]);
-            if (dest == null) {
-                sender.sendMessage(ChatColor.RED + "Player not found: " + args[0]);
-                return true;
-            }
-            self.teleport(dest.getLocation());
-            sender.sendMessage(ChatColor.YELLOW + "Teleported to " + dest.getName());
-            return true;
-        } else if (args.length >= 2) {
-            Player src = Bukkit.getPlayerExact(args[0]);
-            Player dest = Bukkit.getPlayerExact(args[1]);
-            if (src == null) {
-                sender.sendMessage(ChatColor.RED + "Player not found: " + args[0]);
-                return true;
-            }
-            if (dest == null) {
-                sender.sendMessage(ChatColor.RED + "Player not found: " + args[1]);
-                return true;
-            }
-            src.teleport(dest.getLocation());
-            sender.sendMessage(ChatColor.YELLOW + "Teleported " + src.getName() + " to " + dest.getName());
-            return true;
-        }
-
-        sender.sendMessage(ChatColor.RED + "Usage: " + usageMessage);
-        return true;
     }
 
     private int parseCoord(String token, double base) throws NumberFormatException {

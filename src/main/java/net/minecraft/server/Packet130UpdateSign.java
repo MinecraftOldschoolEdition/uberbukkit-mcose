@@ -39,8 +39,8 @@ public class Packet130UpdateSign extends Packet {
             }
         }
         
-        // MCOSE: Sign color is NOT sent over Packet130UpdateSign
-        // Color is synced separately via MC|SignDye custom payload
+        // MCOSE: Read sign text color (added for persistence)
+        this.color = datainputstream.readInt();
     }
 
     public void a(DataOutputStream dataoutputstream) throws IOException {
@@ -57,8 +57,8 @@ public class Packet130UpdateSign extends Packet {
             }
         }
         
-        // MCOSE: Sign color is NOT sent over Packet130UpdateSign
-        // Color is synced separately via MC|SignDye custom payload
+        // MCOSE: Write sign text color (added for persistence)
+        dataoutputstream.writeInt(this.color);
     }
 
     public void a(NetHandler nethandler) {
