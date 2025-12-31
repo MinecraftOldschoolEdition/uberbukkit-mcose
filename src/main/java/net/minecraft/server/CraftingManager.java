@@ -228,6 +228,13 @@ public class CraftingManager {
     }
 
     public ItemStack craft(InventoryCrafting inventorycrafting) {
+        // Check for item recycling first (single damageable item in grid)
+        ItemStack recycleResult = RecyclingManager.getInstance().getRecycleResult(inventorycrafting);
+        if (recycleResult != null) {
+            return recycleResult;
+        }
+        
+        // Then check normal recipes
         for (int i = 0; i < this.b.size(); ++i) {
             CraftingRecipe craftingrecipe = (CraftingRecipe) this.b.get(i);
 
