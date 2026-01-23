@@ -4,8 +4,6 @@ import org.bukkit.Location;
 import org.bukkit.entity.Vehicle;
 import org.bukkit.event.vehicle.*;
 
-import uk.betacraft.uberbukkit.UberbukkitConfig;
-
 import java.util.List;
 
 // CraftBukkit start
@@ -753,41 +751,33 @@ public class EntityMinecart extends Entity implements IInventory {
                     d0 *= 0.5D;
                     d1 *= 0.5D;
                     if (entity instanceof EntityMinecart) {
-                        // uberbukkit
-                        if (!UberbukkitConfig.getInstance().getBoolean("mechanics.allow_minecart_boosters", false)) {
-                            double d4 = entity.locX - this.locX;
-                            double d5 = entity.locZ - this.locZ;
-                            double d6 = d4 * entity.motZ + d5 * entity.lastX;
-
-                            d6 *= d6;
-                            if (d6 > 5.0D) {
-                                return;
-                            }
-                        }
-
+                        // Classic minecart booster behavior (pre-powered rails)
+                        // Enhanced momentum exchange for authentic booster cart physics
                         double d7 = entity.motX + this.motX;
                         double d8 = entity.motZ + this.motZ;
 
                         if (((EntityMinecart) entity).type == 2 && this.type != 2) {
-                            this.motX *= 0.20000000298023224D;
-                            this.motZ *= 0.20000000298023224D;
-                            this.b(entity.motX - d0, 0.0D, entity.motZ - d1);
-                            entity.motX *= 0.699999988079071D;
-                            entity.motZ *= 0.699999988079071D;
+                            // Furnace cart pushing regular cart - full momentum transfer
+                            this.motX *= 0.1D;
+                            this.motZ *= 0.1D;
+                            this.b(entity.motX * 1.2D - d0, 0.0D, entity.motZ * 1.2D - d1);
+                            entity.motX *= 0.8D;
+                            entity.motZ *= 0.8D;
                         } else if (((EntityMinecart) entity).type != 2 && this.type == 2) {
-                            entity.motX *= 0.20000000298023224D;
-                            entity.motZ *= 0.20000000298023224D;
-                            entity.b(this.motX + d0, 0.0D, this.motZ + d1);
-                            this.motX *= 0.699999988079071D;
-                            this.motZ *= 0.699999988079071D;
+                            // Regular cart pushing furnace cart
+                            entity.motX *= 0.1D;
+                            entity.motZ *= 0.1D;
+                            entity.b(this.motX * 1.2D + d0, 0.0D, this.motZ * 1.2D + d1);
+                            this.motX *= 0.8D;
+                            this.motZ *= 0.8D;
                         } else {
-                            d7 /= 2.0D;
-                            d8 /= 2.0D;
-                            this.motX *= 0.20000000298023224D;
-                            this.motZ *= 0.20000000298023224D;
+                            // Two regular carts colliding - classic booster behavior
+                            // Don't divide by 2 - this creates the momentum amplification effect
+                            this.motX *= 0.1D;
+                            this.motZ *= 0.1D;
                             this.b(d7 - d0, 0.0D, d8 - d1);
-                            entity.motX *= 0.20000000298023224D;
-                            entity.motZ *= 0.20000000298023224D;
+                            entity.motX *= 0.1D;
+                            entity.motZ *= 0.1D;
                             entity.b(d7 + d0, 0.0D, d8 + d1);
                         }
                     } else {

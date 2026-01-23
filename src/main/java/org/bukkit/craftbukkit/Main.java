@@ -18,22 +18,33 @@ public class Main {
     public static boolean useGui = false;
 
     public static void main(String[] args) {
-        // Check for GUI mode first (before option parsing)
+        // Check for GUI/no-GUI mode first (before option parsing)
         boolean launchGui = false;
-        List<String> argList = Arrays.asList(args);
+        boolean forceNoGui = false;
+        List<String> argList = new java.util.ArrayList<>(Arrays.asList(args));
         
-        // Check for --gui or -gui flag
-        if (argList.contains("--gui") || argList.contains("-gui") || argList.contains("gui")) {
-            launchGui = true;
-            // Remove gui flag from args before passing to server
-            args = argList.stream()
-                .filter(a -> !a.equals("--gui") && !a.equals("-gui") && !a.equals("gui"))
-                .toArray(String[]::new);
+        // Check for --nogui or --no-gui flag (forces console mode)
+        if (argList.contains("--nogui") || argList.contains("--no-gui") || 
+            argList.contains("-nogui") || argList.contains("-no-gui") || argList.contains("nogui")) {
+            forceNoGui = true;
+            // Remove nogui flags from args before passing to server
+            argList.removeIf(a -> a.equals("--nogui") || a.equals("--no-gui") || 
+                                  a.equals("-nogui") || a.equals("-no-gui") || a.equals("nogui"));
+            args = argList.toArray(new String[0]);
         }
         
-        // If no args provided and we detect a graphical environment, offer GUI
-        if (args.length == 0 && !java.awt.GraphicsEnvironment.isHeadless()) {
-            // Check if running from double-click (no console args)
+        // Check for --gui or -gui flag
+        if (!forceNoGui && (argList.contains("--gui") || argList.contains("-gui") || argList.contains("gui"))) {
+            launchGui = true;
+            // Remove gui flag from args before passing to server
+            argList.removeIf(a -> a.equals("--gui") || a.equals("-gui") || a.equals("gui"));
+            args = argList.toArray(new String[0]);
+        }
+        
+        // If no args provided (or only server args) and we detect a graphical environment, use GUI
+        // unless --nogui was explicitly specified
+        if (!forceNoGui && !launchGui && !java.awt.GraphicsEnvironment.isHeadless()) {
+            // Default to GUI mode when running in graphical environment
             launchGui = true;
         }
         

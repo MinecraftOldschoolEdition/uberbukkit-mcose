@@ -25,6 +25,15 @@ public class EntityCreature extends EntityLiving {
         this.e = this.w();
         float f = 16.0F;
 
+        // Clear target if player switched to creative mode
+        if (this.target instanceof EntityHuman) {
+            EntityHuman targetPlayer = (EntityHuman) this.target;
+            if (targetPlayer.gameMode == 1) {
+                this.target = null;
+                this.pathEntity = null;
+            }
+        }
+
         if (this.target == null) {
             // CraftBukkit start
             Entity target = this.findTarget();

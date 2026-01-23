@@ -2297,7 +2297,23 @@ public class ServerGUI extends JFrame {
         SwingUtilities.invokeLater(() -> {
             ServerGUI gui = new ServerGUI(args);
             gui.setVisible(true);
+            
+            // Auto-start the server after GUI is visible
+            gui.autoStartServer();
         });
+    }
+    
+    /**
+     * Automatically starts the server.
+     * Called when the GUI is launched to provide immediate server startup.
+     */
+    private void autoStartServer() {
+        if (!serverStarted) {
+            appendLog("Auto-starting server...", LogType.INFO);
+            startServer();
+            startButton.setText("Stop Server");
+            styleButton(startButton, ERROR_COLOR, Color.WHITE);
+        }
     }
 }
 

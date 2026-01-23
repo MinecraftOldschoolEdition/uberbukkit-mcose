@@ -1440,6 +1440,11 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         } else if (packet19entityaction.animation == 3) {
             this.player.a(false, true, true);
             this.checkMovement = false;
+        } else if (packet19entityaction.animation == 4) {
+            // Dismount from vehicle (boat/minecart)
+            if (this.player.vehicle != null) {
+                this.player.mount(null);
+            }
         }
     }
 

@@ -193,16 +193,63 @@ public class TileEntityFurnace extends TileEntity implements IInventory {
     private boolean canBurn() {
         if (this.items[0] == null) {
             return false;
-        } else {
-            ItemStack itemstack = FurnaceRecipes.getInstance().a(this.items[0].getItem().id);
-
-            // CraftBukkit - consider resultant count instead of current count
-            return itemstack == null ? false : (this.items[2] == null ? true : (!this.items[2].doMaterialsMatch(itemstack) ? false : (this.items[2].count + itemstack.count <= this.getMaxStackSize() && this.items[2].count < this.items[2].getMaxStackSize() ? true : this.items[2].count + itemstack.count <= itemstack.getMaxStackSize())));
         }
+        
+        // Check for smelt-recyclable items first (ore-based tools/armor)
+        ItemStack recycleResult = RecyclingManager.getInstance().getSmeltRecycleResult(this.items[0]);
+        if (recycleResult != null) {
+            // Can only recycle one item at a time (items with durability don't stack anyway)
+            if (this.items[2] == null) {
+                return true;
+            }
+            // Check if output slot can accept the recycled materials
+            if (!this.items[2].doMaterialsMatch(recycleResult)) {
+                return false;
+            }
+            int totalCount = this.items[2].count + recycleResult.count;
+            return totalCount <= this.getMaxStackSize() && totalCount <= recycleResult.getMaxStackSize();
+        }
+        
+        // Fall back to normal furnace recipes
+        ItemStack itemstack = FurnaceRecipes.getInstance().a(this.items[0].getItem().id);
+
+        // CraftBukkit - consider resultant count instead of current count
+        return itemstack == null ? false : (this.items[2] == null ? true : (!this.items[2].doMaterialsMatch(itemstack) ? false : (this.items[2].count + itemstack.count <= this.getMaxStackSize() && this.items[2].count < this.items[2].getMaxStackSize() ? true : this.items[2].count + itemstack.count <= itemstack.getMaxStackSize())));
     }
 
     public void burn() {
         if (this.canBurn()) {
+            // Check for smelt-recyclable items first (ore-based tools/armor)
+            ItemStack recycleResult = RecyclingManager.getInstance().getSmeltRecycleResult(this.items[0]);
+            if (recycleResult != null) {
+                // CraftBukkit start
+                CraftItemStack source = new CraftItemStack(this.items[0]);
+                CraftItemStack result = new CraftItemStack(recycleResult.cloneItemStack());
+
+                FurnaceSmeltEvent furnaceSmeltEvent = new FurnaceSmeltEvent(this.world.getWorld().getBlockAt(this.x, this.y, this.z), source, result);
+                this.world.getServer().getPluginManager().callEvent(furnaceSmeltEvent);
+
+                if (furnaceSmeltEvent.isCancelled()) {
+                    return;
+                }
+
+                org.bukkit.inventory.ItemStack oldResult = furnaceSmeltEvent.getResult();
+                ItemStack newResult = new ItemStack(oldResult.getTypeId(), oldResult.getAmount(), oldResult.getDurability());
+                recycleResult = newResult;
+                // CraftBukkit end
+
+                if (this.items[2] == null) {
+                    this.items[2] = recycleResult.cloneItemStack();
+                } else if (this.items[2].id == recycleResult.id && this.items[2].damage == recycleResult.damage) {
+                    this.items[2].count += recycleResult.count;
+                }
+
+                // Remove the recycled item (it's always count of 1 for damageable items)
+                this.items[0] = null;
+                return;
+            }
+            
+            // Fall back to normal furnace smelting
             ItemStack itemstack = FurnaceRecipes.getInstance().a(this.items[0].getItem().id);
 
             // CraftBukkit start

@@ -104,7 +104,6 @@ public class UberbukkitConfig extends Configuration {
         writeDefault("mechanics.pre_1_6_fire", false);
         writeDefault("mechanics.nether_bed_explode", true);
         writeDefault("mechanics.arrows_pickup_by_others", true);
-        writeDefault("mechanics.allow_minecart_boosters", false);
         writeDefault("mechanics.spawn_squids", true);
         writeDefault("mechanics.spawn_wolves", true);
         writeDefault("mechanics.spawn_slimes", true);

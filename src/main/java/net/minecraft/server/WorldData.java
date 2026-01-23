@@ -65,6 +65,7 @@ public class WorldData {
         if (nbttagcompound.hasKey("MobGriefing")) this.mobGriefing = nbttagcompound.m("MobGriefing");
         if (nbttagcompound.hasKey("DoWeatherCycle")) this.doWeatherCycle = nbttagcompound.m("DoWeatherCycle");
         if (nbttagcompound.hasKey("ShowDeathMessages")) this.showDeathMessages = nbttagcompound.m("ShowDeathMessages");
+        if (nbttagcompound.hasKey("SleepEnabled")) this.sleepEnabled = nbttagcompound.m("SleepEnabled");
         // Integer gamerules
         if (nbttagcompound.hasKey("SpawnRadius")) this.spawnRadius = nbttagcompound.e("SpawnRadius");
     }
@@ -147,6 +148,7 @@ public class WorldData {
         nbttagcompound.a("MobGriefing", this.mobGriefing);
         nbttagcompound.a("DoWeatherCycle", this.doWeatherCycle);
         nbttagcompound.a("ShowDeathMessages", this.showDeathMessages);
+        nbttagcompound.a("SleepEnabled", this.sleepEnabled);
         // Integer gamerules
         nbttagcompound.a("SpawnRadius", this.spawnRadius);
     }
@@ -263,6 +265,7 @@ public class WorldData {
     private boolean mobGriefing = true;
     private boolean doWeatherCycle = true;
     private boolean showDeathMessages = true;
+    private boolean sleepEnabled = false; // If true, sleeping in beds is enabled
     
     // Gamerules (integer)
     private int spawnRadius = 10; // Vanilla default spawn randomization radius
@@ -278,6 +281,8 @@ public class WorldData {
     public void setDoWeatherCycle(boolean v) { this.doWeatherCycle = v; }
     public boolean getShowDeathMessages() { return this.showDeathMessages; }
     public void setShowDeathMessages(boolean v) { this.showDeathMessages = v; }
+    public boolean getSleepEnabled() { return this.sleepEnabled; }
+    public void setSleepEnabled(boolean v) { this.sleepEnabled = v; }
     
     // Integer gamerules
     public int getSpawnRadius() { return this.spawnRadius; }

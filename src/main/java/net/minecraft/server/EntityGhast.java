@@ -80,6 +80,15 @@ public class EntityGhast extends EntityFlying implements IMonster {
             // CraftBukkit end
         }
 
+        // Clear target if player switched to creative mode
+        if (this.target instanceof EntityHuman) {
+            EntityHuman targetPlayer = (EntityHuman) this.target;
+            if (targetPlayer.gameMode == 1) {
+                this.target = null;
+                this.f = 0; // Reset attack counter
+            }
+        }
+
         if (this.target == null || this.h-- <= 0) {
             // CraftBukkit start
             Entity target = this.world.findNearbyPlayer(this, 100.0D);

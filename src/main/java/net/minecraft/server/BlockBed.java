@@ -55,6 +55,12 @@ public class BlockBed extends Block {
                 world.createExplosion((Entity) null, (double) ((float) i + 0.5F), (double) ((float) j + 0.5F), (double) ((float) k + 0.5F), 5.0F, true, EntityDamageEvent.DamageCause.BED_EXPLOSION); //Project poseidon
                 return true;
             } else {
+                // Check if sleeping is enabled via gamerule
+                if (!world.worldData.getSleepEnabled()) {
+                    entityhuman.a("tile.bed.sleepDisabled");
+                    return true;
+                }
+                
                 if (e(l)) {
                     EntityHuman entityhuman1 = null;
                     Iterator iterator = world.players.iterator();

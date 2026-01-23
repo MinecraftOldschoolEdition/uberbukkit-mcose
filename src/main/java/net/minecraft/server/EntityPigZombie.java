@@ -23,6 +23,15 @@ public class EntityPigZombie extends EntityZombie {
     }
 
     public void m_() {
+        // Clear anger if target switched to creative mode
+        if (this.target instanceof EntityHuman) {
+            EntityHuman targetPlayer = (EntityHuman) this.target;
+            if (targetPlayer.gameMode == 1) {
+                this.target = null;
+                this.angerLevel = 0;
+            }
+        }
+
         this.aE = this.target != null ? 0.95F : 0.5F;
         if (this.soundDelay > 0 && --this.soundDelay == 0) {
             this.world.makeSound(this, "mob.zombiepig.zpigangry", this.k() * 2.0F, ((this.random.nextFloat() - this.random.nextFloat()) * 0.2F + 1.0F) * 1.8F);
@@ -54,7 +63,8 @@ public class EntityPigZombie extends EntityZombie {
     }
 
     public boolean damageEntity(Entity entity, int i) {
-        if (entity instanceof EntityHuman) {
+        // Don't become angry at creative mode players
+        if (entity instanceof EntityHuman && ((EntityHuman) entity).gameMode != 1) {
             List list = this.world.b((Entity) this, this.boundingBox.b(32.0D, 32.0D, 32.0D));
 
             for (int j = 0; j < list.size(); ++j) {

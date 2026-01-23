@@ -59,10 +59,6 @@ public class EntityMonster extends EntityCreature implements IMonster {
     }
 
     public boolean damageEntity(Entity entity, int i) {
-        // Ignore retaliation against creative players
-        if (entity instanceof EntityHuman && ((EntityHuman) entity).gameMode == 1) {
-            return true;
-        }
         if (super.damageEntity(entity, i)) {
             // Remember who hurt us
             try {
@@ -70,6 +66,11 @@ public class EntityMonster extends EntityCreature implements IMonster {
             } catch (Throwable ignored) {}
             if (this.passenger != entity && this.vehicle != entity) {
                 if (entity != this) {
+                    // Do not retaliate against creative players - they can punch but mobs won't fight back
+                    if (entity instanceof EntityHuman && ((EntityHuman) entity).gameMode == 1) {
+                        // Take damage but don't target the player
+                        return true;
+                    }
                     // CraftBukkit start
                     org.bukkit.entity.Entity bukkitTarget = entity == null ? null : entity.getBukkitEntity();
 

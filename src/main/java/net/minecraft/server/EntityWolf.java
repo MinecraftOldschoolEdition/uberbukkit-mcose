@@ -90,6 +90,15 @@ public class EntityWolf extends EntityAnimal {
     }
 
     protected void c_() {
+        // Clear anger if target switched to creative mode
+        if (this.isAngry() && this.target instanceof EntityHuman) {
+            EntityHuman targetPlayer = (EntityHuman) this.target;
+            if (targetPlayer.gameMode == 1) {
+                this.setAngry(false);
+                this.target = null;
+            }
+        }
+
         super.c_();
         if (!this.e && !this.C() && this.isTamed() && this.vehicle == null) {
             EntityHuman entityhuman = this.world.a(this.getOwnerName());
@@ -246,6 +255,11 @@ public class EntityWolf extends EntityAnimal {
         if (!super.damageEntity((Entity) entity, i)) {
             return false;
         } else {
+            // Don't retaliate against creative mode players
+            if (entity instanceof EntityHuman && ((EntityHuman) entity).gameMode == 1) {
+                return true;
+            }
+            
             if (!this.isTamed() && !this.isAngry()) {
                 if (entity instanceof EntityHuman) {
                     // CraftBukkit start
