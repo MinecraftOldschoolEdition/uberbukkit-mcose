@@ -10,6 +10,7 @@
 package me.lucko.luckperms.common.cacheddata;
 
 import me.lucko.luckperms.common.model.User;
+import me.lucko.luckperms.common.model.manager.group.StandardGroupManager;
 
 /**
  * Holds cached data for a user.
@@ -18,10 +19,18 @@ public class UserCachedData {
     
     private final User user;
     private CachedPermissionData permissionData;
+    private StandardGroupManager groupManager;
     
     public UserCachedData(User user) {
         this.user = user;
-        refresh();
+    }
+    
+    /**
+     * Sets the group manager for resolving group inheritance.
+     * Must be called before getPermissionData() for inheritance to work.
+     */
+    public void setGroupManager(StandardGroupManager groupManager) {
+        this.groupManager = groupManager;
     }
     
     public CachedPermissionData getPermissionData() {
@@ -32,7 +41,12 @@ public class UserCachedData {
     }
     
     public void refresh() {
-        this.permissionData = CachedPermissionData.calculate(this.user);
+        if (this.groupManager != null) {
+            this.permissionData = CachedPermissionData.calculateWithInheritance(this.user, this.groupManager);
+        } else {
+            // Fallback: no inheritance resolution
+            this.permissionData = CachedPermissionData.calculate(this.user);
+        }
     }
     
     public void invalidate() {

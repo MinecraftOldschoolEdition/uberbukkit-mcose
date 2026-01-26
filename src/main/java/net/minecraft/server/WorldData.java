@@ -66,6 +66,7 @@ public class WorldData {
         if (nbttagcompound.hasKey("DoWeatherCycle")) this.doWeatherCycle = nbttagcompound.m("DoWeatherCycle");
         if (nbttagcompound.hasKey("ShowDeathMessages")) this.showDeathMessages = nbttagcompound.m("ShowDeathMessages");
         if (nbttagcompound.hasKey("SleepEnabled")) this.sleepEnabled = nbttagcompound.m("SleepEnabled");
+        if (nbttagcompound.hasKey("AdvertiseAchievements")) this.advertiseAchievements = nbttagcompound.m("AdvertiseAchievements");
         // Integer gamerules
         if (nbttagcompound.hasKey("SpawnRadius")) this.spawnRadius = nbttagcompound.e("SpawnRadius");
     }
@@ -149,6 +150,7 @@ public class WorldData {
         nbttagcompound.a("DoWeatherCycle", this.doWeatherCycle);
         nbttagcompound.a("ShowDeathMessages", this.showDeathMessages);
         nbttagcompound.a("SleepEnabled", this.sleepEnabled);
+        nbttagcompound.a("AdvertiseAchievements", this.advertiseAchievements);
         // Integer gamerules
         nbttagcompound.a("SpawnRadius", this.spawnRadius);
     }
@@ -265,6 +267,7 @@ public class WorldData {
     private boolean mobGriefing = true;
     private boolean doWeatherCycle = true;
     private boolean showDeathMessages = true;
+    private boolean advertiseAchievements = false; // Default to false
     private boolean sleepEnabled = false; // If true, sleeping in beds is enabled
     
     // Gamerules (integer)
@@ -283,6 +286,8 @@ public class WorldData {
     public void setShowDeathMessages(boolean v) { this.showDeathMessages = v; }
     public boolean getSleepEnabled() { return this.sleepEnabled; }
     public void setSleepEnabled(boolean v) { this.sleepEnabled = v; }
+    public boolean getAdvertiseAchievements() { return this.advertiseAchievements; }
+    public void setAdvertiseAchievements(boolean v) { this.advertiseAchievements = v; }
     
     // Integer gamerules
     public int getSpawnRadius() { return this.spawnRadius; }

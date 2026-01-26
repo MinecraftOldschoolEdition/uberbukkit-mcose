@@ -303,15 +303,17 @@ public class LPBukkitCommandExecutor implements CommandExecutor, TabCompleter {
         this.plugin.getServer().getScheduler().scheduleAsyncDelayedTask(this.plugin.getLoader(), new Runnable() {
             @Override
             public void run() {
-                // Collect all groups and online users
+                // Collect all groups and all users (including offline)
                 List<PermissionHolder> holders = new ArrayList<PermissionHolder>();
                 List<Track> tracks = new ArrayList<Track>();
                 
                 // Add all groups
                 holders.addAll(plugin.getGroupManager().getAll().values());
                 
-                // Add all loaded users
-                holders.addAll(plugin.getUserManager().getAll().values());
+                // Add all users (including offline from storage)
+                List<User> users = new ArrayList<User>();
+                WebEditorRequest.includeMatchingUsers(users, true, plugin);
+                holders.addAll(users);
                 
                 // Add all tracks
                 tracks.addAll(plugin.getTrackManager().getAll().values());

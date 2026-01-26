@@ -60,7 +60,6 @@ public class WorldGenHerobrineShrine extends WorldGenerator {
         // The platform goes ON TOP of the surface
         int platformY = surfaceY + 1;
         
-        System.out.println("[HerobrineShrine] Generating at " + x + ", " + platformY + ", " + z);
         
         int goldId = Block.GOLD_BLOCK.id;
         int torchId = Block.REDSTONE_TORCH_ON.id;

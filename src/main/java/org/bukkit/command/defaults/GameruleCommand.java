@@ -10,7 +10,7 @@ import net.minecraft.server.MinecraftServer;
 public class GameruleCommand extends VanillaCommand {
     
     // Boolean gamerules
-    private static final String[] BOOLEAN_RULES = {"doDayNightCycle", "tntexplodes", "mobGriefing", "doWeatherCycle", "showDeathMessages", "sleepEnabled"};
+    private static final String[] BOOLEAN_RULES = {"doDayNightCycle", "tntexplodes", "mobGriefing", "doWeatherCycle", "showDeathMessages", "sleepEnabled", "advertiseAchievements"};
     // Integer gamerules
     private static final String[] INTEGER_RULES = {"spawnRadius"};
     
@@ -80,6 +80,8 @@ public class GameruleCommand extends VanillaCommand {
                 sender.sendMessage(args[0] + " = " + worldData.getShowDeathMessages());
             } else if (ruleName.equals("sleepenabled")) {
                 sender.sendMessage(args[0] + " = " + worldData.getSleepEnabled());
+            } else if (ruleName.equals("advertiseachievements")) {
+                sender.sendMessage(args[0] + " = " + worldData.getAdvertiseAchievements());
             } else if (ruleName.equals("spawnradius")) {
                 sender.sendMessage(args[0] + " = " + worldData.getSpawnRadius());
             } else {
@@ -133,6 +135,8 @@ public class GameruleCommand extends VanillaCommand {
                     worldData.setShowDeathMessages(value);
                 } else if (ruleName.equals("sleepenabled")) {
                     worldData.setSleepEnabled(value);
+                } else if (ruleName.equals("advertiseachievements")) {
+                    worldData.setAdvertiseAchievements(value);
                 } else {
                     sender.sendMessage(ChatColor.RED + "Unknown game rule: " + args[0]);
                     return false;

@@ -31,7 +31,12 @@ public class StandardUserManager {
     }
     
     public User getOrMake(UUID uuid, String username) {
-        return this.users.computeIfAbsent(uuid, u -> new User(u, username));
+        return this.users.computeIfAbsent(uuid, u -> {
+            User user = new User(u, username);
+            // Set the group manager so inheritance can be resolved
+            user.getCachedData().setGroupManager(this.plugin.getGroupManager());
+            return user;
+        });
     }
     
     public User getIfLoaded(UUID uuid) {

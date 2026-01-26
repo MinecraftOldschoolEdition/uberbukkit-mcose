@@ -32,6 +32,11 @@ public class OpenInventoryCommand extends Command {
             return true;
         }
         Player viewer = (Player) sender;
+        // Permission check: require op or uberbukkit.openinv permission
+        if (!viewer.isOp() && !viewer.hasPermission("uberbukkit.openinv")) {
+            sender.sendMessage("\u00a7cYou don't have permission to use this command.");
+            return true;
+        }
         if (args.length < 1) {
             sender.sendMessage("Usage: /" + label + " <playername>");
             return true;

@@ -158,9 +158,16 @@ public class TileEntityFurnace extends TileEntity implements IInventory {
                     // CraftBukkit end
                     flag1 = true;
                     if (this.items[1] != null) {
+                        // Check if fuel item has a container (e.g., lava bucket -> empty bucket)
+                        Item containerItem = this.items[1].getItem().h(); // h() is getContainerItem()
                         --this.items[1].count;
                         if (this.items[1].count == 0) {
-                            this.items[1] = null;
+                            // Return the container item (empty bucket) if applicable
+                            if (containerItem != null) {
+                                this.items[1] = new ItemStack(containerItem);
+                            } else {
+                                this.items[1] = null;
+                            }
                         }
                     }
                 }

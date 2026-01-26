@@ -160,12 +160,30 @@ public class WebEditorRequest {
     }
 
     public static void includeMatchingUsers(List<? super User> holders, boolean includeOffline, LPBukkitPlugin plugin) {
-        Map<java.util.UUID, User> users = plugin.getUserManager().getAll();
+        // First add all currently loaded users
+        Map<java.util.UUID, User> loadedUsers = plugin.getUserManager().getAll();
         int count = 0;
-        for (User user : users.values()) {
+        for (User user : loadedUsers.values()) {
             if (count >= MAX_USERS) break;
             holders.add(user);
             count++;
+        }
+        
+        // If we want offline users and haven't hit the limit, load from storage
+        if (includeOffline && count < MAX_USERS) {
+            java.util.Set<java.util.UUID> allUserUuids = plugin.getStorage().getUniqueUsers();
+            for (java.util.UUID uuid : allUserUuids) {
+                if (count >= MAX_USERS) break;
+                // Skip if already loaded
+                if (loadedUsers.containsKey(uuid)) continue;
+                
+                // Load user from storage
+                User user = plugin.getStorage().loadUser(uuid, null);
+                if (user != null) {
+                    holders.add(user);
+                    count++;
+                }
+            }
         }
     }
 }

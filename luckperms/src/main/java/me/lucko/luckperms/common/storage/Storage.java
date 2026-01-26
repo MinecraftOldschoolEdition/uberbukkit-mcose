@@ -13,6 +13,7 @@ import me.lucko.luckperms.common.model.Group;
 import me.lucko.luckperms.common.model.Track;
 import me.lucko.luckperms.common.model.User;
 
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -47,6 +48,14 @@ public interface Storage {
     void saveUser(User user);
     
     /**
+     * Gets all unique user UUIDs that have data stored.
+     * Used for the web editor.
+     *
+     * @return a set of all stored user UUIDs
+     */
+    Set<UUID> getUniqueUsers();
+    
+    /**
      * Load a group from storage.
      * 
      * @param name the group name
@@ -69,6 +78,11 @@ public interface Storage {
     void deleteGroup(Group group);
     
     /**
+     * Loads all groups from storage.
+     */
+    void loadAllGroups();
+    
+    /**
      * Load a track from storage.
      * 
      * @param name the track name
@@ -89,5 +103,10 @@ public interface Storage {
      * @param track the track to delete
      */
     void deleteTrack(Track track);
+    
+    /**
+     * Loads all tracks from storage.
+     */
+    void loadAllTracks();
 }
 

@@ -27,8 +27,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -143,6 +145,27 @@ public class YamlStorage implements Storage {
     }
     
     @Override
+    public Set<UUID> getUniqueUsers() {
+        Set<UUID> users = new HashSet<>();
+        File[] files = this.usersDirectory.toFile().listFiles();
+        if (files != null) {
+            for (File file : files) {
+                String name = file.getName();
+                if (name.endsWith(".yml")) {
+                    try {
+                        String uuidStr = name.substring(0, name.length() - 4);
+                        UUID uuid = UUID.fromString(uuidStr);
+                        users.add(uuid);
+                    } catch (IllegalArgumentException ignored) {
+                        // Not a valid UUID filename, skip
+                    }
+                }
+            }
+        }
+        return users;
+    }
+    
+    @Override
     public Group loadGroup(String name) {
         File file = this.groupsDirectory.resolve(name.toLowerCase() + ".yml").toFile();
         
@@ -208,6 +231,21 @@ public class YamlStorage implements Storage {
     }
     
     @Override
+    public void loadAllGroups() {
+        File[] files = this.groupsDirectory.toFile().listFiles();
+        if (files != null) {
+            for (File file : files) {
+                String name = file.getName();
+                if (name.endsWith(".yml")) {
+                    String groupName = name.substring(0, name.length() - 4);
+                    loadGroup(groupName);
+                }
+            }
+        }
+        this.plugin.getLogger().info("Loaded " + this.plugin.getGroupManager().getAll().size() + " groups.");
+    }
+    
+    @Override
     public Track loadTrack(String name) {
         File file = this.tracksDirectory.resolve(name.toLowerCase() + ".yml").toFile();
         
@@ -256,6 +294,21 @@ public class YamlStorage implements Storage {
             file.delete();
         }
         this.plugin.getTrackManager().unload(track.getName());
+    }
+    
+    @Override
+    public void loadAllTracks() {
+        File[] files = this.tracksDirectory.toFile().listFiles();
+        if (files != null) {
+            for (File file : files) {
+                String name = file.getName();
+                if (name.endsWith(".yml")) {
+                    String trackName = name.substring(0, name.length() - 4);
+                    loadTrack(trackName);
+                }
+            }
+        }
+        this.plugin.getLogger().info("Loaded " + this.plugin.getTrackManager().getAll().size() + " tracks.");
     }
     
     @SuppressWarnings("unchecked")

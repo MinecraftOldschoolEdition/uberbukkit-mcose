@@ -38,6 +38,9 @@ public class EntityHerobrine extends EntityLiving {
     private int totallyStuckTicks = 0;
     private static final int STUCK_THRESHOLD_FOR_ESCAPE = 30;
     
+    // Stalking behavior constants - should match client and HerobrineEventManager
+    private static final float STALK_DISTANCE_RATIO = 0.50F;
+    
     // Escape behavior
     private int escapeAttemptTicks = 0;
     
@@ -105,14 +108,10 @@ public class EntityHerobrine extends EntityLiving {
         this.ay = 0; // entityAge
         this.aF = 0; // Prevent frozen state
         
-        // Debug output every 2 seconds (40 ticks)
+        // Debug tick counter (used for periodic logging if needed)
         debugTickCounter++;
         if (debugTickCounter >= 40) {
             debugTickCounter = 0;
-            System.out.println("[Herobrine AI] State=" + aiState + 
-                ", Target=" + (targetPlayer != null ? targetPlayer.name : "null") +
-                ", Pos=(" + (int)locX + "," + (int)locY + "," + (int)locZ + ")" +
-                ", Yaw=" + (int)yaw);
         }
         
         // Pathfinding cooldown
@@ -145,8 +144,8 @@ public class EntityHerobrine extends EntityLiving {
             }
         }
         
-        // Check for nearby threatening players (any player who gets too close)
-        checkForThreats();
+        // NOTE: Retreat is triggered by HerobrineEventManager, NOT here!
+        // The entity just executes the state it's given.
         
         // AI behavior based on state
         if (targetPlayer != null && !targetPlayer.dead) {
@@ -209,7 +208,6 @@ public class EntityHerobrine extends EntityLiving {
         
         // If any player is too close and we're not already retreating, start retreating
         if (nearestThreat != null && aiState != AI_RETREATING && aiState != AI_ESCAPING) {
-            System.out.println("[Herobrine] Player " + nearestThreat.name + " too close! Retreating...");
             aiState = AI_RETREATING;
         }
     }
@@ -219,41 +217,161 @@ public class EntityHerobrine extends EntityLiving {
     private void doStalkingBehavior() {
         if (targetPlayer == null) return;
         
-        // Always face the player while stalking
+        // Stay JUST inside the visible fog
+        this.targetDistance = currentFogDistance * STALK_DISTANCE_RATIO;
+        
+        // Always face the player
         faceEntitySmooth(targetPlayer);
         
         // Ensure we're on solid ground
         snapToGround();
         
-        // Calculate current distance to player
+        // Check if we're currently visible to the player - if not, try to reposition
+        if (!isVisibleToPlayer(targetPlayer)) {
+            tryMoveToVisiblePosition(targetPlayer);
+        }
+        
+        // Calculate current distance to player (EXACTLY like client)
         double dx = this.locX - targetPlayer.locX;
         double dz = this.locZ - targetPlayer.locZ;
         double currentDist = Math.sqrt(dx * dx + dz * dz);
         
-        // Stalking behavior: Stand still and watch
-        // Only walk TOWARDS player if they get too far away (beyond visible range)
-        float visibleRange = currentFogDistance * 0.75F;
         
-        if (debugTickCounter == 0) {
-            System.out.println("[Herobrine STALK] dist=" + String.format("%.1f", currentDist) + 
-                " visibleRange=" + String.format("%.1f", visibleRange));
+        // Only move if player is getting FARTHER away
+        if (currentDist <= targetDistance + 1.0) {
+            return; // Stand still and stare
         }
         
-        // If player moves too far away, slowly walk towards them
-        if (currentDist > visibleRange + 5) {
-            // Walk towards player to stay in visible range
-            double dirToPlayerX = -dx / Math.max(0.1, currentDist);
-            double dirToPlayerZ = -dz / Math.max(0.1, currentDist);
+        // Follow player - EXACTLY like client code
+        double toPlayerDist = Math.max(0.1, currentDist);
+        double dirX = -dx / toPlayerDist;  // Direction FROM herobrine TO player (normalized)
+        double dirZ = -dz / toPlayerDist;
+        
+        // Ideal position = player position MINUS (direction to player * targetDistance)
+        // This places ideal behind the player from herobrine's perspective, at targetDistance
+        double idealX = targetPlayer.locX - dirX * targetDistance;
+        double idealZ = targetPlayer.locZ - dirZ * targetDistance;
+        
+        // Movement vector towards ideal position
+        double toIdealX = idealX - this.locX;
+        double toIdealZ = idealZ - this.locZ;
+        double toIdealDist = Math.sqrt(toIdealX * toIdealX + toIdealZ * toIdealZ);
+        
+        
+        if (toIdealDist > 0.5) {
+            double moveX = (toIdealX / toIdealDist) * moveSpeed;
+            double moveZ = (toIdealZ / toIdealDist) * moveSpeed;
             
-            // Use slow, creepy movement
-            double slowSpeed = moveSpeed * 0.5;
-            smoothMove(dirToPlayerX * slowSpeed, dirToPlayerZ * slowSpeed);
             
-            if (debugTickCounter == 0) {
-                System.out.println("[Herobrine STALK] Walking towards player (too far)");
+            tryMove(moveX, moveZ);
+        }
+    }
+    
+    /**
+     * Try to reposition for visibility - EXACTLY like client.
+     * Only moves to positions that maintain correct distance from player.
+     * Uses very slow movement (0.1 multiplier).
+     */
+    private void tryMoveToVisiblePosition(EntityHuman player) {
+        if (player == null) return;
+        
+        double currentDist = Math.sqrt(
+            (this.locX - player.locX) * (this.locX - player.locX) +
+            (this.locZ - player.locZ) * (this.locZ - player.locZ)
+        );
+        
+        // Try positions around current location
+        for (int i = 0; i < 8; i++) {
+            double angle = (Math.PI * 2 * i) / 8;
+            double testX = this.locX + Math.cos(angle) * 3;
+            double testZ = this.locZ + Math.sin(angle) * 3;
+            
+            // Make sure we stay at roughly the right distance from player
+            double testDist = Math.sqrt(
+                (testX - player.locX) * (testX - player.locX) +
+                (testZ - player.locZ) * (testZ - player.locZ)
+            );
+            
+            // Only consider positions at roughly the same distance
+            if (testDist >= targetDistance - 5 && testDist <= targetDistance + 5) {
+                if (hasLineOfSightFrom(testX, this.locY + 1.6, testZ, player.locX, player.locY + 1.6, player.locZ)) {
+                    // Move SLOWLY towards this visible position
+                    double moveX = (testX - this.locX) * 0.1;
+                    double moveZ = (testZ - this.locZ) * 0.1;
+                    tryMove(moveX, moveZ);
+                    return;
+                }
             }
         }
-        // Otherwise, just stand still and stare
+        // If no suitable position found, don't move at all (no fallback!)
+    }
+    
+    /**
+     * Find ground level at given X,Z near the reference Y level
+     */
+    private int findGroundAt(int x, int refY, int z) {
+        // Search around reference Y
+        for (int y = refY + 3; y >= refY - 5; y--) {
+            if (isBlockSolid(x, y, z) && !isBlockSolid(x, y + 1, z) && !isBlockSolid(x, y + 2, z)) {
+                return y + 1;
+            }
+        }
+        return -1;
+    }
+    
+    /**
+     * Check if there's a clear line of sight between two points.
+     */
+    private boolean hasLineOfSightFrom(double x1, double y1, double z1, double x2, double y2, double z2) {
+        double dx = x2 - x1;
+        double dy = y2 - y1;
+        double dz = z2 - z1;
+        double dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        
+        if (dist < 0.5) return true;
+        
+        double step = 0.5;
+        int steps = (int)(dist / step);
+        
+        dx /= dist;
+        dy /= dist;
+        dz /= dist;
+        
+        for (int i = 1; i < steps; i++) {
+            double checkX = x1 + dx * step * i;
+            double checkY = y1 + dy * step * i;
+            double checkZ = z1 + dz * step * i;
+            
+            int blockX = MathHelper.floor(checkX);
+            int blockY = MathHelper.floor(checkY);
+            int blockZ = MathHelper.floor(checkZ);
+            
+            int blockId = this.world.getTypeId(blockX, blockY, blockZ);
+            if (isBlockOpaque(blockId)) {
+                return false;
+            }
+        }
+        
+        return true;
+    }
+    
+    /**
+     * Check if a block is opaque (blocks vision).
+     */
+    private boolean isBlockOpaque(int blockId) {
+        if (blockId == 0) return false;
+        Block block = Block.byId[blockId];
+        if (block == null) return false;
+        
+        // Transparent blocks that don't block vision
+        if (blockId == Block.GLASS.id) return false;
+        if (blockId == Block.LEAVES.id) return false;
+        if (blockId == Block.FENCE.id) return false;
+        if (blockId == Block.WATER.id || blockId == Block.STATIONARY_WATER.id) return false;
+        if (blockId == Block.LONG_GRASS.id) return false;
+        if (blockId == Block.TORCH.id) return false;
+        
+        return block.material.isBuildable();
     }
     
     private void doApproachingBehavior() {
@@ -266,8 +384,8 @@ public class EntityHerobrine extends EntityLiving {
         double dz = targetPlayer.locZ - this.locZ;
         double dist = Math.sqrt(dx * dx + dz * dz);
         
-        // Walk towards player to get into visible range
-        float visibleRange = currentFogDistance * 0.65F;
+        // Walk towards player to get into visible range (use stalk ratio)
+        float visibleRange = currentFogDistance * STALK_DISTANCE_RATIO;
         
         if (dist > visibleRange && dist > 0.1) {
             dx /= dist;
@@ -298,10 +416,6 @@ public class EntityHerobrine extends EntityLiving {
         double dz = this.locZ - retreatFrom.locZ;
         double dist = Math.sqrt(dx * dx + dz * dz);
         
-        if (debugTickCounter == 0) {
-            System.out.println("[Herobrine RETREAT] dist=" + String.format("%.1f", dist) + 
-                " stuckTicks=" + totallyStuckTicks);
-        }
         
         // Walk backwards (facing player while retreating)
         faceEntitySmooth(retreatFrom);
@@ -424,16 +538,6 @@ public class EntityHerobrine extends EntityLiving {
         // Use standard entity movement - this handles collision and step-up properly
         this.move(this.motX, this.motY, this.motZ);
         
-        // Debug: Log if movement occurred
-        if (debugTickCounter == 0) {
-            double actualMoveX = this.locX - prevX;
-            double actualMoveZ = this.locZ - prevZ;
-            System.out.println("[Herobrine] Move attempt: motX=" + String.format("%.3f", motX) + 
-                " motZ=" + String.format("%.3f", motZ) + 
-                " actualX=" + String.format("%.3f", actualMoveX) + 
-                " actualZ=" + String.format("%.3f", actualMoveZ) +
-                " onGround=" + onGround);
-        }
         
         // Reset motionY if we landed
         if (this.onGround && this.motY <= 0) {

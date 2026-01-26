@@ -74,6 +74,27 @@ settings:
     statistics:
         key: cfa4fdd7-ee11-4aaf-ac2e-a198d4d2ed56
         enabled: true
+    death-messages:
+        enabled: true
+        info: When enabled, death messages are broadcast to all players like in modern Minecraft (e.g., 'Player was slain by Zombie').
+    entity-tracking:
+        info: These settings control how frequently entity positions are sent to clients. Lower values = smoother movement but more bandwidth/CPU. Vanilla b1.7.3 uses 3 for mobs.
+        enabled: true
+        mob-update-frequency: 2
+        mob-update-frequency-info: 'How often (in ticks) mob positions are sent to
+            clients. 2 = smoother than vanilla, 3 = vanilla b1.7.3. Default: 2'
+        player-update-frequency: 2
+        player-update-frequency-info: 'How often (in ticks) player positions are sent
+            to other players. Default: 2 (vanilla)'
+        vehicle-update-frequency: 2
+        vehicle-update-frequency-info: 'How often (in ticks) minecart/boat positions
+            are sent to clients. Default: 2'
+        projectile-update-frequency: 3
+        projectile-update-frequency-info: 'How often (in ticks) arrows/snowballs/eggs/fireballs
+            are sent to clients. Default: 3'
+        item-update-frequency: 10
+        item-update-frequency-info: 'How often (in ticks) dropped item positions are
+            sent to clients. Default: 10'
     delete-duplicate-uuids: false
     save-playerdata-by-uuid: true
     remove-join-leave-debug: true

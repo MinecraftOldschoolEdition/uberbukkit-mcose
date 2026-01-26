@@ -66,6 +66,12 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     private static final long VOICE_PACKET_COOLDOWN_MS = 40L;
     private long lastVoicePacketAt = 0L;
     
+    // MCOSE version checking
+    private boolean receivedVersionPacket = false;
+    private String clientVersion = null;
+    private long connectionStartTime = System.currentTimeMillis();
+    private static final long VERSION_CHECK_GRACE_PERIOD_MS = 10000; // 10 seconds to send version
+    
     private final String msgPlayerLeave;
 
     public boolean isReceivedKeepAlive() {
@@ -1776,6 +1782,12 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             return;
         }
         
+        // MCOSE version check - must be received first
+        if ("MCOSE_VERSION".equals(packet250custompayload.channel)) {
+            handleVersionPacket(packet250custompayload);
+            return;
+        }
+        
         // Try friends verification handler first (for MCOSE|F* channels)
         if (packet250custompayload.channel.startsWith("MCOSE|F")) {
             if (minecraftServer.friendsVerificationHandler.handlePacket(this.player, packet250custompayload)) {
@@ -1802,6 +1814,77 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         
         // Handle other custom channels here if needed
         // (Voice chat, Herobrine events, etc. are handled by their own systems)
+    }
+    
+    /**
+     * Handle MCOSE version packet from client.
+     * Kicks players with outdated client versions.
+     */
+    private void handleVersionPacket(Packet250CustomPayload packet) {
+        if (receivedVersionPacket) {
+            return; // Already handled
+        }
+        receivedVersionPacket = true;
+        
+        try {
+            if (packet.data == null || packet.data.length == 0) {
+                // No version data - treat as outdated
+                this.disconnect("Outdated client! Please update to " + ModVersion.VERSION);
+                return;
+            }
+            
+            // Read version string from packet
+            java.io.DataInputStream dis = new java.io.DataInputStream(
+                new java.io.ByteArrayInputStream(packet.data));
+            this.clientVersion = dis.readUTF();
+            
+            a.info("[MCOSE] " + this.player.name + " connected with client version " + this.clientVersion);
+            
+            // Check version compatibility
+            if (!ModVersion.isCompatible(this.clientVersion)) {
+                this.disconnect(ModVersion.getOutdatedMessage(this.clientVersion));
+                return;
+            }
+            
+        } catch (Exception e) {
+            a.warning("[MCOSE] Error reading version packet: " + e.getMessage());
+            this.disconnect("Outdated client! Please update to " + ModVersion.VERSION);
+        }
+    }
+    
+    /**
+     * Check if the client has sent version packet within grace period.
+     * Called from tick/update loop.
+     */
+    public void checkVersionTimeout() {
+        // Skip if already received or if it's a vanilla client (no MCOSE features)
+        if (receivedVersionPacket) {
+            return;
+        }
+        
+        long elapsed = System.currentTimeMillis() - connectionStartTime;
+        if (elapsed > VERSION_CHECK_GRACE_PERIOD_MS) {
+            // Grace period expired - this is likely a vanilla client
+            // Mark as received to stop checking, but with null version
+            receivedVersionPacket = true;
+            this.clientVersion = "vanilla";
+            a.info("[MCOSE] " + this.player.name + " did not send version packet - assuming vanilla client");
+            // Don't kick vanilla clients - they just won't have MCOSE features
+        }
+    }
+    
+    /**
+     * Get the client's MCOSE version, or null if unknown/vanilla.
+     */
+    public String getClientVersion() {
+        return this.clientVersion;
+    }
+    
+    /**
+     * Check if this client is a confirmed MCOSE client.
+     */
+    public boolean isMcoseClient() {
+        return this.clientVersion != null && !"vanilla".equals(this.clientVersion);
     }
     
     /**

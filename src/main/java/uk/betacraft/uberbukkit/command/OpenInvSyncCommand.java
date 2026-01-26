@@ -18,10 +18,14 @@ public class OpenInvSyncCommand extends Command {
         if (!(sender instanceof Player)) {
             return true;
         }
+        Player viewer = (Player) sender;
+        // Permission check: require op or uberbukkit.openinv permission
+        if (!viewer.isOp() && !viewer.hasPermission("uberbukkit.openinv")) {
+            return true; // Silently fail for internal commands
+        }
         if (args.length < 1) {
             return true;
         }
-        Player viewer = (Player) sender;
         Player target = Bukkit.getServer().getPlayer(args[0]);
         if (target == null) {
             return true;

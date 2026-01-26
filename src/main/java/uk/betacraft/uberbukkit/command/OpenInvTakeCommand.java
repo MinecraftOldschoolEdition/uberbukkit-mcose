@@ -19,11 +19,15 @@ public class OpenInvTakeCommand extends Command {
         if (!(sender instanceof Player)) {
             return true;
         }
+        Player viewer = (Player) sender;
+        // Permission check: require op or uberbukkit.openinv permission
+        if (!viewer.isOp() && !viewer.hasPermission("uberbukkit.openinv")) {
+            return true; // Silently fail for internal commands
+        }
         if (args.length < 3) {
             sender.sendMessage("Usage: /" + label + " <player> <viewerSlot> <toIdx> [expId expCnt expDmg tx]");
             return true;
         }
-        Player viewer = (Player) sender;
         Player target = Bukkit.getServer().getPlayer(args[0]);
         if (target == null) {
             return true;

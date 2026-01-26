@@ -9,13 +9,18 @@
 
 package me.lucko.luckperms.common.cacheddata;
 
+import me.lucko.luckperms.common.model.Group;
 import me.lucko.luckperms.common.model.PermissionHolder;
+import me.lucko.luckperms.common.model.User;
+import me.lucko.luckperms.common.model.manager.group.StandardGroupManager;
 import me.lucko.luckperms.common.node.Node;
 import me.lucko.luckperms.common.util.Tristate;
 
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -88,14 +93,69 @@ public class CachedPermissionData {
     public static CachedPermissionData calculate(PermissionHolder holder) {
         Map<String, Boolean> permissions = new HashMap<>();
         
-        // Add all permission nodes
+        // Add all permission nodes from the holder itself
         for (Node node : holder.getNodes()) {
-            if (!node.hasExpired()) {
-                permissions.put(node.getKey(), node.getValue());
+            if (!node.hasExpired() && !node.isGroupNode()) {
+                permissions.put(node.getKey().toLowerCase(), node.getValue());
             }
         }
         
         return new CachedPermissionData(permissions);
+    }
+    
+    /**
+     * Calculates cached permission data for a user, resolving group inheritance.
+     *
+     * @param user the user
+     * @param groupManager the group manager to resolve group inheritance
+     * @return the cached permission data
+     */
+    public static CachedPermissionData calculateWithInheritance(User user, StandardGroupManager groupManager) {
+        Map<String, Boolean> permissions = new HashMap<>();
+        Set<String> visitedGroups = new HashSet<>();
+        
+        // First, resolve all inherited group permissions (lower priority)
+        for (String groupName : user.getInheritedGroups()) {
+            resolveGroupPermissions(groupName, permissions, visitedGroups, groupManager);
+        }
+        
+        // Then add user's own permissions (higher priority - overwrites group permissions)
+        for (Node node : user.getNodes()) {
+            if (!node.hasExpired() && !node.isGroupNode()) {
+                permissions.put(node.getKey().toLowerCase(), node.getValue());
+            }
+        }
+        
+        return new CachedPermissionData(permissions);
+    }
+    
+    /**
+     * Recursively resolves permissions from a group and its parent groups.
+     */
+    private static void resolveGroupPermissions(String groupName, Map<String, Boolean> permissions, 
+                                                  Set<String> visitedGroups, StandardGroupManager groupManager) {
+        // Prevent infinite loops from circular inheritance
+        if (visitedGroups.contains(groupName.toLowerCase())) {
+            return;
+        }
+        visitedGroups.add(groupName.toLowerCase());
+        
+        Group group = groupManager.getIfLoaded(groupName);
+        if (group == null) {
+            return;
+        }
+        
+        // First resolve parent groups (lower priority)
+        for (String parentName : group.getInheritedGroups()) {
+            resolveGroupPermissions(parentName, permissions, visitedGroups, groupManager);
+        }
+        
+        // Then add this group's permissions (overwrites parent permissions)
+        for (Node node : group.getNodes()) {
+            if (!node.hasExpired() && !node.isGroupNode()) {
+                permissions.put(node.getKey().toLowerCase(), node.getValue());
+            }
+        }
     }
 }
 

@@ -102,6 +102,10 @@ public class LPBukkitPlugin {
         // Setup storage
         this.storage = StorageFactory.create(this);
         
+        // Load all groups and tracks from storage so inheritance works
+        this.storage.loadAllGroups();
+        this.storage.loadAllTracks();
+        
         // Register listeners
         this.connectionListener = new UberbukkitConnectionListener(this);
         getServer().getPluginManager().registerEvents(this.connectionListener, this.loader);

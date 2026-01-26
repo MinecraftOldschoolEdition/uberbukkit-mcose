@@ -20,11 +20,15 @@ public class OpenInvSwapCommand extends Command {
             sender.sendMessage("This command can only be used by players.");
             return true;
         }
+        Player viewer = (Player) sender;
+        // Permission check: require op or uberbukkit.openinv permission
+        if (!viewer.isOp() && !viewer.hasPermission("uberbukkit.openinv")) {
+            return true; // Silently fail for internal commands
+        }
         if (args.length < 2) {
             sender.sendMessage("Usage: /" + label + " <player> <slotIndex>");
             return true;
         }
-        Player viewer = (Player) sender;
         Player target = Bukkit.getServer().getPlayer(args[0]);
         if (target == null) {
             sender.sendMessage("Can't find user " + args[0]);

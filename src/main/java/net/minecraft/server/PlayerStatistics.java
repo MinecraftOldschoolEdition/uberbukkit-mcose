@@ -100,9 +100,27 @@ public class PlayerStatistics {
         // Send to player via chat
         String message = "\u00A7e" + player.name + " has just earned the achievement \u00A7a[" + achievement.f + "]";
         
-        // Broadcast to all players on the server
+        // Broadcast to all players on the server (if advertiseAchievements gamerule is enabled)
         if (player.b != null && player.b.serverConfigurationManager != null) {
-            player.b.serverConfigurationManager.sendAll(new Packet3Chat(message));
+            // Check gamerule - only broadcast if advertiseAchievements is true
+            boolean shouldBroadcast = false;
+            try {
+                WorldServer overworld = player.b.getWorldServer(0);
+                if (overworld != null && overworld.worldData != null) {
+                    shouldBroadcast = overworld.worldData.getAdvertiseAchievements();
+                }
+            } catch (Exception e) {
+                // Default to not broadcasting if we can't check
+            }
+            
+            if (shouldBroadcast) {
+                player.b.serverConfigurationManager.sendAll(new Packet3Chat(message));
+            } else {
+                // Only send to the player who earned it
+                if (player.netServerHandler != null) {
+                    player.netServerHandler.sendPacket(new Packet3Chat(message));
+                }
+            }
         }
         
         // Send achievement packet to client (if supported)
