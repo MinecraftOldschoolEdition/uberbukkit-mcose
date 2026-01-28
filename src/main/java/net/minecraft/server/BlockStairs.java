@@ -77,11 +77,13 @@ public class BlockStairs extends Block {
     }
 
     public int a(int i, Random random) {
-        return this.a.a(i, random);
+        // Stairs should drop themselves, not the base block
+        return this.id;
     }
 
     public int a(Random random) {
-        return this.a.a(random);
+        // Always drop 1 stair block
+        return 1;
     }
 
     public int a(int i, int j) {
@@ -122,7 +124,8 @@ public class BlockStairs extends Block {
     }
 
     public void dropNaturally(World world, int i, int j, int k, int l, float f) {
-        this.a.dropNaturally(world, i, j, k, l, f);
+        // Stairs should drop themselves, not delegate to base block
+        super.dropNaturally(world, i, j, k, l, f);
     }
 
     public void b(World world, int i, int j, int k, Entity entity) {

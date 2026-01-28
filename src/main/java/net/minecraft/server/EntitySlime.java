@@ -106,6 +106,7 @@ public class EntitySlime extends EntityLiving implements IMonster {
     public void die() {
         int i = this.getSize();
 
+        // Allow slime division when overkilled (health can be negative)
         if (!this.world.isStatic && i > 1 && this.health <= 0) {
             for (int j = 0; j < 4; ++j) {
                 float f = ((float) (j % 2) - 0.5F) * (float) i / 4.0F;
