@@ -40,17 +40,22 @@ public class ThreadLoginVerifier extends Thread {
             String clientIP = getIP();
 
             SessionAPI.hasJoined(playerName, serverId, clientIP, (int responseCode, String username, String uuid, String ip) -> {
-                boolean checkIP = ip == "127.0.0.1" || ip == "localhost";
+                // Check if client is connecting from localhost (skip IP verification for local connections)
+                boolean isLocalhost = "127.0.0.1".equals(clientIP) || "localhost".equals(clientIP);
 
                 // make sure the request didn't fail (-1), and the response wasn't empty (204)
                 if (responseCode != -1 && responseCode != 204) {
-                    // make sure username and ip match up (docs say username is case insensitive https://wiki.vg/Protocol_Encryption#Server)
+                    // make sure username matches (docs say username is case insensitive https://wiki.vg/Protocol_Encryption#Server)
                     if (username.equalsIgnoreCase(playerName)) {
-                        if (checkIP) {
-                            if (ip == clientIP) {
+                        // For non-localhost, verify IP if Mojang returned one
+                        if (!isLocalhost && ip != null && !"noip".equals(ip) && !ip.isEmpty()) {
+                            if (ip.equals(clientIP)) {
                                 loginProcessHandler.userMojangSessionVerified();
+                            } else {
+                                loginProcessHandler.cancelLoginProcess("Failed to verify username! (IP mismatch)");
                             }
                         } else {
+                            // Localhost or no IP in response - just verify
                             loginProcessHandler.userMojangSessionVerified();
                         }
                     } else {

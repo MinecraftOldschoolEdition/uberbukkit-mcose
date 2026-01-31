@@ -67,6 +67,7 @@ public class WorldData {
         if (nbttagcompound.hasKey("ShowDeathMessages")) this.showDeathMessages = nbttagcompound.m("ShowDeathMessages");
         if (nbttagcompound.hasKey("SleepEnabled")) this.sleepEnabled = nbttagcompound.m("SleepEnabled");
         if (nbttagcompound.hasKey("AdvertiseAchievements")) this.advertiseAchievements = nbttagcompound.m("AdvertiseAchievements");
+        if (nbttagcompound.hasKey("KeepInventory")) this.keepInventory = nbttagcompound.m("KeepInventory");
         // Integer gamerules
         if (nbttagcompound.hasKey("SpawnRadius")) this.spawnRadius = nbttagcompound.e("SpawnRadius");
     }
@@ -151,6 +152,7 @@ public class WorldData {
         nbttagcompound.a("ShowDeathMessages", this.showDeathMessages);
         nbttagcompound.a("SleepEnabled", this.sleepEnabled);
         nbttagcompound.a("AdvertiseAchievements", this.advertiseAchievements);
+        nbttagcompound.a("KeepInventory", this.keepInventory);
         // Integer gamerules
         nbttagcompound.a("SpawnRadius", this.spawnRadius);
     }
@@ -269,6 +271,7 @@ public class WorldData {
     private boolean showDeathMessages = true;
     private boolean advertiseAchievements = false; // Default to false
     private boolean sleepEnabled = false; // If true, sleeping in beds is enabled
+    private boolean keepInventory = false; // If true, players keep inventory on death
     
     // Gamerules (integer)
     private int spawnRadius = 10; // Vanilla default spawn randomization radius
@@ -288,6 +291,8 @@ public class WorldData {
     public void setSleepEnabled(boolean v) { this.sleepEnabled = v; }
     public boolean getAdvertiseAchievements() { return this.advertiseAchievements; }
     public void setAdvertiseAchievements(boolean v) { this.advertiseAchievements = v; }
+    public boolean getKeepInventory() { return this.keepInventory; }
+    public void setKeepInventory(boolean v) { this.keepInventory = v; }
     
     // Integer gamerules
     public int getSpawnRadius() { return this.spawnRadius; }

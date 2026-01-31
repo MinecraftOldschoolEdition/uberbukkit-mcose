@@ -206,6 +206,12 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
 
         PlayerDeathEvent event = new PlayerDeathEvent(bukkitEntity, loot);
         
+        // UberBukkit - Set keepInventory from gamerule (plugins can still override)
+        if (this.world.worldData != null && this.world.worldData.getKeepInventory()) {
+            event.setKeepInventory(true);
+            event.getDrops().clear(); // Don't drop items if keepInventory is enabled
+        }
+        
         // UberBukkit - Generate death message like modern Minecraft
         // Check both config option and gamerule - both must be enabled
         boolean configEnabled = PoseidonConfig.getInstance().getConfigBoolean("settings.death-messages.enabled", true);

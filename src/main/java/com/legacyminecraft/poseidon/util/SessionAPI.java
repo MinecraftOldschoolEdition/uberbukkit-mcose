@@ -22,13 +22,13 @@ public class SessionAPI {
 
     public static boolean hasJoined(String username, String serverId) {
         HTTPResponse response = httpGetRequest(SESSION_BASE + String.format("checkserver.jsp?user=%s&serverId=%s", username, serverId));
-        if (response.getResponse() != "YES") return false;
+        if (!"YES".equals(response.getResponse())) return false;
         return true;
     }
 
     public static void hasJoined(String username, String serverId, String ip, SessionRequestRunnable callback) {
         try {
-            boolean checkIP = ip != "127.0.0.1" && ip != "localhost";
+            boolean checkIP = !"127.0.0.1".equals(ip) && !"localhost".equals(ip);
             StringBuilder sb = new StringBuilder();
             sb.append(MODERN_SESSION_BASE + "hasJoined");
             sb.append("?username=" + username);
@@ -48,9 +48,11 @@ public class SessionAPI {
             String res_username = (obj.containsKey("name") ? (String) obj.get("name") : "nousername");
             String res_uuid = (obj.containsKey("id") ? (String) obj.get("id") : "nouuid");
             String res_ip = (obj.containsKey("ip") ? (String) obj.get("ip") : "noip");
+            System.out.println("[AUTH] Mojang response for " + username + ": code=" + response.getResponseCode() + ", uuid=" + res_uuid);
             callback.callback(response.getResponseCode(), res_username, res_uuid, res_ip);
         } catch (Exception ex) {
-            System.out.println(String.format("Failed to authenticate session for '%s': %s", username, ex.getMessage()));
+            System.out.println(String.format("[AUTH] Failed to authenticate session for '%s': %s", username, ex.getMessage()));
+            ex.printStackTrace();
             callback.callback(-1, "", "", "");
         }
     }

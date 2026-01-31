@@ -119,6 +119,21 @@ public class ServerConfigurationManager {
             }
         }
         
+        // MCOSE - Check if this is an unbanned hardcore player who died
+        // If they were unbanned by an admin, reset their health so they can play again
+        // They stay in hardcore mode - they'll be banned again if they die
+        if (entityplayer.gameMode == 2 && entityplayer.health <= 0) {
+            boolean isBanned = this.banByName.contains(entityplayer.name.toLowerCase());
+            if (!isBanned) {
+                // Player was in hardcore, died, but is no longer banned - admin unbanned them
+                a.info("[Hardcore] Player " + entityplayer.name + " was unbanned - resetting health (staying in hardcore mode)");
+                entityplayer.health = 20;
+                entityplayer.dead = false;
+                entityplayer.deathTicks = 0;
+                // DO NOT change gameMode - they should stay in hardcore and be banned again if they die
+            }
+        }
+        
         // UberBukkit - Award "Open Inventory" achievement on first join
         // This is normally triggered client-side but we track it server-side too
         if (entityplayer.playerStatistics != null && !entityplayer.playerStatistics.hasAchievement(AchievementList.openInventory)) {

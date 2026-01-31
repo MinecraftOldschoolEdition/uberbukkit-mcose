@@ -25,10 +25,26 @@ public abstract class Packet {
     public boolean k = false;
     private static HashMap e;
     private static int f;
+    
+    // Rate limiting for bad packet ID logging (reduce spam from bots/scanners)
+    private static Map<Integer, Long> badPacketLogTimes = new HashMap<Integer, Long>();
+    private static final long BAD_PACKET_LOG_INTERVAL_MS = 60000; // Log each unique bad packet ID once per minute
 
     protected int pvn; // uberbukkit
 
     public Packet() {
+    }
+    
+    /**
+     * Log bad packet ID with rate limiting to reduce spam from bots/scanners
+     */
+    private static void logBadPacketRateLimited(int packetId) {
+        long now = System.currentTimeMillis();
+        Long lastLog = badPacketLogTimes.get(packetId);
+        if (lastLog == null || now - lastLog > BAD_PACKET_LOG_INTERVAL_MS) {
+            System.out.println("Bad packet id: " + packetId + " (rate-limited logging)");
+            badPacketLogTimes.put(packetId, now);
+        }
     }
 
     /**
@@ -101,9 +117,9 @@ public abstract class Packet {
             }
 
             if (flag && !serverPacketIdList.contains(Integer.valueOf(i)) || !flag && !clientPacketIdList.contains(Integer.valueOf(i))) {
-                System.out.println("Bad packet id: " + i); //Project Poseidon
-                return null; //Project Poseidon
-                //throw new IOException("Bad packet id " + i); //Project Poseidon - Comment Out
+                // Rate limit logging to avoid spam from bots/scanners (log once per unique packet ID per 60 seconds)
+                logBadPacketRateLimited(i);
+                return null;
             }
 
             packet = a(i);
@@ -114,18 +130,16 @@ public abstract class Packet {
             packet.pvn = pvn;
             packet.a(datainputstream);
         } catch (EOFException eofexception) {
-            System.out.println("Reached end of stream");
+            // Client disconnected normally - don't log to reduce spam
             return null;
         }
 
-        // CraftBukkit start
+        // CraftBukkit start - handle network exceptions gracefully
         catch (java.net.SocketTimeoutException exception) {
-            System.out.println("Read timed out");
+            // Client timed out - don't log to reduce spam
             return null;
         } catch (java.net.SocketException exception) {
-            if (!(boolean) PoseidonConfig.getInstance().getConfigOption("settings.remove-join-leave-debug", true)) {
-                System.out.println("Connection reset");
-            }
+            // Connection reset - don't log to reduce spam
             return null;
         }
         // CraftBukkit end

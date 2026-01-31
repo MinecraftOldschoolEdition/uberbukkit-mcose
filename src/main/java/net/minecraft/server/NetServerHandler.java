@@ -1589,16 +1589,28 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         server.getPluginManager().callEvent(event);
         if (event.isCancelled()) return;
 
+        System.out.println("[Respawn] Player " + this.player.name + " requesting respawn. Health=" + this.player.health + 
+            ", Hardcore=" + this.player.isHardcoreMode() + ", GameMode=" + this.player.gameMode);
+
         if (this.player.health <= 0) {
-            // Hardcore mode: prevent respawn, ban and kick instead
+            // Hardcore mode: check if player is still banned
             if (this.player.isHardcoreMode()) {
-                String banMessage = PoseidonConfig.getInstance().getConfigString("world-settings.hardcore.ban-message");
-                String kickMessage = PoseidonConfig.getInstance().getConfigString("world-settings.hardcore.death-kick-message");
-                // Ban the player (in case it wasn't already done in die())
-                this.minecraftServer.serverConfigurationManager.a(this.player.name);
-                // Kick with the hardcore death message
-                this.disconnect(kickMessage != null ? kickMessage : "You died in hardcore mode!");
-                return;
+                // Check if player is currently banned - if NOT banned, they were unbanned by admin
+                boolean isBanned = this.minecraftServer.serverConfigurationManager.banByName.contains(this.player.name.toLowerCase());
+                
+                System.out.println("[Hardcore Respawn] Player " + this.player.name + " - isBanned=" + isBanned + 
+                    ", banList contains: " + this.minecraftServer.serverConfigurationManager.banByName);
+                
+                if (isBanned) {
+                    // Still banned - kick them
+                    String kickMessage = PoseidonConfig.getInstance().getConfigString("world-settings.hardcore.death-kick-message");
+                    this.disconnect(kickMessage != null ? kickMessage : "You died in hardcore mode!");
+                    return;
+                }
+                
+                // Player was unbanned - allow them to respawn but KEEP them in hardcore mode
+                // They should still be playing hardcore and will be banned again if they die
+                System.out.println("[Hardcore] Player " + this.player.name + " was unbanned - allowing respawn (staying in hardcore mode)");
             }
 
             this.player = this.minecraftServer.serverConfigurationManager.moveToWorld(this.player, 0);
