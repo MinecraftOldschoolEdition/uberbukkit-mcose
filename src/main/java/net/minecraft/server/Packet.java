@@ -241,7 +241,7 @@ public abstract class Packet {
         a(24, true, false, Packet24MobSpawn.class);
         a(25, true, false, Packet25EntityPainting.class);
         a(26, true, false, Packet26EntityMapHanging.class); // Map hanging entity spawn
-        a(27, false, false, Packet27.class); // CraftBukkit - true -> false; disabled unused packet. TODO -- check if needed
+        a(27, false, true, Packet27.class); // Re-enabled - client sends position updates
         a(28, true, false, Packet28EntityVelocity.class);
         a(29, true, false, Packet29DestroyEntity.class);
         a(30, true, false, Packet30Entity.class);
