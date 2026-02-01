@@ -61,9 +61,12 @@ public class MinecraftServer implements Runnable, ICommandListener {
     public boolean pvpMode;
     public boolean allowFlight;
     public boolean voiceChatEnabled;
+    public int voiceChatPort;
     public final VoiceChatRoomManager chatRoomManager;
     private static final double DEFAULT_VOICE_CHAT_RADIUS = 48.0D;
+    private static final int DEFAULT_VOICE_CHAT_PORT = 24454;
     private double voiceChatBroadcastRadius = DEFAULT_VOICE_CHAT_RADIUS;
+    private VoiceChatUDPServer voiceChatUDPServer;
 
     // CraftBukkit start
     public List<WorldServer> worlds = new ArrayList<WorldServer>();
@@ -141,7 +144,7 @@ public class MinecraftServer implements Runnable, ICommandListener {
             } catch (ClassNotFoundException ignore) {}
         }
 
-        log.info("Starting minecraft server version Beta 1.7.3");
+        log.info("Starting Minecraft Oldschool Edition server version Beta 1.7.6");
         if (Runtime.getRuntime().maxMemory() / 1024L / 1024L < 512L) {
             log.warning("**** NOT ENOUGH RAM!");
             log.warning("To start the server with more ram, launch it as \"java -Xmx1024M -Xms1024M -jar minecraft_server.jar\"");
@@ -156,8 +159,9 @@ public class MinecraftServer implements Runnable, ICommandListener {
         this.pvpMode = this.propertyManager.getBoolean("pvp", true);
         this.allowFlight = this.propertyManager.getBoolean("allow-flight", false);
         this.voiceChatEnabled = this.propertyManager.getBoolean("voice-chat", true);
+        this.voiceChatPort = this.propertyManager.getInt("voice-chat-port", DEFAULT_VOICE_CHAT_PORT);
         if (this.voiceChatEnabled) {
-            log.info("Voice chat broadcasting enabled");
+            log.info("Voice chat broadcasting enabled (UDP port: " + this.voiceChatPort + ")");
         }
         this.configuredLevelType = this.propertyManager.getString("level-type", "DEFAULT").toUpperCase(); // Added
         
@@ -260,6 +264,9 @@ public class MinecraftServer implements Runnable, ICommandListener {
         // UberBukkit - Initialize server-wide statistics tracking
         ServerStatistics.getInstance();
         log.info("[ServerStats] Server-wide statistics tracking initialized");
+        
+        // Start voice chat UDP server
+        this.startVoiceChatServer();
         
         log.info("Done (" + time + ")! For help, type \"help\" or \"?\"");
 
@@ -717,6 +724,10 @@ public class MinecraftServer implements Runnable, ICommandListener {
     //Project Poseidon End - Tick Update
 
     private void h() {
+        ServerProfiler profiler = ServerProfiler.getInstance();
+        profiler.startSection("tick");
+        profiler.recordTickTime();
+        
         ArrayList arraylist = new ArrayList();
         Iterator iterator = trackerList.keySet().iterator();
 
@@ -778,13 +789,19 @@ public class MinecraftServer implements Runnable, ICommandListener {
                 // CraftBukkit end
             }
 
+            profiler.startSection("world" + j + "/doTick");
             worldserver.doTick();
+            profiler.endSection();
 
+            profiler.startSection("world" + j + "/lighting");
             while (worldserver.doLighting()) {
                 ;
             }
+            profiler.endSection();
 
+            profiler.startSection("world" + j + "/cleanUp");
             worldserver.cleanUp();
+            profiler.endSection();
         }
         // } // CraftBukkit
 
@@ -792,9 +809,11 @@ public class MinecraftServer implements Runnable, ICommandListener {
         this.serverConfigurationManager.b();
 
         // CraftBukkit start
+        profiler.startSection("entityTracking");
         for (j = 0; j < this.worlds.size(); ++j) {
             this.worlds.get(j).tracker.updatePlayers();
         }
+        profiler.endSection();
         // CraftBukkit end
 
         for (j = 0; j < this.r.size(); ++j) {
@@ -809,6 +828,8 @@ public class MinecraftServer implements Runnable, ICommandListener {
         
         // Process async threading results
         ThreadingManager.getInstance().processTick();
+        
+        profiler.endSection(); // End "tick" section
     }
 
     public void issueCommand(String s, ICommandListener icommandlistener) {
@@ -894,5 +915,32 @@ public class MinecraftServer implements Runnable, ICommandListener {
 
     public double getVoiceChatBroadcastRadius() {
         return this.voiceChatBroadcastRadius;
+    }
+    
+    public int getVoiceChatPort() {
+        return this.voiceChatPort;
+    }
+    
+    public VoiceChatUDPServer getVoiceChatUDPServer() {
+        return this.voiceChatUDPServer;
+    }
+    
+    public void startVoiceChatServer() {
+        if (this.voiceChatEnabled && this.voiceChatUDPServer == null) {
+            try {
+                this.voiceChatUDPServer = new VoiceChatUDPServer(this, this.voiceChatPort);
+                this.voiceChatUDPServer.start();
+                log.info("Voice chat UDP server started on port " + this.voiceChatPort);
+            } catch (Exception e) {
+                log.warning("Failed to start voice chat UDP server: " + e.getMessage());
+            }
+        }
+    }
+    
+    public void stopVoiceChatServer() {
+        if (this.voiceChatUDPServer != null) {
+            this.voiceChatUDPServer.stop();
+            this.voiceChatUDPServer = null;
+        }
     }
 }

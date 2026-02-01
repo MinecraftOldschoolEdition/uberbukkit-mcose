@@ -269,7 +269,7 @@ public class WorldData {
     private boolean mobGriefing = true;
     private boolean doWeatherCycle = true;
     private boolean showDeathMessages = true;
-    private boolean advertiseAchievements = false; // Default to false
+    private boolean advertiseAchievements = true; // Default to true - broadcast achievements to all players
     private boolean sleepEnabled = false; // If true, sleeping in beds is enabled
     private boolean keepInventory = false; // If true, players keep inventory on death
     

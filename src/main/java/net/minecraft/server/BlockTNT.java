@@ -79,6 +79,8 @@ public class BlockTNT extends Block {
             entitytntprimed.source = entityhuman; // Track who lit the TNT
             world.addEntity(entitytntprimed);
             world.makeSound(entitytntprimed, "random.fuse", 1.0F, 1.0F);
+            // MCOSE: KABOOM! achievement for igniting TNT
+            entityhuman.a(AchievementList.explosion, 1);
             return; // Don't call super - we've handled it
         }
 

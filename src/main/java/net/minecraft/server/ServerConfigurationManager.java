@@ -119,6 +119,20 @@ public class ServerConfigurationManager {
             }
         }
         
+        // MCOSE - Handle server gamemode changes
+        // If server is no longer hardcore but player was in hardcore mode, switch them to survival
+        if (this.server.defaultGameMode != 2 && entityplayer.gameMode == 2) {
+            a.info("[GameMode] Player " + entityplayer.name + " was in hardcore but server is now " + 
+                   (this.server.defaultGameMode == 1 ? "creative" : "survival") + " - switching player to match");
+            entityplayer.gameMode = this.server.defaultGameMode;
+            // Reset death state so they can play normally
+            if (entityplayer.health <= 0) {
+                entityplayer.health = 20;
+            }
+            entityplayer.dead = false;
+            entityplayer.deathTicks = 0;
+        }
+        
         // MCOSE - Check if this is an unbanned hardcore player who died
         // If they were unbanned by an admin, reset their health so they can play again
         // They stay in hardcore mode - they'll be banned again if they die
@@ -132,6 +146,14 @@ public class ServerConfigurationManager {
                 entityplayer.deathTicks = 0;
                 // DO NOT change gameMode - they should stay in hardcore and be banned again if they die
             }
+        }
+        
+        // MCOSE - Ensure players with dead=true but health>0 are reset
+        // This catches edge cases where dead flag wasn't properly cleared
+        if (entityplayer.dead && entityplayer.health > 0) {
+            a.info("[Fix] Player " + entityplayer.name + " had dead=true but health=" + entityplayer.health + " - resetting dead flag");
+            entityplayer.dead = false;
+            entityplayer.deathTicks = 0;
         }
         
         // UberBukkit - Award "Open Inventory" achievement on first join

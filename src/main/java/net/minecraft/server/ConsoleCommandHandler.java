@@ -264,6 +264,9 @@ public class ConsoleCommandHandler {
                                         } catch (NumberFormatException numberformatexception1) {
                                             icommandlistener.sendMessage("Unable to convert time value, " + astring[2]);
                                         }
+                    } else if (s.toLowerCase().startsWith("profile")) {
+                        if (!checkPermission(listener, "profile")) return true;
+                        handleProfileCommand(s, icommandlistener, s1);
                     } else if (s.toLowerCase().startsWith("vanish")) {
                         // Toggle vanish state for the executor if it is a player; otherwise require a target
                         org.bukkit.command.CommandSender sender = null;
@@ -398,6 +401,7 @@ public class ConsoleCommandHandler {
         icommandlistener.sendMessage("   list                      lists all currently connected players");
         icommandlistener.sendMessage("   say <message>             broadcasts a message to all players");
         icommandlistener.sendMessage("   time <add|set> <amount>   adds to or sets the world time (0-24000)");
+        icommandlistener.sendMessage("   profile <start|stop|report|save|clear>  performance profiler commands");
     }
 
     private void print(String s, String s1) {
@@ -438,6 +442,56 @@ public class ConsoleCommandHandler {
             return Integer.parseInt(s);
         } catch (NumberFormatException numberformatexception) {
             return i;
+        }
+    }
+    
+    /**
+     * Handle the /profile command for server performance profiling.
+     */
+    private void handleProfileCommand(String command, ICommandListener listener, String senderName) {
+        String[] parts = command.split(" ");
+        ServerProfiler profiler = ServerProfiler.getInstance();
+        
+        if (parts.length < 2) {
+            listener.sendMessage("Usage: profile <start|stop|report|save|clear|status>");
+            listener.sendMessage("  start  - Start profiling");
+            listener.sendMessage("  stop   - Stop profiling");
+            listener.sendMessage("  report - Show detailed report in console");
+            listener.sendMessage("  save   - Save report to file");
+            listener.sendMessage("  clear  - Clear profiling data");
+            listener.sendMessage("  status - Show current profiler status");
+            return;
+        }
+        
+        String subcommand = parts[1].toLowerCase();
+        
+        if ("start".equals(subcommand)) {
+            profiler.start();
+            this.print(senderName, "Profiler started. Run 'profile stop' to stop, then 'profile report' or 'profile save'.");
+        } else if ("stop".equals(subcommand)) {
+            profiler.stop();
+            this.print(senderName, "Profiler stopped. Use 'profile report' to view or 'profile save' to save.");
+        } else if ("report".equals(subcommand)) {
+            String report = profiler.generateReport();
+            // Split report into lines and send each
+            for (String line : report.split("\n")) {
+                listener.sendMessage(line);
+            }
+        } else if ("save".equals(subcommand)) {
+            String path = profiler.saveReport();
+            if (path != null) {
+                this.print(senderName, "Report saved to: " + path);
+            } else {
+                listener.sendMessage("Failed to save report. Check console for errors.");
+            }
+        } else if ("clear".equals(subcommand)) {
+            profiler.clear();
+            this.print(senderName, "Profiler data cleared.");
+        } else if ("status".equals(subcommand)) {
+            listener.sendMessage(profiler.getStatusSummary());
+        } else {
+            listener.sendMessage("Unknown profile subcommand: " + subcommand);
+            listener.sendMessage("Use: profile <start|stop|report|save|clear|status>");
         }
     }
 }

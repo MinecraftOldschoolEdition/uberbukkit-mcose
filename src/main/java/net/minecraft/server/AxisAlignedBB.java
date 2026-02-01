@@ -7,6 +7,7 @@ public class AxisAlignedBB {
 
     private static List g = new ArrayList();
     private static int h = 0;
+    private static final int MAX_POOL_SIZE = 10000; // Prevent unbounded memory growth
     public double a;
     public double b;
     public double c;
@@ -20,6 +21,10 @@ public class AxisAlignedBB {
 
     public static void a() {
         h = 0;
+        // Trim pool if it's grown too large to prevent memory bloat
+        if (g.size() > MAX_POOL_SIZE) {
+            g = new ArrayList(MAX_POOL_SIZE / 2);
+        }
     }
 
     public static AxisAlignedBB b(double d0, double d1, double d2, double d3, double d4, double d5) {

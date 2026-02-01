@@ -85,6 +85,14 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
     public String displayName;
     public UUID playerUUID; //Project Poseidon
     public org.bukkit.Location compassTarget;
+    
+    /**
+     * Get the Mojang UUID for this player.
+     * @return The player's UUID
+     */
+    public UUID getMojangUUID() {
+        return this.playerUUID;
+    }
     // CraftBukkit end
     
     // UberBukkit - Server-side statistics and achievements tracking
@@ -240,8 +248,14 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
             }
         }
 
-        for (org.bukkit.inventory.ItemStack stack : event.getDrops()) {
-            bworld.dropItemNaturally(bukkitEntity.getLocation(), stack);
+        // Only drop items if keepInventory is false
+        // Double-check by clearing drops if keepInventory is true (prevents plugins from adding items back)
+        if (event.getKeepInventory()) {
+            event.getDrops().clear();
+        } else {
+            for (org.bukkit.inventory.ItemStack stack : event.getDrops()) {
+                bworld.dropItemNaturally(bukkitEntity.getLocation(), stack);
+            }
         }
 
         this.y();

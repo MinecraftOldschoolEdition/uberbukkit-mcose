@@ -12,6 +12,8 @@ public class ItemEgg extends Item {
         world.makeSound(entityhuman, "random.bow", 0.5F, 0.4F / (b.nextFloat() * 0.4F + 0.8F));
         if (!world.isStatic) {
             world.addEntity(new EntityEgg(world, entityhuman));
+            // MCOSE: Egg Hunt achievement
+            entityhuman.a(AchievementList.eggHunt, 1);
         }
 
         return itemstack;

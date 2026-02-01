@@ -63,12 +63,16 @@ public class ChunkProviderServer implements IChunkProvider {
 
         if (chunk == null) {
             chunk = this.loadChunk(i, j);
+            if (chunk != null) {
+                ServerProfiler.getInstance().recordChunkLoaded();
+            }
             if (chunk == null) {
                 if (this.chunkProvider == null) {
                     chunk = this.emptyChunk;
                 } else {
                     // Try async generation first (uses thread-safe generators)
                     AsyncChunkGenerator asyncGen = ThreadingManager.getInstance().getChunkGenerator(this.world);
+                    long genStart = System.nanoTime();
                     if (asyncGen != null) {
                         // Check if async generation already completed
                         ChunkGenerationData asyncData = asyncGen.pollCompletedChunk(i, j);
@@ -89,6 +93,9 @@ public class ChunkProviderServer implements IChunkProvider {
                         // Fallback to sync generation
                         chunk = this.chunkProvider.getOrCreateChunk(i, j);
                     }
+                    long genEnd = System.nanoTime();
+                    double genTimeMs = (genEnd - genStart) / 1_000_000.0;
+                    ServerProfiler.getInstance().recordChunkGenerated(genTimeMs);
                 }
                 newChunk = true; // CraftBukkit
             }
@@ -286,6 +293,7 @@ public class ChunkProviderServer implements IChunkProvider {
                     // this.unloadQueue.remove(integer);
                     this.chunks.remove(chunkcoordinates); // CraftBukkit
                     this.chunkList.remove(chunk);
+                    ServerProfiler.getInstance().recordChunkUnloaded();
                 }
             }
             // CraftBukkit end

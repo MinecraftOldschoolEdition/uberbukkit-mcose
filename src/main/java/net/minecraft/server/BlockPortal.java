@@ -166,6 +166,11 @@ public class BlockPortal extends BlockBreakable {
             EntityPortalEnterEvent event = new EntityPortalEnterEvent(entity.getBukkitEntity(), new org.bukkit.Location(world.getWorld(), i, j, k));
             world.getServer().getPluginManager().callEvent(event);
             // CraftBukkit end
+            
+            // MCOSE: Portal achievement for players entering portal
+            if (entity instanceof EntityHuman) {
+                ((EntityHuman) entity).a(AchievementList.portal, 1);
+            }
 
             entity.P();
         }

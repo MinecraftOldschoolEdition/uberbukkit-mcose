@@ -150,12 +150,41 @@ public class EntityItem extends Entity {
             // CraftBukkit end
 
             if (this.pickupDelay == 0 && entityhuman.inventory.pickup(this.itemStack)) {
+                // === Achievement triggers on item pickup ===
+                
+                // Getting Wood (mineWood) - pick up any log
                 if (this.itemStack.id == Block.LOG.id) {
-                    entityhuman.a((Statistic) AchievementList.g);
+                    entityhuman.a((Statistic) AchievementList.mineWood);
                 }
 
+                // Cow Tipper (killCow) - pick up leather
                 if (this.itemStack.id == Item.LEATHER.id) {
-                    entityhuman.a((Statistic) AchievementList.t);
+                    entityhuman.a((Statistic) AchievementList.killCow);
+                }
+                
+                // DIAMONDS! - pick up diamond
+                if (this.itemStack.id == Item.DIAMOND.id) {
+                    entityhuman.a((Statistic) AchievementList.diamonds);
+                }
+                
+                // We Need to Go Deeper (obsidian) - pick up obsidian
+                if (this.itemStack.id == Block.OBSIDIAN.id) {
+                    entityhuman.a((Statistic) AchievementList.obsidian);
+                }
+                
+                // Time to Farm (growWheat) - pick up wheat
+                if (this.itemStack.id == Item.WHEAT.id) {
+                    entityhuman.a((Statistic) AchievementList.growWheat);
+                }
+                
+                // Into Fire (blazingHell) - pick up glowstone dust or block
+                if (this.itemStack.id == Block.GLOWSTONE.id || this.itemStack.id == Item.GLOWSTONE_DUST.id) {
+                    entityhuman.a((Statistic) AchievementList.blazingHell);
+                }
+                
+                // Track wool colors for Rainbow Collection achievement
+                if (this.itemStack.id == Block.WOOL.id) {
+                    entityhuman.trackWoolColor(this.itemStack.getData());
                 }
 
                 this.world.makeSound(this, "random.pop", 0.2F, ((this.random.nextFloat() - this.random.nextFloat()) * 0.7F + 1.0F) * 2.0F);

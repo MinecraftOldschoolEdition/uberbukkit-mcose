@@ -7,6 +7,7 @@ public class Vec3D {
 
     private static List d = new ArrayList();
     private static int e = 0;
+    private static final int MAX_POOL_SIZE = 10000; // Prevent unbounded memory growth
     public double a;
     public double b;
     public double c;
@@ -17,6 +18,10 @@ public class Vec3D {
 
     public static void a() {
         e = 0;
+        // Trim pool if it's grown too large to prevent memory bloat
+        if (d.size() > MAX_POOL_SIZE) {
+            d = new ArrayList(MAX_POOL_SIZE / 2);
+        }
     }
 
     public static Vec3D create(double d0, double d1, double d2) {

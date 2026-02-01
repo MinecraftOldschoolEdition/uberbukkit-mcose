@@ -57,6 +57,9 @@ public abstract class EntityHuman extends EntityLiving {
     public int gameMode = 0;
     private int d = 0;
     public EntityFish hookedFish = null;
+    
+    // MCOSE - Wool colors collected for Rainbow Collection achievement (bitmask)
+    public int woolColorsCollected = 0;
 
     public EntityHuman(World world) {
         super(world);
@@ -243,7 +246,11 @@ public abstract class EntityHuman extends EntityLiving {
             this.a(new ItemStack(Item.APPLE, 1), true);
         }
 
-        this.inventory.h();
+        // Only drop inventory items if keepInventory gamerule is false
+        boolean keepInventory = this.world.worldData != null && this.world.worldData.getKeepInventory();
+        if (!keepInventory) {
+            this.inventory.h();
+        }
         // Multiplayer parity: send death tilt and smoke puff
         if (!this.world.isStatic && this instanceof EntityPlayer) {
             // status 3 indicates death animation on clients
@@ -755,6 +762,9 @@ public abstract class EntityHuman extends EntityLiving {
         if (!this.world.isStatic) {
             this.world.everyoneSleeping();
         }
+        
+        // MCOSE: Sweet Dreams achievement for sleeping in a bed
+        this.a(AchievementList.sleepInBed, 1);
 
         return EnumBedError.OK;
     }
@@ -980,6 +990,20 @@ public abstract class EntityHuman extends EntityLiving {
         this.health -= 4;
         if (this.health <= 0) {
             this.die();
+        }
+    }
+    
+    /**
+     * MCOSE: Track wool colors collected for Rainbow Collection achievement.
+     * @param color The wool color metadata (0-15)
+     */
+    public void trackWoolColor(int color) {
+        if (color >= 0 && color < 16) {
+            this.woolColorsCollected |= (1 << color);
+            // Check if all 16 colors collected (bitmask = 0xFFFF = 65535)
+            if (this.woolColorsCollected == 0xFFFF) {
+                this.a(AchievementList.rainbowWool, 1);
+            }
         }
     }
 }

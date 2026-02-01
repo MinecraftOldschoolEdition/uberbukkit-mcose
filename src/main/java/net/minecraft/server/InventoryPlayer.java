@@ -42,6 +42,15 @@ public class InventoryPlayer implements IInventory {
         return -1;
     }
 
+    /**
+     * Check if the inventory contains an item with the given id.
+     * Returns true if the item is found, false otherwise.
+     * Does not consume the item.
+     */
+    public boolean hasItem(int itemId) {
+        return d(itemId) >= 0;
+    }
+
     private int firstPartial(ItemStack itemstack) {
         for (int i = 0; i < this.items.length; ++i) {
             if (this.items[i] != null && this.items[i].id == itemstack.id && this.items[i].isStackable() && this.items[i].count < this.items[i].getMaxStackSize() && this.items[i].count < this.getMaxStackSize() && (!this.items[i].usesData() || this.items[i].getData() == itemstack.getData())) {

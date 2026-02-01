@@ -357,6 +357,11 @@ public abstract class EntityLiving extends Entity {
                 if (entity instanceof EntityPlayer) {
                     this.lastPlayerAttacker = (EntityPlayer) entity;
                     this.lastPlayerAttackerTime = this.world.getTime();
+                    
+                    // MCOSE: Overkill achievement - deal 9 hearts (18 damage) in a single hit
+                    if (i >= 18) {
+                        ((EntityPlayer) entity).a(AchievementList.overkill, 1);
+                    }
                 }
                 
                 this.ao = 1.5F;

@@ -142,6 +142,9 @@ public class EntitySheep extends EntityAnimal {
                     entityitem.motX += (double) ((this.random.nextFloat() - this.random.nextFloat()) * 0.1F);
                     entityitem.motZ += (double) ((this.random.nextFloat() - this.random.nextFloat()) * 0.1F);
                 }
+                
+                // MCOSE: Shearing achievement
+                entityhuman.a(AchievementList.shearSheep, 1);
             }
 
             itemstack.damage(1, entityhuman);

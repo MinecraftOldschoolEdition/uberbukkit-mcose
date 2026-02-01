@@ -696,11 +696,19 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     }
 
 	private boolean canUseVoiceChat() {
+		// Voice chat is enabled by default for all players
+		// Admins can disable it for specific players using permission plugins
+		// by negating the uberbukkit.voice.chat permission (set to false)
 		CraftPlayer craft = this.getPlayer();
 		if(craft == null) {
 			return true;
 		}
-		return craft.isOp() || craft.hasPermission("uberbukkit.voice.chat") || craft.hasPermission("uberbukkit.*");
+		// Check if permission is explicitly set to false (negated)
+		// If not set at all, default to true (allowed)
+		if(craft.isPermissionSet("uberbukkit.voice.chat")) {
+			return craft.hasPermission("uberbukkit.voice.chat");
+		}
+		return true; // Default: voice chat allowed for everyone
     }
 
     public void handle66ChatRoomAction(Packet66ChatRoomAction packet66) {
@@ -1170,18 +1178,25 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             this.player.compassTarget = new Location(this.getPlayer().getWorld(), packet6.x, packet6.y, packet6.z);
         } else if (packet instanceof Packet3Chat) {
             String message = ((Packet3Chat) packet).message;
-            // uberbukkit
-            String[] wrapped = null;
-            if (this.networkManager.pvn >= 9) { // TODO check compatibility
-                wrapped = TextWrapper.wrapText(message);
+            
+            // Skip word wrapping for internal protocol messages - they should be sent as-is
+            if (message != null && message.startsWith("[[") && message.endsWith("]]")) {
+                this.networkManager.queue(packet);
+                packet = null;
             } else {
-                wrapped = TextWrapper.wrapTextLegacy(message);
-            }
+                // uberbukkit - wrap normal chat messages
+                String[] wrapped = null;
+                if (this.networkManager.pvn >= 9) { // TODO check compatibility
+                    wrapped = TextWrapper.wrapText(message);
+                } else {
+                    wrapped = TextWrapper.wrapTextLegacy(message);
+                }
 
-            for (final String line : wrapped) {
-                this.networkManager.queue(new Packet3Chat(line));
+                for (final String line : wrapped) {
+                    this.networkManager.queue(new Packet3Chat(line));
+                }
+                packet = null;
             }
-            packet = null;
         } else if (packet.k == true) {
             // Reroute all low-priority packets through to compression thread.
             ChunkCompressionThread.sendPacket(this.player, packet);
@@ -1933,6 +1948,12 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
                             heldItem.tag = new NBTTagCompound();
                         }
                         heldItem.tag.a("pages", pages);
+                        
+                        // Mark inventory as dirty for persistence
+                        this.player.inventory.update();
+                        
+                        // Sync inventory back to client so they see the saved book
+                        this.player.updateInventory(this.player.activeContainer);
                     }
                 }
             }
@@ -1993,8 +2014,13 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
                         heldItem.tag.setString("title", title);
                         heldItem.tag.setString("author", author);
                         
+                        // Mark inventory as dirty for persistence
+                        this.player.inventory.update();
+                        
                         // Sync inventory back to client so they see the signed book
                         this.player.updateInventory(this.player.activeContainer);
+                        
+                        a.info("[MCOSE] Player " + this.player.name + " signed book: \"" + title + "\"");
                     }
                 }
             }

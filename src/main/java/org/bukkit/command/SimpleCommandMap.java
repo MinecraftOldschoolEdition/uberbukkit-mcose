@@ -47,6 +47,7 @@ public class SimpleCommandMap implements CommandMap {
         fallbackCommands.add(new SummonCommand());
         fallbackCommands.add(new LocateCommand());
         fallbackCommands.add(new HerobrineCommand());
+        fallbackCommands.add(new ProfileCommand());
     }
 
     public SimpleCommandMap(final Server server) {

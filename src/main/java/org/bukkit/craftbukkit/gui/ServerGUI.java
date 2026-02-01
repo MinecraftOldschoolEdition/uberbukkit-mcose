@@ -94,6 +94,8 @@ public class ServerGUI extends JFrame {
     private JCheckBox allowFlightCheck;
     private JCheckBox allowNetherCheck;
     private JCheckBox whiteListCheck;
+    private JCheckBox voiceChatCheck;
+    private JTextField voiceChatPortField;
     private JButton savePropertiesButton;
     
     // Threading configuration UI components
@@ -1164,6 +1166,29 @@ public class ServerGUI extends JFrame {
         
         row++;
         
+        // Voice chat row
+        JPanel voiceRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 0));
+        voiceRow.setBackground(BG_PANEL);
+        
+        voiceChatCheck = createCheckBox("Voice Chat Enabled", true);
+        voiceRow.add(voiceChatCheck);
+        
+        JLabel voicePortLabel = new JLabel("Voice Port:");
+        voicePortLabel.setForeground(TEXT_COLOR);
+        voiceRow.add(voicePortLabel);
+        
+        voiceChatPortField = new JTextField("24454", 6);
+        voiceChatPortField.setBackground(BG_INPUT);
+        voiceChatPortField.setForeground(TEXT_COLOR);
+        voiceChatPortField.setCaretColor(TEXT_COLOR);
+        voiceChatPortField.setBorder(BorderFactory.createLineBorder(BG_DARK));
+        voiceRow.add(voiceChatPortField);
+        
+        gbc.gridx = 0; gbc.gridy = row; gbc.gridwidth = 4;
+        propsGrid.add(voiceRow, gbc);
+        
+        row++;
+        
         // Save button
         JPanel saveRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 5));
         saveRow.setBackground(BG_PANEL);
@@ -1321,6 +1346,63 @@ public class ServerGUI extends JFrame {
         
         commandsSection.add(commandsRow);
         optionsContent.add(commandsSection);
+        optionsContent.add(Box.createVerticalStrut(10));
+        
+        // Debug Commands section (Profiler)
+        JPanel debugSection = createSection("Debug Commands");
+        debugSection.setMaximumSize(new Dimension(Integer.MAX_VALUE, 120));
+        
+        JPanel debugRow1 = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
+        debugRow1.setBackground(BG_PANEL);
+        
+        JButton profileStartBtn = new JButton("Start Profiler");
+        styleButton(profileStartBtn, SUCCESS_COLOR, Color.WHITE);
+        profileStartBtn.addActionListener(e -> {
+            if (server != null) server.issueCommand("profile start", server);
+        });
+        debugRow1.add(profileStartBtn);
+        
+        JButton profileStopBtn = new JButton("Stop Profiler");
+        styleButton(profileStopBtn, new Color(200, 120, 50), Color.WHITE);
+        profileStopBtn.addActionListener(e -> {
+            if (server != null) server.issueCommand("profile stop", server);
+        });
+        debugRow1.add(profileStopBtn);
+        
+        JButton profileReportBtn = new JButton("View Report");
+        styleButton(profileReportBtn, ACCENT_COLOR, Color.WHITE);
+        profileReportBtn.addActionListener(e -> {
+            if (server != null) server.issueCommand("profile report", server);
+        });
+        debugRow1.add(profileReportBtn);
+        
+        JButton profileSaveBtn = new JButton("Save Report");
+        styleButton(profileSaveBtn, new Color(80, 140, 200), Color.WHITE);
+        profileSaveBtn.addActionListener(e -> {
+            if (server != null) server.issueCommand("profile save", server);
+        });
+        debugRow1.add(profileSaveBtn);
+        
+        JPanel debugRow2 = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
+        debugRow2.setBackground(BG_PANEL);
+        
+        JButton profileStatusBtn = new JButton("Profiler Status");
+        styleButton(profileStatusBtn, new Color(100, 100, 120), Color.WHITE);
+        profileStatusBtn.addActionListener(e -> {
+            if (server != null) server.issueCommand("profile status", server);
+        });
+        debugRow2.add(profileStatusBtn);
+        
+        JButton profileClearBtn = new JButton("Clear Data");
+        styleButton(profileClearBtn, new Color(180, 80, 80), Color.WHITE);
+        profileClearBtn.addActionListener(e -> {
+            if (server != null) server.issueCommand("profile clear", server);
+        });
+        debugRow2.add(profileClearBtn);
+        
+        debugSection.add(debugRow1);
+        debugSection.add(debugRow2);
+        optionsContent.add(debugSection);
         
         // Add filler
         optionsContent.add(Box.createVerticalGlue());
@@ -1434,6 +1516,8 @@ public class ServerGUI extends JFrame {
             allowFlightCheck.setSelected(Boolean.parseBoolean(props.getProperty("allow-flight", "false")));
             allowNetherCheck.setSelected(Boolean.parseBoolean(props.getProperty("allow-nether", "true")));
             whiteListCheck.setSelected(Boolean.parseBoolean(props.getProperty("white-list", "false")));
+            voiceChatCheck.setSelected(Boolean.parseBoolean(props.getProperty("voice-chat", "true")));
+            voiceChatPortField.setText(props.getProperty("voice-chat-port", "24454"));
             
         } catch (IOException e) {
             appendLog("[GUI] Error loading server.properties: " + e.getMessage(), LogType.ERROR);
@@ -1477,6 +1561,8 @@ public class ServerGUI extends JFrame {
             props.setProperty("allow-flight", String.valueOf(allowFlightCheck.isSelected()));
             props.setProperty("allow-nether", String.valueOf(allowNetherCheck.isSelected()));
             props.setProperty("white-list", String.valueOf(whiteListCheck.isSelected()));
+            props.setProperty("voice-chat", String.valueOf(voiceChatCheck.isSelected()));
+            props.setProperty("voice-chat-port", voiceChatPortField.getText().trim());
             
             // Save
             FileOutputStream fos = new FileOutputStream(propsFile);
@@ -1508,6 +1594,8 @@ public class ServerGUI extends JFrame {
         allowFlightCheck.setEnabled(enabled);
         allowNetherCheck.setEnabled(enabled);
         whiteListCheck.setEnabled(enabled);
+        voiceChatCheck.setEnabled(enabled);
+        voiceChatPortField.setEnabled(enabled);
         
         // Always enable save button - allows creating new server.properties
         savePropertiesButton.setEnabled(true);

@@ -79,6 +79,8 @@ public class ItemBucket extends Item {
                         // CraftBukkit end
 
                         world.setTypeId(i, j, k, 0);
+                        // MCOSE: Hot Stuff achievement for picking up lava
+                        entityhuman.a(AchievementList.hotStuff, 1);
                         return new ItemStack(itemInHand.getTypeId(), itemInHand.getAmount(), data); // CraftBukkit
                     }
                 } else {

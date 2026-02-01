@@ -37,6 +37,38 @@ Discord (Project Poseidon): https://discord.gg/FwKg676
 - **Spawn Location Options:** Provides options to disable spawn location randomization and teleportation to the highest safe block on join.
 - **Configurable Mob Spawner Area Limit:** Allows server owners to set a mob-cap for mob spawners to prevent mob farms from causing extreme lag.
 
+## Voice Chat
+
+This server includes built-in proximity voice chat support for the Minecraft Oldschool Edition client.
+
+### Configuration (server.properties)
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| `voice-chat` | `true` | Enable/disable voice chat |
+| `voice-chat-port` | `24454` | UDP port for voice chat (must be forwarded for internet servers) |
+
+### How It Works
+
+- **Proximity-based**: Players can only hear others within a 48-block radius
+- **UDP for low latency**: Voice data is sent via UDP for real-time communication
+- **Automatic**: Voice chat connects automatically when joining a server
+
+### Port Forwarding
+
+For internet-accessible servers, you must forward **both**:
+1. Your game server port (default: 25565, TCP)
+2. Your voice chat port (default: 24454, UDP)
+
+### Permissions
+
+Voice chat is **enabled by default for all players**. Admins can disable it for specific players using permission plugins:
+- Negate the `uberbukkit.voice.chat` permission to disable voice for a player
+
+### Chat Rooms
+
+Players can also create private voice chat rooms that bypass proximity restrictions. See the `/chatroom` command.
+
 ## Want to use UberBukkit on your server?
 Please read the following article before changing over to UberBukkit (From Project-Poseidon): https://github.com/RhysB/Project-Poseidon/wiki/Implementing-Project-Poseidon-In-Production
 

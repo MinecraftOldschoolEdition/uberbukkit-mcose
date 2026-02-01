@@ -316,6 +316,17 @@ public class NetLoginHandler extends NetHandler {
                 } catch (Throwable ignore) {}
                 if (this.server.isVoiceChatEnabled()) {
                     netserverhandler.sendPacket(new Packet70Bed(11));
+                    // Send voice server info for UDP voice chat
+                    VoiceChatUDPServer voiceServer = this.server.getVoiceChatUDPServer();
+                    if (voiceServer != null && entityplayer.getMojangUUID() != null) {
+                        java.util.UUID secret = voiceServer.generateSecret(entityplayer.getMojangUUID());
+                        // Send voice server connection info as a special packet
+                        // Format: [[VOICEINFO:port:secretMSB:secretLSB]]
+                        String voiceInfo = "[[VOICEINFO:" + this.server.getVoiceChatPort() + ":" + 
+                                          secret.getMostSignificantBits() + ":" + 
+                                          secret.getLeastSignificantBits() + "]]";
+                        netserverhandler.sendPacket(new Packet3Chat(voiceInfo));
+                    }
                 } else {
                     netserverhandler.sendPacket(new Packet70Bed(12));
                 }
