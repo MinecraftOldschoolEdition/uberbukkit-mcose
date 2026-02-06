@@ -103,10 +103,33 @@ public class ContainerFurnace extends Container {
                     itemstack1 = ((Slot) this.e.get(2)).getItem();
                     if (itemstack1 == null) break;
                 }
-            } else if (i >= 3 && i < 30) {
-                this.a(itemstack1, 30, 39, false);
-            } else if (i >= 30 && i < 39) {
-                this.a(itemstack1, 3, 30, false);
+            } else if (i >= 3 && i < 39) {
+                // Shift-clicking from player inventory - try to place in furnace slots
+                int beforeCount = itemstack1.count;
+                boolean isSmeltable = FurnaceRecipes.getInstance().a(itemstack1.getItem().id) != null ||
+                                      RecyclingManager.getInstance().getSmeltRecycleResult(itemstack1) != null;
+                
+                if (TileEntityFurnace.isFuel(itemstack1)) {
+                    // Item is fuel - try fuel slot first
+                    this.a(itemstack1, 1, 2, false);
+                    // If fuel slot couldn't take it all and item is also smeltable, try input
+                    if (itemstack1.count > 0 && isSmeltable) {
+                        this.a(itemstack1, 0, 1, false);
+                    }
+                } else if (isSmeltable) {
+                    // Item is smeltable but not fuel - put in input slot
+                    this.a(itemstack1, 0, 1, false);
+                } else if (i >= 3 && i < 30) {
+                    // Not furnace-related, move between inventory sections
+                    this.a(itemstack1, 30, 39, false);
+                } else {
+                    this.a(itemstack1, 3, 30, false);
+                }
+                
+                // If we moved items to furnace slots, mark dirty to trigger smelting
+                if (itemstack1.count < beforeCount) {
+                    this.a.update();
+                }
             } else {
                 this.a(itemstack1, 3, 39, false);
             }

@@ -9,5 +9,7 @@ public class RecipesCrafting {
         craftingmanager.registerShapedRecipe(new ItemStack(Block.CHEST), new Object[] { "###", "# #", "###", Character.valueOf('#'), Block.WOOD });
         craftingmanager.registerShapedRecipe(new ItemStack(Block.FURNACE), new Object[] { "###", "# #", "###", Character.valueOf('#'), Block.COBBLESTONE });
         craftingmanager.registerShapedRecipe(new ItemStack(Block.WORKBENCH), new Object[] { "##", "##", Character.valueOf('#'), Block.WOOD });
+        craftingmanager.registerShapedRecipe(new ItemStack(Block.SANDSTONE), new Object[] { "##", "##", Character.valueOf('#'), Block.SAND });
+        craftingmanager.registerShapedRecipe(new ItemStack(Block.STONE_BRICK, 4), new Object[] { "##", "##", Character.valueOf('#'), Block.STONE });
     }
 }

@@ -156,10 +156,9 @@ public class ServerConfigurationManager {
             entityplayer.deathTicks = 0;
         }
         
-        // UberBukkit - Award "Open Inventory" achievement on first join
-        // This is normally triggered client-side but we track it server-side too
-        if (entityplayer.playerStatistics != null && !entityplayer.playerStatistics.hasAchievement(AchievementList.openInventory)) {
-            entityplayer.a(AchievementList.openInventory, 1);
+        // UberBukkit - Sync all unlocked achievements to client
+        if (entityplayer.achievementManager != null) {
+            entityplayer.achievementManager.syncAllToClient();
         }
         
         // UberBukkit - Record player join in server-wide statistics

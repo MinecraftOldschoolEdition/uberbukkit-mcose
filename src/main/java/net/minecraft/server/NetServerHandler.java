@@ -1466,6 +1466,11 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             if (this.player.vehicle != null) {
                 this.player.mount(null);
             }
+        } else if (packet19entityaction.animation == 5) {
+            // MCOSE: Player opened inventory - grant "Taking Inventory" achievement
+            if (this.player.achievementManager != null && !this.player.achievementManager.hasAchievement(AchievementList.openInventory)) {
+                this.player.achievementManager.unlock(AchievementList.openInventory);
+            }
         }
     }
 

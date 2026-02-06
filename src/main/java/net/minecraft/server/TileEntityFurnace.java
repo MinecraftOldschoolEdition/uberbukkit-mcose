@@ -301,6 +301,20 @@ public class TileEntityFurnace extends TileEntity implements IInventory {
         }
     }
 
+    /**
+     * Static check if an item can be used as fuel.
+     */
+    public static boolean isFuel(ItemStack itemstack) {
+        if (itemstack == null) return false;
+        int i = itemstack.getItem().id;
+        if (i < 256 && Block.byId[i] != null && Block.byId[i].material == Material.WOOD) return true;
+        if (i == Item.STICK.id) return true;
+        if (i == Item.COAL.id) return true;
+        if (i == Item.LAVA_BUCKET.id) return true;
+        if (Uberbukkit.getTargetPVN() >= 11 && i == Block.SAPLING.id) return true;
+        return false;
+    }
+
     public boolean a_(EntityHuman entityhuman) {
         return this.world.getTileEntity(this.x, this.y, this.z) != this ? false : entityhuman.e((double) this.x + 0.5D, (double) this.y + 0.5D, (double) this.z + 0.5D) <= 64.0D;
     }

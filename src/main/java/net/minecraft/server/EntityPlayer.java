@@ -78,8 +78,9 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
         this.displayName = this.name;
         this.playerUUID = PoseidonUUID.getPlayerGracefulUUID(this.name); //Project Poseidon
         
-        // UberBukkit - Initialize server-side statistics tracking
+        // UberBukkit - Initialize server-side statistics and achievements tracking
         this.playerStatistics = new PlayerStatistics(this);
+        this.achievementManager = new AchievementManager(this);
     }
 
     public String displayName;
@@ -97,6 +98,7 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
     
     // UberBukkit - Server-side statistics and achievements tracking
     public PlayerStatistics playerStatistics;
+    public AchievementManager achievementManager;
     // Project Poseidon - Update container for creative/survival mode switch
     public void updateContainer() {
         this.defaultContainer = new ContainerPlayer(this.inventory, !this.world.isStatic);
@@ -700,19 +702,30 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
 
     public void a(Statistic statistic, int i) {
         if (statistic != null) {
-            // MCOSE: Track statistics and achievements server-side
-            if (this.playerStatistics != null) {
-                this.playerStatistics.addStatistic(statistic, i);
-            }
-            
-            // Send packet to client (for non-achievement stats)
-            if (!statistic.g && this.netServerHandler != null) {
-                int remaining = i;
-                while (remaining > 100) {
-                    this.netServerHandler.sendPacket(new Packet200Statistic(statistic.e, 100));
-                    remaining -= 100;
+            // Use centralized AchievementManager for all achievement operations
+            if (statistic instanceof Achievement) {
+                Achievement achievement = (Achievement) statistic;
+                if (this.achievementManager != null) {
+                    this.achievementManager.unlock(achievement);
+                } else if (this.playerStatistics != null) {
+                    // Fallback to old system if AchievementManager not initialized
+                    this.playerStatistics.addStatistic(statistic, i);
                 }
-                this.netServerHandler.sendPacket(new Packet200Statistic(statistic.e, remaining));
+            } else {
+                // Handle regular stats
+                if (this.playerStatistics != null) {
+                    this.playerStatistics.addStatistic(statistic, i);
+                }
+                
+                // Send packet to client for non-achievement stats
+                if (!statistic.g && this.netServerHandler != null) {
+                    int remaining = i;
+                    while (remaining > 100) {
+                        this.netServerHandler.sendPacket(new Packet200Statistic(statistic.e, 100));
+                        remaining -= 100;
+                    }
+                    this.netServerHandler.sendPacket(new Packet200Statistic(statistic.e, remaining));
+                }
             }
         }
     }
@@ -780,27 +793,45 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
     }
     // CraftBukkit end
     
-    // UberBukkit - Override NBT load to include statistics
+    // UberBukkit - Override NBT load to include statistics and achievements
     @Override
     public void a(NBTTagCompound nbttagcompound) {
         super.a(nbttagcompound);
         
-        // Load player statistics
+        // Load player statistics (legacy - keeps stats other than achievements)
         if (this.playerStatistics != null && nbttagcompound.hasKey("PlayerStats")) {
             this.playerStatistics.loadFromNBT(nbttagcompound.k("PlayerStats"));
         }
+        
+        // Load achievements via AchievementManager
+        if (this.achievementManager != null && nbttagcompound.hasKey("PlayerAchievements")) {
+            this.achievementManager.loadFromNBT(nbttagcompound.k("PlayerAchievements"));
+        } else if (this.achievementManager != null && nbttagcompound.hasKey("PlayerStats")) {
+            // Migrate from old PlayerStats if PlayerAchievements doesn't exist
+            NBTTagCompound statsNbt = nbttagcompound.k("PlayerStats");
+            if (statsNbt.hasKey("Achievements")) {
+                this.achievementManager.loadFromNBT(statsNbt);
+            }
+        }
     }
     
-    // UberBukkit - Override NBT save to include statistics
+    // UberBukkit - Override NBT save to include statistics and achievements
     @Override
     public void b(NBTTagCompound nbttagcompound) {
         super.b(nbttagcompound);
         
-        // Save player statistics
+        // Save player statistics (legacy - keeps stats other than achievements)
         if (this.playerStatistics != null) {
             NBTTagCompound statsNbt = new NBTTagCompound();
             this.playerStatistics.saveToNBT(statsNbt);
             nbttagcompound.a("PlayerStats", statsNbt);
+        }
+        
+        // Save achievements via AchievementManager (separate key for cleaner data)
+        if (this.achievementManager != null) {
+            NBTTagCompound achievementsNbt = new NBTTagCompound();
+            this.achievementManager.saveToNBT(achievementsNbt);
+            nbttagcompound.a("PlayerAchievements", achievementsNbt);
         }
     }
 }

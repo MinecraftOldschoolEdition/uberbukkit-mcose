@@ -1,5 +1,7 @@
 package net.minecraft.server;
 
+import com.legacyminecraft.poseidon.PoseidonConfig;
+
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.Socket;
@@ -10,11 +12,17 @@ class NetworkAcceptThread extends Thread {
     final MinecraftServer a;
 
     final NetworkListenThread b;
+    
+    // Connection rate limiting - configurable to allow clients that ping then connect
+    // Default 1000ms (1 second) - enough to prevent spam but allows poll+connect flow
+    private final long connectionThrottleMs;
 
     NetworkAcceptThread(NetworkListenThread networklistenthread, String s, MinecraftServer minecraftserver) {
         super(s);
         this.b = networklistenthread;
         this.a = minecraftserver;
+        // Load from config, default to 1000ms (was hardcoded 5000ms which broke clients)
+        this.connectionThrottleMs = (long) PoseidonConfig.getInstance().getInt("settings.connection-throttle-ms.value", 1000);
     }
 
     public void run() {
@@ -27,7 +35,10 @@ class NetworkAcceptThread extends Thread {
                 if (socket != null) {
                     InetAddress inetaddress = socket.getInetAddress();
 
-                    if (hashmap.containsKey(inetaddress) && !"127.0.0.1".equals(inetaddress.getHostAddress()) && System.currentTimeMillis() - ((Long) hashmap.get(inetaddress)).longValue() < 5000L) {
+                    // Rate limit connections per IP (except localhost)
+                    // This prevents connection spam but allows normal client behavior
+                    // (clients ping the server list, then connect shortly after)
+                    if (connectionThrottleMs > 0 && hashmap.containsKey(inetaddress) && !"127.0.0.1".equals(inetaddress.getHostAddress()) && System.currentTimeMillis() - ((Long) hashmap.get(inetaddress)).longValue() < connectionThrottleMs) {
                         hashmap.put(inetaddress, Long.valueOf(System.currentTimeMillis()));
                         socket.close();
                     } else {

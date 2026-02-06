@@ -255,6 +255,9 @@ public class NetLoginHandler extends NetHandler {
             // MCOSE: Send Uberbukkit NBT flag IMMEDIATELY after login, BEFORE any inventory packets
             // This MUST be the first packet after login so client knows to expect NBT in all subsequent ItemStack packets
             netserverhandler.sendPacket(new Packet70Bed(13));
+            
+            // MCOSE: Signal modded server - enables modern fence collision and other compatibility flags
+            netserverhandler.sendPacket(new Packet70Bed(19));
 
             // Poseidon parity: signal client to enable special visuals for ALPHA/ALPHA_SNOW/SKY on overworld
             try {

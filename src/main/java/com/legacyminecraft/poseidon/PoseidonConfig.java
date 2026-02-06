@@ -9,7 +9,7 @@ import java.util.regex.Pattern;
 
 public class PoseidonConfig extends Configuration {
     private static PoseidonConfig singleton;
-    private final int configVersion = 5;
+    private final int configVersion = 6;
     private Integer[] treeBlacklistIDs;
 
     public Integer[] getTreeBlacklistIDs() {
@@ -117,6 +117,10 @@ public class PoseidonConfig extends Configuration {
         generateConfigOption("settings.packet-spam-detection.enabled", true);
         generateConfigOption("settings.packet-spam-detection.info", "This setting causes the server to detect and kick malicious players who send too many packets in a short period of time. This is useful to prevent players from sending too many packets to the server to cause lag.");
         generateConfigOption("settings.packet-spam-detection.threshold", 10000);
+        
+        // Connection throttling - prevents rapid connections from same IP
+        generateConfigOption("settings.connection-throttle-ms.value", 0);
+        generateConfigOption("settings.connection-throttle-ms.info", "Minimum milliseconds between connections from the same IP. Set to 0 to disable (default). Only increase if you're experiencing connection spam attacks.");
 
         //Statistics
         generateConfigOption("settings.statistics.key", UUID.randomUUID().toString());
@@ -347,6 +351,13 @@ public class PoseidonConfig extends Configuration {
         convertToNewAddress("settings.uuid-fetcher.get.enforce-case-sensitivity.enabled", "settings.use-get-for-uuids.case-sensitive.enabled");
         removeDeprecatedConfig("settings.use-get-for-uuids.case-sensitive.info");
 
+        // 5-6 Conversion: Force connection throttle to 0 (disabled) for all existing configs
+        // The old default of 5000ms caused "End of stream" errors when clients pinged then connected
+        int currentThrottle = this.getInt("settings.connection-throttle-ms.value", -1);
+        if (currentThrottle != 0) {
+            System.out.println("[Poseidon] Config: Disabling connection throttle (was " + currentThrottle + "ms) to fix client connection issues.");
+            this.setProperty("settings.connection-throttle-ms.value", 0);
+        }
 
     }
 
