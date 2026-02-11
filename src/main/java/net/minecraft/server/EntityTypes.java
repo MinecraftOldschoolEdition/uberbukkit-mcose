@@ -1,5 +1,8 @@
 package net.minecraft.server;
 
+import net.minecraft.server.registry.EntityTypeRegistryApi;
+import net.minecraft.server.util.ResourceLocation;
+
 import java.util.HashMap;
 import java.util.Map;
 
@@ -23,6 +26,11 @@ public class EntityTypes {
     }
 
     public static Entity a(String s, World world) {
+        Entity fromRegistry = EntityTypeRegistryApi.createEntity(s, world);
+        if (fromRegistry != null) {
+            return fromRegistry;
+        }
+
         Entity entity = null;
 
         try {
@@ -45,6 +53,15 @@ public class EntityTypes {
         Entity entity = null;
 
         try {
+            Entity fromRegistry = EntityTypeRegistryApi.createEntity(nbttagcompound.getString("id"), world);
+            if (fromRegistry != null) {
+                fromRegistry.e(nbttagcompound);
+                return fromRegistry;
+            }
+        } catch (Throwable ignored) {
+        }
+
+        try {
             Class oclass = (Class) a.get(nbttagcompound.getString("id"));
 
             if (oclass != null) {
@@ -64,7 +81,21 @@ public class EntityTypes {
     }
 
     public static int a(Entity entity) {
-        return ((Integer) d.get(entity.getClass())).intValue();
+        if (entity == null) {
+            return -1;
+        }
+
+        Integer legacy = (Integer) d.get(entity.getClass());
+        if (legacy != null) {
+            return legacy.intValue();
+        }
+
+        ResourceLocation key = EntityTypeRegistryApi.getKey(entity.getClass());
+        if (key != null) {
+            Integer mapped = EntityTypeRegistryApi.getLegacyId(key.toString());
+            return mapped == null ? -1 : mapped.intValue();
+        }
+        return -1;
     }
 
     public static String b(Entity entity) {
@@ -99,7 +130,7 @@ public class EntityTypes {
         a(EntityBoat.class, "Boat", 41);
         a(EntitySnowman.class, "SnowMan", 97);
         a(EntityHerobrine.class, "Herobrine", 100); // Must match client EntityList
-        
+
         // Initialize registry bootstraps
         try { net.minecraft.server.registry.SpawnGroupRegistryBootstrap.initialize(); } catch (Throwable ignored) {}
         try { net.minecraft.server.registry.JukeboxSongRegistryBootstrap.initialize(); } catch (Throwable ignored) {}

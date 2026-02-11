@@ -13,6 +13,7 @@ public class WorldManager implements IWorldAccess {
     }
 
     public void a(String s, double d0, double d1, double d2, double d3, double d4, double d5) {
+        net.minecraft.server.registry.ParticleTypeRegistryApi.resolveLegacyKey(s);
     }
 
     public void a(Entity entity) {

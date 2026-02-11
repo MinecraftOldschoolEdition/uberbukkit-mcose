@@ -19,6 +19,10 @@ import org.bukkit.generator.ChunkGenerator;
 
 import java.util.*;
 
+import net.minecraft.server.event.EventBus;
+import net.minecraft.server.event.events.EntitySpawnEvent;
+import net.minecraft.server.registry.BlockCapabilityRegistryApi;
+
 // CraftBukkit start
 // CraftBukkit end
 
@@ -30,6 +34,7 @@ public class World implements IBlockAccess {
     private List D = new ArrayList();
     private TreeSet E = new TreeSet();
     private Set F = new HashSet();
+    private Map scheduledTickChunkIndex = new HashMap();
     public List c = new ArrayList();
     private List G = new ArrayList();
     public List players = new ArrayList();
@@ -70,6 +75,7 @@ public class World implements IBlockAccess {
     public boolean isStatic;
     public final Map<Explosion.CacheKey, Float> explosionDensityCache = new HashMap<>(); // Paper - Optimize explosions
     private int saveTickCounter = 0; // Decouple periodic saves from time-of-day gamerule
+    private long blockTickTime = 0L; // Monotonic scheduled-tick clock independent of day/night time
 
     public WorldChunkManager getWorldChunkManager() {
         return this.worldProvider.b;
@@ -140,7 +146,7 @@ public class World implements IBlockAccess {
             this.worldProvider = WorldProvider.byDimension(0);
         }
 
-        boolean flag = false;
+        boolean flag = this.s;
 
         if (this.worldData == null) {
             this.worldData = new WorldData(i, s);
@@ -148,6 +154,7 @@ public class World implements IBlockAccess {
         } else {
             this.worldData.a(s);
         }
+        this.blockTickTime = this.worldData.f();
 
         this.worldProvider.a(this);
         this.chunkProvider = this.b();
@@ -157,6 +164,13 @@ public class World implements IBlockAccess {
         } else if (this.worldData != null && this.worldData.getTerrainType() == 3 && 
                    this.worldData.c() == 0 && this.worldData.d() == 90 && this.worldData.e() == 0) {
             // If it's a sky world with the default spawn we just set in MinecraftServer, run spawn finding
+            this.c();
+        } else if (this.worldData != null && this.worldData.getTerrainType() == 6 &&
+                this.worldData.c() == 0 && this.worldData.e() == 0 &&
+                this.worldData.d() <= 1 && this.worldData.f() == 0L &&
+                this.worldProvider != null && this.worldProvider.dimension == 0) {
+            // Newly-created CLASSIC worlds can arrive here with prewritten WorldData and a default 0,0,0 spawn.
+            // Force one-time classic spawn initialization so spawn is chosen near the center island.
             this.c();
         }
 
@@ -181,114 +195,256 @@ public class World implements IBlockAccess {
                             (this.worldData != null && this.worldData.getTerrainType() == 3);
         
         if (isSkyWorld) {
-            
-            int spawnX = 0;
-            int spawnZ = 0;
-            int spawnY = 0; 
-            int attempts = 0;
-            boolean foundValidSpawnPoint = false;
+            // Prefer center islands first, then expand within the server's pre-generated spawn radius.
+            final int centerX = 0;
+            final int centerZ = 0;
+            final int minY = 48;
+            final int maxY = 126;
+            final int maxRadius = 196;
+            final int step = 2;
+            final int desiredIslandSupport = 9;
 
-            while (attempts < 2000 && !foundValidSpawnPoint) {
-                spawnX = this.random.nextInt(128) - 64; 
-                spawnZ = this.random.nextInt(128) - 64;
-
-                // For sky terrain in overworld, we need to check differently than WorldProviderSky
-                boolean canSpawnHere = true;
-                if (this.worldProvider instanceof WorldProviderSky) {
-                    canSpawnHere = ((WorldProviderSky) this.worldProvider).canSpawn(spawnX, spawnZ);
-                } else {
-                    // For overworld with sky terrain, check if there's a solid platform in sky island range
-                    for (int y = 120; y >= 60; y--) {
-                        int blockId = this.getTypeId(spawnX, y, spawnZ);
-                        if (blockId != 0 && Block.byId[blockId] != null && Block.byId[blockId].material.isSolid()) {
-                            if (this.getTypeId(spawnX, y + 1, spawnZ) == 0) {
-                                canSpawnHere = true;
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                if (canSpawnHere) { 
-                    int surfaceY = this.e(spawnX, spawnZ); // this.e is findTopSolidBlock, returns Y of air block ABOVE solid ground
-                    
-                    // MODIFIED: Ensure surfaceY is at a reasonable height for sky worlds
-                    if (surfaceY >= 60 && surfaceY < 126) { // Was: surfaceY > 0 && surfaceY < 126
-                        int groundBlockId = this.getTypeId(spawnX, surfaceY - 1, spawnZ);
-                        boolean groundIsSolid = (groundBlockId != 0 && Block.byId[groundBlockId] != null && Block.byId[groundBlockId].material.isSolid());
-
-                        if (groundIsSolid) {
-                            // Check if space for player (feet at surfaceY, head at surfaceY+1) is air
-                            if (this.getTypeId(spawnX, surfaceY, spawnZ) == 0 && this.getTypeId(spawnX, surfaceY + 1, spawnZ) == 0) {
-                                spawnY = surfaceY; // This is the Y for player's feet
-                                foundValidSpawnPoint = true;
-                                System.out.println("[ProjectPoseidon World.c] Sky World: Found valid island spawn at (" + spawnX + "," + spawnY + "," + spawnZ + ")");
-                                break; 
-                            }
-                        }
-                    }
-                }
-                attempts++;
-            }
-
-            if (!foundValidSpawnPoint) {
-                System.err.println("[ProjectPoseidon World.c] Sky World: Could not find a suitable natural island spawn after " + attempts + " attempts! Using safe air spawn at 0,90,0 (no platform)." );
-                spawnX = 0; 
-                spawnZ = 0;
-                spawnY = 90; // Air spawn; relies on server preventing immediate damage until client lands
-            }
-            
-            // Final clearance check for player body at the chosen/fallback spawnY
-            if (this.getTypeId(spawnX, spawnY, spawnZ) != 0) { 
-                this.setRawTypeId(spawnX, spawnY, spawnZ, 0); 
-            }
-            if (this.getTypeId(spawnX, spawnY + 1, spawnZ) != 0){ 
-                this.setRawTypeId(spawnX, spawnY + 1, spawnZ, 0); 
-            }
-
-            this.worldData.setSpawn(spawnX, spawnY, spawnZ);
-            System.out.println("[ProjectPoseidon World.c] Sky world initial spawn FINALIZED to: " + spawnX + "," + spawnY + "," + spawnZ);
-            this.isLoading = false;
-            return; 
-        }
-        
-        // Classic world: fixed-size 256x256 map with centered spawn
-        if (this.worldData != null && this.worldData.getTerrainType() == 6) {
-            int bestX = 128;
-            int bestZ = 128;
+            int bestX = 0;
+            int bestZ = 0;
             int bestY = -1;
-            // Prefer solid ground at or above sea level (32) and within 0..255 bounds
-            int radius = 32;
-            outer:
-            for (int r = 0; r <= radius; r += 4) {
-                for (int dx = -r; dx <= r; dx += 4) {
-                    for (int dz = -r; dz <= r; dz += 4) {
-                        int sx = 128 + dx;
-                        int sz = 128 + dz;
-                        if (sx < 0 || sx > 255 || sz < 0 || sz > 255) continue;
-                        int y = this.f(sx, sz); // top solid block + 1
-                        if (y <= 0) continue;
-                        int groundId = this.getTypeId(sx, y - 1, sz);
-                        if (groundId == Block.WATER.id || groundId == Block.STATIONARY_WATER.id) continue; // skip ocean
-                        bestX = sx; bestZ = sz; bestY = y; break outer;
+            int bestSupport = -1;
+            int bestDist = Integer.MAX_VALUE;
+
+            for (int r = 0; r <= maxRadius; r += step) {
+                int ringBestX = 0;
+                int ringBestZ = 0;
+                int ringBestY = -1;
+                int ringBestSupport = -1;
+                int ringBestDist = Integer.MAX_VALUE;
+
+                for (int x = centerX - r; x <= centerX + r; x += step) {
+                    int zTop = centerZ + r;
+                    int zBottom = centerZ - r;
+
+                    int yTop = this.findSkySpawnY(x, zTop, minY, maxY);
+                    if (yTop > 0) {
+                        int support = this.computeSkyIslandSupportScore(x, zTop, minY, maxY);
+                        int dist = Math.abs(x - centerX) + Math.abs(zTop - centerZ);
+                        if (support > ringBestSupport || (support == ringBestSupport && dist < ringBestDist)) {
+                            ringBestX = x;
+                            ringBestY = yTop;
+                            ringBestZ = zTop;
+                            ringBestSupport = support;
+                            ringBestDist = dist;
+                        }
+                    }
+
+                    if (zBottom != zTop) {
+                        int yBottom = this.findSkySpawnY(x, zBottom, minY, maxY);
+                        if (yBottom > 0) {
+                            int support = this.computeSkyIslandSupportScore(x, zBottom, minY, maxY);
+                            int dist = Math.abs(x - centerX) + Math.abs(zBottom - centerZ);
+                            if (support > ringBestSupport || (support == ringBestSupport && dist < ringBestDist)) {
+                                ringBestX = x;
+                                ringBestY = yBottom;
+                                ringBestZ = zBottom;
+                                ringBestSupport = support;
+                                ringBestDist = dist;
+                            }
+                        }
+                    }
+                }
+
+                for (int z = centerZ - r + step; z <= centerZ + r - step; z += step) {
+                    int xRight = centerX + r;
+                    int xLeft = centerX - r;
+
+                    int yRight = this.findSkySpawnY(xRight, z, minY, maxY);
+                    if (yRight > 0) {
+                        int support = this.computeSkyIslandSupportScore(xRight, z, minY, maxY);
+                        int dist = Math.abs(xRight - centerX) + Math.abs(z - centerZ);
+                        if (support > ringBestSupport || (support == ringBestSupport && dist < ringBestDist)) {
+                            ringBestX = xRight;
+                            ringBestY = yRight;
+                            ringBestZ = z;
+                            ringBestSupport = support;
+                            ringBestDist = dist;
+                        }
+                    }
+
+                    if (xLeft != xRight) {
+                        int yLeft = this.findSkySpawnY(xLeft, z, minY, maxY);
+                        if (yLeft > 0) {
+                            int support = this.computeSkyIslandSupportScore(xLeft, z, minY, maxY);
+                            int dist = Math.abs(xLeft - centerX) + Math.abs(z - centerZ);
+                            if (support > ringBestSupport || (support == ringBestSupport && dist < ringBestDist)) {
+                                ringBestX = xLeft;
+                                ringBestY = yLeft;
+                                ringBestZ = z;
+                                ringBestSupport = support;
+                                ringBestDist = dist;
+                            }
+                        }
+                    }
+                }
+
+                if (ringBestY > 0) {
+                    if (ringBestSupport > bestSupport || (ringBestSupport == bestSupport && ringBestDist < bestDist)) {
+                        bestX = ringBestX;
+                        bestY = ringBestY;
+                        bestZ = ringBestZ;
+                        bestSupport = ringBestSupport;
+                        bestDist = ringBestDist;
+                    }
+                    if (ringBestSupport >= desiredIslandSupport) {
+                        break;
                     }
                 }
             }
+
             if (bestY <= 0) {
-                bestY = 36; // fallback
+                // Emergency pass: broaden search so we still land on a real island before any air fallback.
+                final int emergencyMaxRadius = 1024;
+                final int emergencyStep = 8;
+                for (int r = maxRadius + emergencyStep; r <= emergencyMaxRadius && bestY <= 0; r += emergencyStep) {
+                    for (int x = centerX - r; x <= centerX + r && bestY <= 0; x += emergencyStep) {
+                        int zTop = centerZ + r;
+                        int zBottom = centerZ - r;
+
+                        int yTop = this.findSkySpawnY(x, zTop, minY, maxY);
+                        if (yTop > 0) {
+                            bestX = x;
+                            bestY = yTop;
+                            bestZ = zTop;
+                            bestSupport = this.computeSkyIslandSupportScore(x, zTop, minY, maxY);
+                            break;
+                        }
+
+                        int yBottom = this.findSkySpawnY(x, zBottom, minY, maxY);
+                        if (yBottom > 0) {
+                            bestX = x;
+                            bestY = yBottom;
+                            bestZ = zBottom;
+                            bestSupport = this.computeSkyIslandSupportScore(x, zBottom, minY, maxY);
+                            break;
+                        }
+                    }
+                }
             }
-            // Ensure space for player
-            if (this.getTypeId(bestX, bestY, bestZ) != 0) this.setRawTypeId(bestX, bestY, bestZ, 0);
-            if (this.getTypeId(bestX, bestY + 1, bestZ) != 0) this.setRawTypeId(bestX, bestY + 1, bestZ, 0);
-            this.worldData.setSpawn(bestX, bestY, bestZ);
+
+            if (bestY <= 0) {
+                System.err.println("[ProjectPoseidon World.c] Sky World: no safe island spawn found. Falling back to 0,90,0.");
+                bestX = 0;
+                bestZ = 0;
+                bestY = 90;
+            }
+
+            ChunkCoordinates safeSkySpawn = this.findSafeSpawnNear(bestX, bestZ, 96, false);
+            this.worldData.setSpawn(safeSkySpawn.x, safeSkySpawn.y, safeSkySpawn.z);
+            System.out.println("[ProjectPoseidon World.c] Sky world initial spawn finalized to: " + safeSkySpawn.x + "," + safeSkySpawn.y + "," + safeSkySpawn.z + " (support=" + bestSupport + ")");
             this.isLoading = false;
             return;
         }
         
-        // Original logic for non-sky worlds or if Bukkit generator provides spawn:
-        int i = 0; 
-        byte b0 = 64; 
-        int j; 
+        // Classic world: fixed-size 256x256 map with spawn biased to center and inland land quality.
+        if (this.worldData != null && this.worldData.getTerrainType() == 6 && this.worldProvider.dimension == 0) {
+            final int centerX = 128;
+            final int centerZ = 128;
+            final int seaLevel = 32;
+            final int centerWindow = 5;       // roughly 10x10 around center
+            final int targetInlandScore = 30; // 0..49 (higher = more inland)
+            int bestX = centerX;
+            int bestZ = centerZ;
+            int bestY = -1;
+            int bestScore = -1;
+            int bestDist = Integer.MAX_VALUE;
+
+            // 1) Evaluate all candidates in the center window and pick the most inland.
+            for (int sx = centerX - centerWindow; sx <= centerX + centerWindow; ++sx) {
+                for (int sz = centerZ - centerWindow; sz <= centerZ + centerWindow; ++sz) {
+                    int sy = this.findClassicSpawnY(sx, sz, seaLevel);
+                    if (sy <= 0) {
+                        continue;
+                    }
+
+                    int score = this.computeClassicInlandScore(sx, sz, seaLevel);
+                    int dist = Math.abs(sx - centerX) + Math.abs(sz - centerZ);
+                    if (score > bestScore || (score == bestScore && dist < bestDist)) {
+                        bestX = sx;
+                        bestY = sy;
+                        bestZ = sz;
+                        bestScore = score;
+                        bestDist = dist;
+                    }
+                }
+            }
+
+            // 2) If center is still shoreline/ocean edge, expand outward until we find a better inland point.
+            if (bestScore < targetInlandScore) {
+                for (int r = centerWindow + 1; r <= 96; ++r) {
+                    int ringBestX = 0;
+                    int ringBestZ = 0;
+                    int ringBestY = -1;
+                    int ringBestScore = -1;
+                    int ringBestDist = Integer.MAX_VALUE;
+
+                    for (int dx = -r; dx <= r; ++dx) {
+                        for (int dz = -r; dz <= r; ++dz) {
+                            if (Math.max(Math.abs(dx), Math.abs(dz)) != r) {
+                                continue;
+                            }
+
+                            int sx = centerX + dx;
+                            int sz = centerZ + dz;
+                            int sy = this.findClassicSpawnY(sx, sz, seaLevel);
+                            if (sy <= 0) {
+                                continue;
+                            }
+
+                            int score = this.computeClassicInlandScore(sx, sz, seaLevel);
+                            int dist = Math.abs(dx) + Math.abs(dz);
+                            if (score > ringBestScore || (score == ringBestScore && dist < ringBestDist)) {
+                                ringBestX = sx;
+                                ringBestY = sy;
+                                ringBestZ = sz;
+                                ringBestScore = score;
+                                ringBestDist = dist;
+                            }
+                        }
+                    }
+
+                    if (ringBestY > 0 && (ringBestScore > bestScore || (ringBestScore == bestScore && ringBestDist < bestDist))) {
+                        bestX = ringBestX;
+                        bestY = ringBestY;
+                        bestZ = ringBestZ;
+                        bestScore = ringBestScore;
+                        bestDist = ringBestDist;
+                    }
+
+                    if (bestScore >= targetInlandScore) {
+                        break;
+                    }
+                }
+            }
+
+            if (bestY <= 0) {
+                int centerY = this.findClassicSpawnY(centerX, centerZ, seaLevel);
+                bestY = centerY > 0 ? centerY : 36;
+            }
+
+            if (bestY < 1) {
+                bestY = 1;
+            } else if (bestY > 125) {
+                bestY = 125;
+            }
+
+            ChunkCoordinates safeClassicSpawn = this.findSafeSpawnNear(bestX, bestZ, 48, false);
+            this.worldData.setSpawn(safeClassicSpawn.x, safeClassicSpawn.y, safeClassicSpawn.z);
+            this.isLoading = false;
+            return;
+        }
+        
+        // Safe spawn resolution for all remaining world types.
+        int terrainType = this.worldData != null ? this.worldData.getTerrainType() : 0;
+        boolean preferShorelineSpawn = terrainType == 0 || terrainType == 1; // DEFAULT/ALPHA washed-ashore style
+        int preferredX = 0;
+        int preferredZ = 0;
+        int searchRadius = 256;
 
         if (this.generator != null) {
             Random randForGenerator = new Random(this.getSeed()); 
@@ -298,21 +454,388 @@ public class World implements IBlockAccess {
                 if (spawn.getWorld() != this.getWorld()) {
                     throw new IllegalStateException("Cannot set spawn point for " + this.worldData.name + " to be in another world (" + spawn.getWorld().getName() + ")");
                 } else {
-                    this.worldData.setSpawn(spawn.getBlockX(), spawn.getBlockY(), spawn.getBlockZ());
-                    System.out.println("[ProjectPoseidon World.c] Initial spawn set by Bukkit generator to: " + spawn.getBlockX() + "," + spawn.getBlockY() + "," + spawn.getBlockZ());
-                    this.isLoading = false;
-                    return;
+                    preferredX = spawn.getBlockX();
+                    preferredZ = spawn.getBlockZ();
+                    searchRadius = 128;
                 }
             }
         }
         
-        System.out.println("[ProjectPoseidon World.c] Using default spawn search logic for non-sky world.");
-        for (j = 0; !this.canSpawn(i, j); j += this.random.nextInt(64) - this.random.nextInt(64)) {
-            i += this.random.nextInt(64) - this.random.nextInt(64);
-        }
-        this.worldData.setSpawn(i, b0, j); 
-        System.out.println("[ProjectPoseidon World.c] Initial spawn (default search or non-sky) set to: " + i + "," + b0 + "," + j);
+        ChunkCoordinates safeSpawn = this.findSafeSpawnNear(preferredX, preferredZ, searchRadius, preferShorelineSpawn);
+        this.worldData.setSpawn(safeSpawn.x, safeSpawn.y, safeSpawn.z);
+        System.out.println("[ProjectPoseidon World.c] Initial spawn finalized to: " + safeSpawn.x + "," + safeSpawn.y + "," + safeSpawn.z);
         this.isLoading = false;
+    }
+
+    private int findClassicSpawnY(int x, int z, int seaLevel) {
+        if (x < 0 || x > 255 || z < 0 || z > 255) {
+            return -1;
+        }
+
+        int y = this.f(x, z); // top solid block + 1
+        if (y <= seaLevel || y >= 126) {
+            return -1;
+        }
+
+        int groundId = this.getTypeId(x, y - 1, z);
+        if (groundId <= 0 || groundId >= Block.byId.length) {
+            return -1;
+        }
+
+        Block ground = Block.byId[groundId];
+        if (ground == null || !ground.material.isSolid() || ground.material.isLiquid()) {
+            return -1;
+        }
+
+        // Spawn location must be dry and have headroom.
+        if (this.getTypeId(x, y, z) != 0 || this.getTypeId(x, y + 1, z) != 0) {
+            return -1;
+        }
+
+        return y;
+    }
+
+    private int findSkySpawnY(int x, int z, int minY, int maxY) {
+        int y = this.e(x, z); // air block above top solid block
+        if (y < minY || y > maxY) {
+            return -1;
+        }
+
+        int groundId = this.getTypeId(x, y - 1, z);
+        if (groundId <= 0 || groundId >= Block.byId.length) {
+            return -1;
+        }
+
+        Block ground = Block.byId[groundId];
+        if (ground == null || !ground.material.isSolid() || ground.material.isLiquid()) {
+            return -1;
+        }
+
+        if (this.getTypeId(x, y, z) != 0 || this.getTypeId(x, y + 1, z) != 0) {
+            return -1;
+        }
+
+        return y;
+    }
+
+    private int computeSkyIslandSupportScore(int x, int z, int minY, int maxY) {
+        int radius = 2;
+        int score = 0;
+
+        for (int dx = -radius; dx <= radius; ++dx) {
+            for (int dz = -radius; dz <= radius; ++dz) {
+                if (this.findSkySpawnY(x + dx, z + dz, minY, maxY) > 0) {
+                    ++score;
+                }
+            }
+        }
+
+        return score;
+    }
+
+    private int computeClassicInlandScore(int x, int z, int seaLevel) {
+        int radius = 3;
+        int score = 0;
+
+        for (int dx = -radius; dx <= radius; ++dx) {
+            for (int dz = -radius; dz <= radius; ++dz) {
+                if (this.findClassicSpawnY(x + dx, z + dz, seaLevel) > 0) {
+                    ++score;
+                }
+            }
+        }
+
+        return score;
+    }
+
+    private boolean isSafeSpawnFloorBlock(int blockId) {
+        if (blockId <= 0 || blockId >= Block.byId.length) {
+            return false;
+        }
+
+        if (blockId == Block.FIRE.id || blockId == Block.CACTUS.id || blockId == Block.LAVA.id || blockId == Block.STATIONARY_LAVA.id) {
+            return false;
+        }
+
+        Block block = Block.byId[blockId];
+        if (block == null || !block.material.isSolid() || block.material.isLiquid()) {
+            return false;
+        }
+
+        return Block.o[blockId] || blockId == Block.SOUL_SAND.id;
+    }
+
+    private boolean isSafeSpawnSpaceBlock(int blockId) {
+        if (blockId == 0) {
+            return true;
+        }
+
+        if (blockId < 0 || blockId >= Block.byId.length) {
+            return false;
+        }
+
+        if (blockId == Block.FIRE.id || blockId == Block.CACTUS.id || blockId == Block.WEB.id || blockId == Block.LAVA.id || blockId == Block.STATIONARY_LAVA.id) {
+            return false;
+        }
+
+        Block block = Block.byId[blockId];
+        if (block == null) {
+            return true;
+        }
+
+        return !block.material.isSolid() && !block.material.isLiquid();
+    }
+
+    public boolean isSafePlayerSpawnAt(int x, int y, int z) {
+        if (y <= 1 || y >= 126) {
+            return false;
+        }
+
+        if (!this.isSafeSpawnFloorBlock(this.getTypeId(x, y - 1, z))) {
+            return false;
+        }
+
+        if (!this.isSafeSpawnSpaceBlock(this.getTypeId(x, y, z))) {
+            return false;
+        }
+
+        return this.isSafeSpawnSpaceBlock(this.getTypeId(x, y + 1, z));
+    }
+
+    private int findSafeSpawnYAtColumn(int x, int z) {
+        int y = this.f(x, z);
+        if (y <= 1 || y >= 126) {
+            y = this.e(x, z);
+        }
+
+        if (y <= 1 || y >= 126) {
+            return -1;
+        }
+
+        return this.isSafePlayerSpawnAt(x, y, z) ? y : -1;
+    }
+
+    private int computeSpawnSupportScore(int x, int z) {
+        int score = 0;
+        int radius = 2;
+
+        for (int dx = -radius; dx <= radius; ++dx) {
+            for (int dz = -radius; dz <= radius; ++dz) {
+                if (this.findSafeSpawnYAtColumn(x + dx, z + dz) > 0) {
+                    ++score;
+                }
+            }
+        }
+
+        return score;
+    }
+
+    private int computeSpawnColumnScore(int x, int y, int z, boolean preferShorelineSpawn) {
+        int score = 0;
+        int groundId = this.getTypeId(x, y - 1, z);
+
+        if (preferShorelineSpawn) {
+            if (groundId == Block.SAND.id) {
+                score += 700;
+            } else if (groundId == Block.GRAVEL.id) {
+                score += 220;
+            } else {
+                score -= 50;
+            }
+        }
+
+        if (groundId == Block.GRASS.id) {
+            score += 160;
+        } else if (groundId == Block.DIRT.id) {
+            score += 120;
+        } else if (groundId == Block.STONE.id || groundId == Block.SANDSTONE.id) {
+            score += 100;
+        } else if (groundId == Block.NETHERRACK.id) {
+            score += 80;
+        } else if (groundId == Block.SNOW_BLOCK.id || groundId == Block.ICE.id) {
+            score += 60;
+        }
+
+        score += this.computeSpawnSupportScore(x, z) * 25;
+
+        int preferredY = this.worldProvider instanceof WorldProviderHell ? 64 : 70;
+        score -= Math.abs(y - preferredY);
+        return score;
+    }
+
+    private ChunkCoordinates buildEmergencySpawnPlatform(int centerX, int centerZ, boolean preferShorelineSpawn) {
+        int terrainType = this.worldData != null ? this.worldData.getTerrainType() : 0;
+        int x = centerX;
+        int z = centerZ;
+
+        if (terrainType == 6) {
+            x = Math.max(1, Math.min(254, x));
+            z = Math.max(1, Math.min(254, z));
+        }
+
+        int y = this.findSafeSpawnYAtColumn(x, z);
+        if (y <= 1) {
+            y = this.f(x, z);
+            if (y <= 1 || y >= 126) {
+                y = this.e(x, z);
+            }
+        }
+
+        if (y <= 1 || y >= 126) {
+            y = this.worldProvider instanceof WorldProviderHell ? 64 : 70;
+        }
+
+        if (y < 2) {
+            y = 2;
+        } else if (y > 125) {
+            y = 125;
+        }
+
+        int foundationY = y - 1;
+        int foundationId;
+        if (this.worldProvider instanceof WorldProviderHell) {
+            foundationId = Block.NETHERRACK.id;
+        } else if (this.worldData != null && this.worldData.getTerrainType() == 3) {
+            foundationId = Block.STONE.id;
+        } else if (preferShorelineSpawn) {
+            foundationId = Block.SAND.id;
+        } else {
+            foundationId = Block.GRASS.id;
+        }
+
+        for (int dx = -1; dx <= 1; ++dx) {
+            for (int dz = -1; dz <= 1; ++dz) {
+                int px = x + dx;
+                int pz = z + dz;
+
+                if (terrainType == 6 && (px < 0 || px > 255 || pz < 0 || pz > 255)) {
+                    continue;
+                }
+
+                if (!this.isSafeSpawnFloorBlock(this.getTypeId(px, foundationY, pz))) {
+                    this.setRawTypeId(px, foundationY, pz, foundationId);
+                }
+
+                this.setRawTypeId(px, y, pz, 0);
+                this.setRawTypeId(px, y + 1, pz, 0);
+            }
+        }
+
+        return new ChunkCoordinates(x, y, z);
+    }
+
+    public ChunkCoordinates findSafeSpawnNear(int centerX, int centerZ, int maxRadius, boolean preferShorelineSpawn) {
+        int terrainType = this.worldData != null ? this.worldData.getTerrainType() : 0;
+        int cx = centerX;
+        int cz = centerZ;
+
+        if (terrainType == 6) {
+            cx = Math.max(1, Math.min(254, cx));
+            cz = Math.max(1, Math.min(254, cz));
+        }
+
+        int radiusLimit = Math.max(0, maxRadius);
+        int step = 2;
+        int bestX = cx;
+        int bestY = -1;
+        int bestZ = cz;
+        int bestScore = Integer.MIN_VALUE;
+        int bestDist = Integer.MAX_VALUE;
+        int targetScore = preferShorelineSpawn ? 900 : 500;
+
+        for (int r = 0; r <= radiusLimit; r += step) {
+            if (r == 0) {
+                int y = this.findSafeSpawnYAtColumn(cx, cz);
+                if (y > 0) {
+                    int score = this.computeSpawnColumnScore(cx, y, cz, preferShorelineSpawn);
+                    bestX = cx;
+                    bestY = y;
+                    bestZ = cz;
+                    bestScore = score;
+                    bestDist = 0;
+                }
+            } else {
+                for (int x = cx - r; x <= cx + r; x += step) {
+                    int zTop = cz + r;
+                    int zBottom = cz - r;
+
+                    if (terrainType != 6 || (x >= 0 && x <= 255 && zTop >= 0 && zTop <= 255)) {
+                        int yTop = this.findSafeSpawnYAtColumn(x, zTop);
+                        if (yTop > 0) {
+                            int score = this.computeSpawnColumnScore(x, yTop, zTop, preferShorelineSpawn);
+                            int dist = Math.abs(x - cx) + Math.abs(zTop - cz);
+                            if (score > bestScore || (score == bestScore && dist < bestDist)) {
+                                bestX = x;
+                                bestY = yTop;
+                                bestZ = zTop;
+                                bestScore = score;
+                                bestDist = dist;
+                            }
+                        }
+                    }
+
+                    if (zBottom != zTop && (terrainType != 6 || (x >= 0 && x <= 255 && zBottom >= 0 && zBottom <= 255))) {
+                        int yBottom = this.findSafeSpawnYAtColumn(x, zBottom);
+                        if (yBottom > 0) {
+                            int score = this.computeSpawnColumnScore(x, yBottom, zBottom, preferShorelineSpawn);
+                            int dist = Math.abs(x - cx) + Math.abs(zBottom - cz);
+                            if (score > bestScore || (score == bestScore && dist < bestDist)) {
+                                bestX = x;
+                                bestY = yBottom;
+                                bestZ = zBottom;
+                                bestScore = score;
+                                bestDist = dist;
+                            }
+                        }
+                    }
+                }
+
+                for (int z = cz - r + step; z <= cz + r - step; z += step) {
+                    int xRight = cx + r;
+                    int xLeft = cx - r;
+
+                    if (terrainType != 6 || (xRight >= 0 && xRight <= 255 && z >= 0 && z <= 255)) {
+                        int yRight = this.findSafeSpawnYAtColumn(xRight, z);
+                        if (yRight > 0) {
+                            int score = this.computeSpawnColumnScore(xRight, yRight, z, preferShorelineSpawn);
+                            int dist = Math.abs(xRight - cx) + Math.abs(z - cz);
+                            if (score > bestScore || (score == bestScore && dist < bestDist)) {
+                                bestX = xRight;
+                                bestY = yRight;
+                                bestZ = z;
+                                bestScore = score;
+                                bestDist = dist;
+                            }
+                        }
+                    }
+
+                    if (xLeft != xRight && (terrainType != 6 || (xLeft >= 0 && xLeft <= 255 && z >= 0 && z <= 255))) {
+                        int yLeft = this.findSafeSpawnYAtColumn(xLeft, z);
+                        if (yLeft > 0) {
+                            int score = this.computeSpawnColumnScore(xLeft, yLeft, z, preferShorelineSpawn);
+                            int dist = Math.abs(xLeft - cx) + Math.abs(z - cz);
+                            if (score > bestScore || (score == bestScore && dist < bestDist)) {
+                                bestX = xLeft;
+                                bestY = yLeft;
+                                bestZ = z;
+                                bestScore = score;
+                                bestDist = dist;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (bestY > 0 && bestScore >= targetScore && r >= 32) {
+                break;
+            }
+        }
+
+        if (bestY > 0) {
+            return new ChunkCoordinates(bestX, bestY, bestZ);
+        }
+
+        return this.buildEmergencySpawnPlatform(cx, cz, preferShorelineSpawn);
     }
 
     public int a(int i, int j) {
@@ -960,26 +1483,30 @@ public class World implements IBlockAccess {
     }
 
     public void makeSound(Entity entity, String s, float f, float f1) {
+        String resolved = net.minecraft.server.registry.SoundEventResolver.resolve(s);
         for (int i = 0; i < this.u.size(); ++i) {
-            ((IWorldAccess) this.u.get(i)).a(s, entity.locX, entity.locY - (double) entity.height, entity.locZ, f, f1);
+            ((IWorldAccess) this.u.get(i)).a(resolved, entity.locX, entity.locY - (double) entity.height, entity.locZ, f, f1);
         }
     }
 
     public void makeSound(double d0, double d1, double d2, String s, float f, float f1) {
+        String resolved = net.minecraft.server.registry.SoundEventResolver.resolve(s);
         for (int i = 0; i < this.u.size(); ++i) {
-            ((IWorldAccess) this.u.get(i)).a(s, d0, d1, d2, f, f1);
+            ((IWorldAccess) this.u.get(i)).a(resolved, d0, d1, d2, f, f1);
         }
     }
 
     public void a(String s, int i, int j, int k) {
+        String resolved = net.minecraft.server.registry.SoundEventResolver.resolve(s);
         for (int l = 0; l < this.u.size(); ++l) {
-            ((IWorldAccess) this.u.get(l)).a(s, i, j, k);
+            ((IWorldAccess) this.u.get(l)).a(resolved, i, j, k);
         }
     }
 
     public void a(String s, double d0, double d1, double d2, double d3, double d4, double d5) {
+        String resolved = net.minecraft.server.registry.ParticleTypeRegistryApi.resolveLegacyKey(s);
         for (int i = 0; i < this.u.size(); ++i) {
-            ((IWorldAccess) this.u.get(i)).a(s, d0, d1, d2, d3, d4, d5);
+            ((IWorldAccess) this.u.get(i)).a(resolved, d0, d1, d2, d3, d4, d5);
         }
     }
 
@@ -1018,6 +1545,12 @@ public class World implements IBlockAccess {
             }
         }
         // CraftBukkit end
+
+        EntitySpawnEvent nmsSpawnEvent = new EntitySpawnEvent(entity, this, spawnReason == null ? "UNKNOWN" : spawnReason.name());
+        EventBus.global().publish(nmsSpawnEvent);
+        if (nmsSpawnEvent.isCancelled()) {
+            return false;
+        }
 
         if (!flag && !this.isChunkLoaded(i, j)) {
             return false;
@@ -1185,6 +1718,33 @@ public class World implements IBlockAccess {
 
         return -1;
     }
+    private static long chunkKeyFromChunkCoords(int chunkX, int chunkZ) {
+        return ((long) chunkX & 4294967295L) | (((long) chunkZ & 4294967295L) << 32);
+    }
+
+    private void indexScheduledTick(NextTickListEntry nextticklistentry) {
+        Long key = Long.valueOf(chunkKeyFromChunkCoords(nextticklistentry.a >> 4, nextticklistentry.c >> 4));
+        Set chunkTicks = (Set) this.scheduledTickChunkIndex.get(key);
+
+        if (chunkTicks == null) {
+            chunkTicks = new HashSet();
+            this.scheduledTickChunkIndex.put(key, chunkTicks);
+        }
+
+        chunkTicks.add(nextticklistentry);
+    }
+
+    private void unindexScheduledTick(NextTickListEntry nextticklistentry) {
+        Long key = Long.valueOf(chunkKeyFromChunkCoords(nextticklistentry.a >> 4, nextticklistentry.c >> 4));
+        Set chunkTicks = (Set) this.scheduledTickChunkIndex.get(key);
+
+        if (chunkTicks != null) {
+            chunkTicks.remove(nextticklistentry);
+            if (chunkTicks.isEmpty()) {
+                this.scheduledTickChunkIndex.remove(key);
+            }
+        }
+    }
 
     public void c(int i, int j, int k, int l, int i1) {
         NextTickListEntry nextticklistentry = new NextTickListEntry(i, j, k, l);
@@ -1201,15 +1761,57 @@ public class World implements IBlockAccess {
         } else {
             if (this.a(i - b0, j - b0, k - b0, i + b0, j + b0, k + b0)) {
                 if (l > 0) {
-                    nextticklistentry.a((long) i1 + this.worldData.f());
+                    nextticklistentry.a((long) i1 + this.blockTickTime);
                 }
 
                 if (!this.F.contains(nextticklistentry)) {
                     this.F.add(nextticklistentry);
                     this.E.add(nextticklistentry);
+                    this.indexScheduledTick(nextticklistentry);
                 }
             }
         }
+    }
+
+    public List getPendingBlockTicksForChunk(int chunkX, int chunkZ) {
+        Set chunkTicks = (Set) this.scheduledTickChunkIndex.get(Long.valueOf(chunkKeyFromChunkCoords(chunkX, chunkZ)));
+
+        if (chunkTicks == null || chunkTicks.isEmpty()) {
+            return null;
+        }
+
+        ArrayList copiedTicks = new ArrayList(chunkTicks.size());
+        Iterator iterator = chunkTicks.iterator();
+
+        while (iterator.hasNext()) {
+            NextTickListEntry nextticklistentry = (NextTickListEntry) iterator.next();
+            NextTickListEntry copy = new NextTickListEntry(nextticklistentry.a, nextticklistentry.b, nextticklistentry.c, nextticklistentry.d);
+
+            copy.a(nextticklistentry.e);
+            copiedTicks.add(copy);
+        }
+
+        return copiedTicks;
+    }
+
+    public void scheduleBlockUpdateFromLoad(int i, int j, int k, int l, int i1) {
+        if (l <= 0 || l >= Block.byId.length || Block.byId[l] == null) {
+            return;
+        }
+
+        NextTickListEntry nextticklistentry = new NextTickListEntry(i, j, k, l);
+        long delay = i1 < 0 ? 0L : (long) i1;
+
+        nextticklistentry.a(this.blockTickTime + delay);
+        if (!this.F.contains(nextticklistentry)) {
+                    this.F.add(nextticklistentry);
+                    this.E.add(nextticklistentry);
+                    this.indexScheduledTick(nextticklistentry);
+                }
+    }
+
+    public long getBlockTickTime() {
+        return this.blockTickTime;
     }
 
     public void cleanUp() {
@@ -1937,6 +2539,7 @@ public class World implements IBlockAccess {
             this.saveTickCounter = 0;
         }
 
+        this.blockTickTime++;
         this.worldData.a(nextTickTime); // setTime() using the (conditionally) incremented value
 
         this.a(false); // updateEntities (original call)
@@ -2227,13 +2830,13 @@ public class World implements IBlockAccess {
             for (int j = 0; j < i; ++j) {
                 NextTickListEntry nextticklistentry = (NextTickListEntry) this.E.first();
 
-                // Project Poseidon - Don't check time if doDayNightCycle is false, so water/lava can still flow
-                if (!flag && this.worldData.getDoDayNightCycle() && nextticklistentry.e > this.worldData.f()) {
+                if (!flag && nextticklistentry.e > this.blockTickTime) {
                     break;
                 }
 
                 this.E.remove(nextticklistentry);
                 this.F.remove(nextticklistentry);
+                this.unindexScheduledTick(nextticklistentry);
                 byte b0 = 8;
 
                 if (this.a(nextticklistentry.a - b0, nextticklistentry.b - b0, nextticklistentry.c - b0, nextticklistentry.a + b0, nextticklistentry.b + b0, nextticklistentry.c + b0)) {
@@ -2395,9 +2998,15 @@ public class World implements IBlockAccess {
     }
 
     public boolean isBlockFacePowered(int i, int j, int k, int l) {
-        int i1 = this.getTypeId(i, j, k);
+        int blockId = this.getTypeId(i, j, k);
+        Block block = blockId > 0 && blockId < Block.byId.length ? Block.byId[blockId] : null;
 
-        return i1 == 0 ? false : Block.byId[i1].d(this, i, j, k, l);
+        // Preserve vanilla wire semantics while wire is recalculating.
+        if (block == Block.REDSTONE_WIRE) {
+            return block.d(this, i, j, k, l);
+        }
+
+        return BlockCapabilityRegistryApi.getDirectRedstonePower(this, i, j, k, l) > 0;
     }
 
     public boolean isBlockPowered(int i, int j, int k) {
@@ -2405,13 +3014,25 @@ public class World implements IBlockAccess {
     }
 
     public boolean isBlockFaceIndirectlyPowered(int i, int j, int k, int l) {
+        int blockId = this.getTypeId(i, j, k);
+        Block block = blockId > 0 && blockId < Block.byId.length ? Block.byId[blockId] : null;
+
+        // Preserve vanilla wire semantics while wire is recalculating.
+        if (block == Block.REDSTONE_WIRE) {
+            return block.a(this, i, j, k, l);
+        }
+
+        // Capability-driven full-cube sources (e.g. redstone block) must emit even when opaque.
+        // Keep non-opaque sources (levers/buttons/torches) on the indirect-power path.
+        if (BlockCapabilityRegistryApi.isRedstonePowerSource(block) && this.e(i, j, k)) {
+            return BlockCapabilityRegistryApi.getDirectRedstonePower(this, i, j, k, l) > 0;
+        }
+
         if (this.e(i, j, k)) {
             return this.isBlockPowered(i, j, k);
-        } else {
-            int i1 = this.getTypeId(i, j, k);
-
-            return i1 == 0 ? false : Block.byId[i1].a(this, i, j, k, l);
         }
+
+        return BlockCapabilityRegistryApi.getIndirectRedstonePower(this, i, j, k, l) > 0;
     }
 
     public boolean isBlockIndirectlyPowered(int i, int j, int k) {
@@ -2512,14 +3133,6 @@ public class World implements IBlockAccess {
     }
 
     public void setTimeAndFixTicklists(long i) {
-        long j = i - this.worldData.f();
-
-        NextTickListEntry nextticklistentry;
-
-        for (Iterator iterator = this.F.iterator(); iterator.hasNext(); nextticklistentry.e += j) {
-            nextticklistentry = (NextTickListEntry) iterator.next();
-        }
-
         this.setTime(i);
     }
 

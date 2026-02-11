@@ -12,7 +12,7 @@ public final class JukeboxSongRegistryBootstrap {
     
     private JukeboxSongRegistryBootstrap() {}
     
-    public static void initialize() {
+    public static synchronized void initialize() {
         if (initialized) return;
         initialized = true;
         
@@ -21,12 +21,12 @@ public final class JukeboxSongRegistryBootstrap {
         registerDisc("13", "streaming/13", 178, Item.GOLD_RECORD.id);
         registerDisc("cat", "streaming/cat", 185, Item.GREEN_RECORD.id);
         
-        System.out.println("[JukeboxSongRegistryBootstrap] Registered " + Registries.JUKEBOX_SONG.keys().size() + " jukebox songs");
+        System.out.println("[JukeboxSongRegistryBootstrap] Registered " + JukeboxSongRegistryApi.size() + " jukebox songs");
     }
     
     private static void registerDisc(String name, String soundPath, int lengthInSeconds, int itemId) {
         JukeboxSong song = new JukeboxSong(name, soundPath, lengthInSeconds, itemId);
-        Registries.JUKEBOX_SONG.register(
+        JukeboxSongRegistryApi.register(
             new ResourceLocation("minecraft", name),
             song
         );
@@ -50,10 +50,9 @@ public final class JukeboxSongRegistryBootstrap {
      */
     public static void registerCustomDisc(String namespace, String name, String soundPath, int lengthInSeconds, int itemId) {
         JukeboxSong song = new JukeboxSong(name, soundPath, lengthInSeconds, itemId);
-        Registries.JUKEBOX_SONG.register(
+        JukeboxSongRegistryApi.register(
             new ResourceLocation(namespace, name),
             song
         );
     }
 }
-

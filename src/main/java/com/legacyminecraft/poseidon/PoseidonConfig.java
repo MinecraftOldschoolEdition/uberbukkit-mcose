@@ -230,6 +230,68 @@ public class PoseidonConfig extends Configuration {
         generateConfigOption("settings.entity-tracking.projectile-update-frequency-info", "How often (in ticks) arrows/snowballs/eggs/fireballs are sent to clients. Default: 3");
         generateConfigOption("settings.entity-tracking.item-update-frequency", 10);
         generateConfigOption("settings.entity-tracking.item-update-frequency-info", "How often (in ticks) dropped item positions are sent to clients. Default: 10");
+        generateConfigOption("settings.entity-tracking.action-priority.enabled", true);
+        generateConfigOption("settings.entity-tracking.action-priority.enabled-info", "When enabled, player interaction responsiveness is prioritized over entity tracking smoothness during startup and packet backpressure.");
+        generateConfigOption("settings.entity-tracking.action-priority.mode", "adaptive");
+        generateConfigOption("settings.entity-tracking.action-priority.mode-info", "Tracking pressure control mode. adaptive = queue-aware hysteresis, off = disabled.");
+        generateConfigOption("settings.entity-tracking.action-priority.startup-seconds", 20);
+        generateConfigOption("settings.entity-tracking.action-priority.startup-seconds-info", "Startup pressure window in seconds before adaptive queue thresholds take over.");
+        generateConfigOption("settings.entity-tracking.action-priority.enter-low-queue", 96);
+        generateConfigOption("settings.entity-tracking.action-priority.exit-low-queue", 48);
+        generateConfigOption("settings.entity-tracking.action-priority.enter-high-queue", 20);
+        generateConfigOption("settings.entity-tracking.action-priority.exit-high-queue", 8);
+        generateConfigOption("settings.entity-tracking.action-priority.enter-player-queued", 96);
+        generateConfigOption("settings.entity-tracking.action-priority.exit-player-queued", 48);
+        generateConfigOption("settings.entity-tracking.action-priority.min-pressure-ticks", 10);
+        generateConfigOption("settings.entity-tracking.action-priority.min-recovery-ticks", 80);
+        generateConfigOption("settings.entity-tracking.action-priority.near-chunk-radius", 2);
+        generateConfigOption("settings.entity-tracking.action-priority.mid-chunk-radius", 4);
+        generateConfigOption("settings.entity-tracking.action-priority.mob-update-frequency", 4);
+        generateConfigOption("settings.entity-tracking.action-priority.vehicle-update-frequency", 4);
+
+        // Startup readiness gate and warmup policy
+        generateConfigOption("settings.startup-readiness.enabled", true);
+        generateConfigOption("settings.startup-readiness.info", "If enabled, server startup blocks on chunk warmup so 'Done' means ready for players.");
+        generateConfigOption("settings.startup-readiness.hold-login-enabled", true);
+        generateConfigOption("settings.startup-readiness.hold-login-enabled-info", "If enabled, players connecting before readiness are held and auto-joined after warmup.");
+        generateConfigOption("settings.startup-readiness.overworld-radius-chunks", 14);
+        generateConfigOption("settings.startup-readiness.overworld-radius-chunks-info", "Warmup radius in chunks around overworld spawn before startup is marked ready.");
+        generateConfigOption("settings.startup-readiness.nether-radius-chunks", 8);
+        generateConfigOption("settings.startup-readiness.nether-radius-chunks-info", "Warmup radius in chunks around nether spawn before startup is marked ready.");
+        generateConfigOption("settings.startup-readiness.joiner-extra-radius-chunks", 4);
+        generateConfigOption("settings.startup-readiness.joiner-extra-radius-chunks-info", "Additional warmup ring around overworld spawn for first-join movement headroom.");
+        generateConfigOption("settings.startup-readiness.max-hold-seconds", 60);
+        generateConfigOption("settings.startup-readiness.max-hold-seconds-info", "Maximum seconds to hold pre-ready logins before disconnecting with warmup message.");
+        generateConfigOption("settings.startup-readiness.progress-log-interval-seconds", 2);
+        generateConfigOption("settings.startup-readiness.progress-log-interval-seconds-info", "How often startup warmup progress is logged.");
+        generateConfigOption("settings.startup-readiness.target-warmup-seconds", 35);
+        generateConfigOption("settings.startup-readiness.target-warmup-seconds-info", "Operator target budget for startup warmup. Informational, does not enforce timing.");
+
+        // Tick catch-up clamp to avoid simulation time warp after stalls
+        generateConfigOption("settings.tick-catchup.enabled", true);
+        generateConfigOption("settings.tick-catchup.enabled-info", "If enabled, caps accumulated tick backlog to prevent temporary 2x simulation bursts.");
+        generateConfigOption("settings.tick-catchup.max-backlog-ms", 200);
+        generateConfigOption("settings.tick-catchup.max-backlog-ms-info", "Maximum backlog in milliseconds allowed for catch-up ticking.");
+        generateConfigOption("settings.tick-catchup.warn-interval-seconds", 30);
+        generateConfigOption("settings.tick-catchup.warn-interval-seconds-info", "Minimum seconds between backlog-drop warning logs.");
+
+        // Profiler 2.0 diagnostics settings
+        generateConfigOption("settings.profiler.always-on.enabled", true);
+        generateConfigOption("settings.profiler.always-on.info", "Collect low-overhead telemetry continuously so intermittent lag spikes are captured.");
+        generateConfigOption("settings.profiler.ring-buffer.seconds", 300);
+        generateConfigOption("settings.profiler.ring-buffer.info", "How many seconds of rolling telemetry to retain for snapshots and reports.");
+        generateConfigOption("settings.profiler.auto-snapshot.enabled", true);
+        generateConfigOption("settings.profiler.auto-snapshot.info", "Automatically capture snapshots when tick time exceeds threshold.");
+        generateConfigOption("settings.profiler.auto-snapshot.tick-threshold-ms", 75);
+        generateConfigOption("settings.profiler.auto-snapshot.tick-threshold-ms-info", "Tick-time threshold in milliseconds that triggers auto snapshots.");
+        generateConfigOption("settings.profiler.auto-snapshot.cooldown-seconds", 30);
+        generateConfigOption("settings.profiler.auto-snapshot.cooldown-seconds-info", "Minimum seconds between auto snapshots.");
+        generateConfigOption("settings.profiler.top-offenders.count", 10);
+        generateConfigOption("settings.profiler.top-offenders.count-info", "How many top per-player offenders to include in reports.");
+        generateConfigOption("settings.profiler.deep.packet-breakdown.enabled", true);
+        generateConfigOption("settings.profiler.deep.per-player.enabled", true);
+        generateConfigOption("settings.profiler.report.include-json", true);
+        generateConfigOption("settings.profiler.report.include-text", true);
 
         //Tree Leave Destroy Blacklist
         if (Boolean.valueOf(String.valueOf(getConfigOption("world.settings.block-tree-growth.enabled", true)))) {

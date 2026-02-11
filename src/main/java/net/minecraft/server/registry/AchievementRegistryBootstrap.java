@@ -1,87 +1,69 @@
 package net.minecraft.server.registry;
 
 import net.minecraft.server.AchievementList;
-import net.minecraft.server.util.ResourceLocation;
 
 /**
  * Bootstrap for the Achievement registry.
- * Registers all built-in achievements.
+ * Registers the built-in achievements.
  */
 public final class AchievementRegistryBootstrap {
     private static boolean initialized = false;
-    
-    private AchievementRegistryBootstrap() {}
-    
-    public static void initialize() {
-        if (initialized) return;
+
+    private AchievementRegistryBootstrap() {
+    }
+
+    public static synchronized void initialize() {
+        if (initialized) {
+            return;
+        }
         initialized = true;
-        
-        // === CORE PROGRESSION ===
-        Registries.ACHIEVEMENT.register(new ResourceLocation("minecraft", "open_inventory"), AchievementList.openInventory);
-        Registries.ACHIEVEMENT.register(new ResourceLocation("minecraft", "mine_wood"), AchievementList.mineWood);
-        Registries.ACHIEVEMENT.register(new ResourceLocation("minecraft", "build_workbench"), AchievementList.buildWorkBench);
-        
-        // === MINING PATH ===
-        Registries.ACHIEVEMENT.register(new ResourceLocation("minecraft", "build_pickaxe"), AchievementList.buildPickaxe);
-        Registries.ACHIEVEMENT.register(new ResourceLocation("minecraft", "build_better_pickaxe"), AchievementList.buildBetterPickaxe);
-        Registries.ACHIEVEMENT.register(new ResourceLocation("minecraft", "build_furnace"), AchievementList.buildFurnace);
-        Registries.ACHIEVEMENT.register(new ResourceLocation("minecraft", "acquire_iron"), AchievementList.acquireIron);
-        
-        // === COOKING BRANCH ===
-        Registries.ACHIEVEMENT.register(new ResourceLocation("minecraft", "cook_fish"), AchievementList.cookFish);
-        Registries.ACHIEVEMENT.register(new ResourceLocation("minecraft", "cook_bacon"), AchievementList.cookBacon);
-        
-        // === DIAMONDS & NETHER BRANCH ===
-        Registries.ACHIEVEMENT.register(new ResourceLocation("minecraft", "diamonds"), AchievementList.diamonds);
-        Registries.ACHIEVEMENT.register(new ResourceLocation("minecraft", "overkill"), AchievementList.overkill);
-        Registries.ACHIEVEMENT.register(new ResourceLocation("minecraft", "full_diamond"), AchievementList.fullDiamond);
-        Registries.ACHIEVEMENT.register(new ResourceLocation("minecraft", "jukebox"), AchievementList.jukebox);
-        Registries.ACHIEVEMENT.register(new ResourceLocation("minecraft", "obsidian"), AchievementList.obsidian);
-        Registries.ACHIEVEMENT.register(new ResourceLocation("minecraft", "portal"), AchievementList.portal);
-        Registries.ACHIEVEMENT.register(new ResourceLocation("minecraft", "ghast_hunter"), AchievementList.ghastHunter);
-        Registries.ACHIEVEMENT.register(new ResourceLocation("minecraft", "blazing_hell"), AchievementList.blazingHell);
-        
-        // === ARMOR BRANCH ===
-        Registries.ACHIEVEMENT.register(new ResourceLocation("minecraft", "full_iron"), AchievementList.fullIron);
-        
-        // === BUCKETS BRANCH ===
-        Registries.ACHIEVEMENT.register(new ResourceLocation("minecraft", "hot_stuff"), AchievementList.hotStuff);
-        
-        // === WOOL & ANIMALS BRANCH ===
-        Registries.ACHIEVEMENT.register(new ResourceLocation("minecraft", "shear_sheep"), AchievementList.shearSheep);
-        Registries.ACHIEVEMENT.register(new ResourceLocation("minecraft", "sleep_in_bed"), AchievementList.sleepInBed);
-        Registries.ACHIEVEMENT.register(new ResourceLocation("minecraft", "rainbow_wool"), AchievementList.rainbowWool);
-        
-        // === REDSTONE BRANCH ===
-        Registries.ACHIEVEMENT.register(new ResourceLocation("minecraft", "repeater"), AchievementList.repeater);
-        Registries.ACHIEVEMENT.register(new ResourceLocation("minecraft", "piston"), AchievementList.piston);
-        
-        // === TRAVEL BRANCH ===
-        Registries.ACHIEVEMENT.register(new ResourceLocation("minecraft", "on_a_rail"), AchievementList.onARail);
-        
-        // === FARMING BRANCH ===
-        Registries.ACHIEVEMENT.register(new ResourceLocation("minecraft", "build_hoe"), AchievementList.buildHoe);
-        Registries.ACHIEVEMENT.register(new ResourceLocation("minecraft", "grow_wheat"), AchievementList.growWheat);
-        Registries.ACHIEVEMENT.register(new ResourceLocation("minecraft", "make_bread"), AchievementList.makeBread);
-        Registries.ACHIEVEMENT.register(new ResourceLocation("minecraft", "bake_cake"), AchievementList.bakeCake);
-        
-        // === COMBAT BRANCH ===
-        Registries.ACHIEVEMENT.register(new ResourceLocation("minecraft", "build_sword"), AchievementList.buildSword);
-        Registries.ACHIEVEMENT.register(new ResourceLocation("minecraft", "kill_enemy"), AchievementList.killEnemy);
-        Registries.ACHIEVEMENT.register(new ResourceLocation("minecraft", "fly_pig"), AchievementList.flyPig);
-        Registries.ACHIEVEMENT.register(new ResourceLocation("minecraft", "explosion"), AchievementList.explosion);
-        Registries.ACHIEVEMENT.register(new ResourceLocation("minecraft", "kill_cow"), AchievementList.killCow);
-        Registries.ACHIEVEMENT.register(new ResourceLocation("minecraft", "egg_hunt"), AchievementList.eggHunt);
-        Registries.ACHIEVEMENT.register(new ResourceLocation("minecraft", "bookshelf"), AchievementList.bookshelf);
-        
-        // === ARCHERY BRANCH ===
-        Registries.ACHIEVEMENT.register(new ResourceLocation("minecraft", "build_bow"), AchievementList.buildBow);
-        Registries.ACHIEVEMENT.register(new ResourceLocation("minecraft", "snipe_skeleton"), AchievementList.snipeSkeleton);
-        
-        // === BUILDING & EXPLORATION BRANCH ===
-        Registries.ACHIEVEMENT.register(new ResourceLocation("minecraft", "craft_map"), AchievementList.craftMap);
-        Registries.ACHIEVEMENT.register(new ResourceLocation("minecraft", "boat_travel"), AchievementList.boatTravel);
-        
-        System.out.println("[AchievementRegistryBootstrap] Registered " + Registries.ACHIEVEMENT.keys().size() + " achievements");
+
+        AchievementRegistryApi.register(AchievementKeys.OPEN_INVENTORY, AchievementList.openInventory);
+        AchievementRegistryApi.register(AchievementKeys.MINE_WOOD, AchievementList.mineWood);
+        AchievementRegistryApi.register(AchievementKeys.BUILD_WORKBENCH, AchievementList.buildWorkBench);
+        AchievementRegistryApi.register(AchievementKeys.BUILD_PICKAXE, AchievementList.buildPickaxe);
+        AchievementRegistryApi.register(AchievementKeys.BUILD_FURNACE, AchievementList.buildFurnace);
+        AchievementRegistryApi.register(AchievementKeys.ACQUIRE_IRON, AchievementList.acquireIron);
+        AchievementRegistryApi.register(AchievementKeys.BUILD_BETTER_PICKAXE, AchievementList.buildBetterPickaxe);
+        AchievementRegistryApi.register(AchievementKeys.BUILD_HOE, AchievementList.buildHoe);
+        AchievementRegistryApi.register(AchievementKeys.MAKE_BREAD, AchievementList.makeBread);
+        AchievementRegistryApi.register(AchievementKeys.BAKE_CAKE, AchievementList.bakeCake);
+        AchievementRegistryApi.register(AchievementKeys.GROW_WHEAT, AchievementList.growWheat);
+        AchievementRegistryApi.register(AchievementKeys.COOK_FISH, AchievementList.cookFish);
+        AchievementRegistryApi.register(AchievementKeys.COOK_BACON, AchievementList.cookBacon);
+        AchievementRegistryApi.register(AchievementKeys.DIAMONDS, AchievementList.diamonds);
+        AchievementRegistryApi.register(AchievementKeys.OBSIDIAN, AchievementList.obsidian);
+        AchievementRegistryApi.register(AchievementKeys.HOT_STUFF, AchievementList.hotStuff);
+        AchievementRegistryApi.register(AchievementKeys.PORTAL, AchievementList.portal);
+        AchievementRegistryApi.register(AchievementKeys.GHAST_HUNTER, AchievementList.ghastHunter);
+        AchievementRegistryApi.register(AchievementKeys.BLAZING_HELL, AchievementList.blazingHell);
+        AchievementRegistryApi.register(AchievementKeys.BUILD_SWORD, AchievementList.buildSword);
+        AchievementRegistryApi.register(AchievementKeys.KILL_ENEMY, AchievementList.killEnemy);
+        AchievementRegistryApi.register(AchievementKeys.KILL_COW, AchievementList.killCow);
+        AchievementRegistryApi.register(AchievementKeys.FLY_PIG, AchievementList.flyPig);
+        AchievementRegistryApi.register(AchievementKeys.OVERKILL, AchievementList.overkill);
+        AchievementRegistryApi.register(AchievementKeys.BUILD_BOW, AchievementList.buildBow);
+        AchievementRegistryApi.register(AchievementKeys.SNIPE_SKELETON, AchievementList.snipeSkeleton);
+        AchievementRegistryApi.register(AchievementKeys.FULL_IRON, AchievementList.fullIron);
+        AchievementRegistryApi.register(AchievementKeys.FULL_DIAMOND, AchievementList.fullDiamond);
+        AchievementRegistryApi.register(AchievementKeys.SLEEP_IN_BED, AchievementList.sleepInBed);
+        AchievementRegistryApi.register(AchievementKeys.EGG_HUNT, AchievementList.eggHunt);
+        AchievementRegistryApi.register(AchievementKeys.SHEAR_SHEEP, AchievementList.shearSheep);
+        AchievementRegistryApi.register(AchievementKeys.RAINBOW_WOOL, AchievementList.rainbowWool);
+        AchievementRegistryApi.register(AchievementKeys.CRAFT_MAP, AchievementList.craftMap);
+        AchievementRegistryApi.register(AchievementKeys.BOOKSHELF, AchievementList.bookshelf);
+        AchievementRegistryApi.register(AchievementKeys.JUKEBOX, AchievementList.jukebox);
+        AchievementRegistryApi.register(AchievementKeys.EXPLOSION, AchievementList.explosion);
+        AchievementRegistryApi.register(AchievementKeys.PISTON, AchievementList.piston);
+        AchievementRegistryApi.register(AchievementKeys.REPEATER, AchievementList.repeater);
+        AchievementRegistryApi.register(AchievementKeys.ON_A_RAIL, AchievementList.onARail);
+        AchievementRegistryApi.register(AchievementKeys.BOAT_TRAVEL, AchievementList.boatTravel);
+
+        int count = AchievementRegistryApi.size();
+        if (count != AchievementKeys.EXPECTED_COUNT) {
+            System.err.println("[AchievementRegistryBootstrap] Expected " + AchievementKeys.EXPECTED_COUNT + " achievements, got " + count);
+        } else {
+            System.out.println("[AchievementRegistryBootstrap] Registered " + count + " achievements");
+        }
     }
 }

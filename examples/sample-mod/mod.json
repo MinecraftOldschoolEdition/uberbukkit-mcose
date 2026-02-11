@@ -1,0 +1,7 @@
+{
+  "id": "sample_mod",
+  "name": "Sample Mod",
+  "version": "1.0.0",
+  "entrypoint": "example.sample.SampleModInitializer",
+  "dependencies": []
+}

@@ -17,9 +17,8 @@ public final class FeatureRegistryBootstrap {
     }
 
     private static void reg(String path, FeatureType t) {
-        try { Registries.FEATURE.registerIfAbsent(new ResourceLocation("minecraft", path), t); } catch (Throwable ignored) {}
+        try { FeatureRegistryApi.register(new ResourceLocation("minecraft", path), t); } catch (Throwable ignored) {}
     }
 }
-
 
 

@@ -13,12 +13,11 @@ public final class FluidRegistryBootstrap {
         initialized = true;
         try {
             // Canonical keys map to the flowing variant; provide aliases for stationary
-            Registries.FLUID.registerIfAbsent(new ResourceLocation("minecraft","water"), Block.WATER);
-            Registries.FLUID.registerIfAbsent(new ResourceLocation("minecraft","water_stationary"), Block.STATIONARY_WATER);
-            Registries.FLUID.registerIfAbsent(new ResourceLocation("minecraft","lava"), Block.LAVA);
-            Registries.FLUID.registerIfAbsent(new ResourceLocation("minecraft","lava_stationary"), Block.STATIONARY_LAVA);
+            FluidRegistryApi.register(new ResourceLocation("minecraft","water"), Block.WATER);
+            FluidRegistryApi.register(new ResourceLocation("minecraft","water_stationary"), Block.STATIONARY_WATER);
+            FluidRegistryApi.register(new ResourceLocation("minecraft","lava"), Block.LAVA);
+            FluidRegistryApi.register(new ResourceLocation("minecraft","lava_stationary"), Block.STATIONARY_LAVA);
         } catch (Throwable ignored) {}
     }
 }
-
 

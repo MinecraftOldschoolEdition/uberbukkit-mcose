@@ -12,10 +12,12 @@ public class FreezeCommand extends Command {
         super(name);
         this.description = "Toggle freeze on a player (prevents movement and build/break)";
         this.usageMessage = "/" + name + " <playername>";
+        this.setPermission("uberbukkit.command.freeze");
     }
 
     @Override
     public boolean execute(CommandSender sender, String label, String[] args) {
+        if (!testPermission(sender)) return true;
         if (args.length < 1) { sender.sendMessage("Usage: /" + label + " <playername>"); return true; }
         String target = args[0];
         boolean nowFrozen = AdminRegistry.toggleFrozen(target);

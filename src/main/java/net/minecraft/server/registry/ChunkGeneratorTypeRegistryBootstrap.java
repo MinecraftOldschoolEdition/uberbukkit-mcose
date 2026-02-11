@@ -34,8 +34,7 @@ public final class ChunkGeneratorTypeRegistryBootstrap {
 
     private static void register(String path, Class<?> provider) {
         if (provider == null) return;
-        Registries.CHUNK_GENERATOR_TYPE.registerIfAbsent(new ResourceLocation("minecraft", path), provider);
+        ChunkGeneratorTypeRegistryApi.register(new ResourceLocation("minecraft", path), provider);
     }
 }
-
 

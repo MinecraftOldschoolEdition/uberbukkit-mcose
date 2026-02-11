@@ -13,7 +13,7 @@ public class GameModeCommand extends VanillaCommand {
     public GameModeCommand() {
         super("gamemode");
         this.description = "Changes the player to a specific game mode";
-        this.usageMessage = "/gamemode <survival|creative|hardcore|s|c|h|0|1|2> [player]";
+        this.usageMessage = "/gamemode <player> <survival|creative|hardcore|s|c|h|0|1|2>";
         this.setPermission("bukkit.command.gamemode");
     }
 
@@ -26,38 +26,50 @@ public class GameModeCommand extends VanillaCommand {
             return false;
         }
 
-        int gameMode = -1;
-        String modeString = args[0].toLowerCase();
-
-        if (modeString.equals("survival") || modeString.equals("s") || modeString.equals("0")) {
-            gameMode = 0;
-        } else if (modeString.equals("creative") || modeString.equals("c") || modeString.equals("1")) {
-            gameMode = 1;
-        } else if (modeString.equals("hardcore") || modeString.equals("h") || modeString.equals("2")) {
-            gameMode = 2;
-        } else {
-            sender.sendMessage(ChatColor.RED + "Unknown game mode: " + args[0]);
-            return false;
-        }
-
         Player target;
-        if (args.length == 2) {
-            target = Bukkit.getPlayerExact(args[1]);
-            if (target == null) {
-                sender.sendMessage(ChatColor.RED + "Can't find player " + args[1]);
+        int gameMode;
+
+        if (args.length == 1) {
+            gameMode = parseGameMode(args[0]);
+            if (gameMode < 0) {
+                sender.sendMessage(ChatColor.RED + "Unknown game mode: " + args[0]);
                 return false;
             }
-        } else {
             if (!(sender instanceof Player)) {
                 sender.sendMessage(ChatColor.RED + "Please specify a player!");
                 return false;
             }
             target = (Player) sender;
+        } else {
+            Player playerFirstTarget = Bukkit.getPlayerExact(args[0]);
+            int playerFirstMode = parseGameMode(args[1]);
+            if (playerFirstTarget != null && playerFirstMode >= 0) {
+                target = playerFirstTarget;
+                gameMode = playerFirstMode;
+            } else {
+                // Mode-first compatibility: /gamemode <mode> <player>
+                gameMode = parseGameMode(args[0]);
+                if (gameMode < 0) {
+                    sender.sendMessage(ChatColor.RED + "Unknown game mode: " + args[0]);
+                    return false;
+                }
+
+                target = Bukkit.getPlayerExact(args[1]);
+                if (target == null) {
+                    sender.sendMessage(ChatColor.RED + "Can't find player " + args[1]);
+                    return false;
+                }
+            }
+        }
+
+        if (target == null) {
+            sender.sendMessage(ChatColor.RED + "Please specify a player!");
+            return false;
         }
 
         EntityPlayer entityPlayer = ((org.bukkit.craftbukkit.entity.CraftPlayer) target).getHandle();
         String modeName;
-        
+
         if (gameMode == 1) {
             entityPlayer.gameMode = 1;
             entityPlayer.updateContainer();
@@ -101,6 +113,49 @@ public class GameModeCommand extends VanillaCommand {
         return true;
     }
 
+    private int parseGameMode(String token) {
+        String modeString = token == null ? "" : token.toLowerCase();
+        if (modeString.equals("survival") || modeString.equals("s") || modeString.equals("0")) {
+            return 0;
+        }
+        if (modeString.equals("creative") || modeString.equals("c") || modeString.equals("1")) {
+            return 1;
+        }
+        if (modeString.equals("hardcore") || modeString.equals("h") || modeString.equals("2")) {
+            return 2;
+        }
+        return -1;
+    }
+
+    private void addModeSuggestions(java.util.List<String> completions, String prefix) {
+        String[] modes = {"survival", "creative", "hardcore", "s", "c", "h", "0", "1", "2"};
+        for (String mode : modes) {
+            if (mode.startsWith(prefix)) {
+                completions.add(mode);
+            }
+        }
+    }
+
+    private void addPlayerSuggestions(java.util.List<String> completions, String prefix) {
+        for (org.bukkit.entity.Player p : org.bukkit.Bukkit.getOnlinePlayers()) {
+            if (p.getName().toLowerCase().startsWith(prefix)) {
+                completions.add(p.getName());
+            }
+        }
+    }
+
+    private boolean isOnlinePlayerName(String name) {
+        if (name == null || name.length() == 0) {
+            return false;
+        }
+        for (org.bukkit.entity.Player p : org.bukkit.Bukkit.getOnlinePlayers()) {
+            if (p.getName().equalsIgnoreCase(name)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     @Override
     public boolean matches(String input) {
         return input.startsWith("gamemode ");
@@ -111,19 +166,15 @@ public class GameModeCommand extends VanillaCommand {
         java.util.List<String> completions = new java.util.ArrayList<String>();
         if (args.length == 1) {
             String prefix = args[0].toLowerCase();
-            String[] modes = {"survival", "creative", "hardcore", "s", "c", "h", "0", "1", "2"};
-            for (String mode : modes) {
-                if (mode.startsWith(prefix)) {
-                    completions.add(mode);
-                }
-            }
+            addPlayerSuggestions(completions, prefix);
         } else if (args.length == 2) {
-            // Complete player names
             String prefix = args[1].toLowerCase();
-            for (org.bukkit.entity.Player p : org.bukkit.Bukkit.getOnlinePlayers()) {
-                if (p.getName().toLowerCase().startsWith(prefix)) {
-                    completions.add(p.getName());
-                }
+            if (isOnlinePlayerName(args[0])) {
+                addModeSuggestions(completions, prefix);
+            } else if (parseGameMode(args[0]) >= 0) {
+                addPlayerSuggestions(completions, prefix);
+            } else {
+                addModeSuggestions(completions, prefix);
             }
         }
         return completions;

@@ -4,19 +4,24 @@ import net.minecraft.server.EnumArt;
 import net.minecraft.server.util.ResourceLocation;
 
 public final class PaintingMotiveRegistryBootstrap {
+    private static boolean initialized = false;
+
     private PaintingMotiveRegistryBootstrap() {}
 
-    public static void initialize() {
+    public static synchronized void initialize() {
+        if (initialized) return;
+        initialized = true;
+
         try {
             for (EnumArt art : EnumArt.values()) {
                 String title = art.A; // display name string
                 if (title == null || title.length() == 0) title = art.name();
                 String snake = toSnake(title);
-                Registries.PAINTING_MOTIVE.registerIfAbsent(new ResourceLocation("minecraft", snake), art);
+                PaintingMotiveRegistryApi.register(new ResourceLocation("minecraft", snake), art);
                 // Alias: enum constant name (lowercase)
                 String lc = art.name().toLowerCase();
                 if (!lc.equals(snake)) {
-                    Registries.PAINTING_MOTIVE.registerIfAbsent(new ResourceLocation("minecraft", lc), art);
+                    PaintingMotiveRegistryApi.register(new ResourceLocation("minecraft", lc), art);
                 }
             }
         } catch (Throwable ignored) {}
@@ -34,5 +39,4 @@ public final class PaintingMotiveRegistryBootstrap {
         return out.toString();
     }
 }
-
 

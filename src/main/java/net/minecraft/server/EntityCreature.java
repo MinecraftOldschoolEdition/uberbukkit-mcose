@@ -5,6 +5,9 @@ package net.minecraft.server;
 import org.bukkit.craftbukkit.TrigMath;
 import org.bukkit.craftbukkit.entity.CraftEntity;
 import org.bukkit.event.entity.EntityTargetEvent;
+
+import net.minecraft.server.event.EventBus;
+import net.minecraft.server.event.events.TargetAcquiredEvent;
 // CraftBukkit end
 
 public class EntityCreature extends EntityLiving {
@@ -39,10 +42,19 @@ public class EntityCreature extends EntityLiving {
             Entity target = this.findTarget();
             if (target != null) {
                 // Ignore creative players as targets
-				if (target instanceof EntityHuman && ((EntityHuman) target).gameMode == 1) {
-					target = null;
-				}
-				EntityTargetEvent event = new EntityTargetEvent(this.getBukkitEntity(), target == null ? null : target.getBukkitEntity(), EntityTargetEvent.TargetReason.CLOSEST_PLAYER);
+                if (target instanceof EntityHuman && ((EntityHuman) target).gameMode == 1) {
+                    target = null;
+                }
+
+                TargetAcquiredEvent acquiredEvent = new TargetAcquiredEvent(this, target, this.world);
+                EventBus.global().publish(acquiredEvent);
+                if (acquiredEvent.isCancelled()) {
+                    target = null;
+                } else {
+                    target = acquiredEvent.getTarget();
+                }
+
+                EntityTargetEvent event = new EntityTargetEvent(this.getBukkitEntity(), target == null ? null : target.getBukkitEntity(), EntityTargetEvent.TargetReason.CLOSEST_PLAYER);
                 this.world.getServer().getPluginManager().callEvent(event);
 
                 if (!event.isCancelled()) {

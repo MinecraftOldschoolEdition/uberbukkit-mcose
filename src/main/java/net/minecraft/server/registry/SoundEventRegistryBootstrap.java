@@ -3,9 +3,14 @@ package net.minecraft.server.registry;
 import net.minecraft.server.util.ResourceLocation;
 
 public final class SoundEventRegistryBootstrap {
+    private static boolean initialized = false;
+
     private SoundEventRegistryBootstrap() {}
 
-    public static void initialize() {
+    public static synchronized void initialize() {
+        if (initialized) return;
+        initialized = true;
+
         // Mirror the client mappings for parity (server can reference them by key)
         reg("ui.button.click", "random.click");
         reg("entity.item.pickup", "random.pop");
@@ -153,13 +158,14 @@ public final class SoundEventRegistryBootstrap {
         reg("entity.iron_golem.death", "mob.irongolem.death");
         reg("entity.item.break", "random.break");
         reg("block.wood.click", "random.wood click");
+
+        System.out.println("[SoundEventRegistryBootstrap] Registered " + SoundEventRegistryApi.size() + " sound events");
     }
 
     private static void reg(String modernKey, String legacy) {
         try {
-            Registries.SOUND_EVENT.registerIfAbsent(new ResourceLocation("minecraft", modernKey), legacy);
+            SoundEventRegistryApi.register(new ResourceLocation("minecraft", modernKey), legacy);
         } catch (Throwable ignored) {}
     }
 }
-
 

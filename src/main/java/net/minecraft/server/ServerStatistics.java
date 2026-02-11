@@ -5,6 +5,8 @@ import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
+import net.minecraft.server.registry.AchievementRegistryApi;
+import net.minecraft.server.util.ResourceLocation;
 
 /**
  * Tracks server-wide combined statistics from all players.
@@ -233,11 +235,11 @@ public class ServerStatistics {
         
         // Achievement unlock counts
         Map<String, Integer> achievementCounts = new LinkedHashMap<String, Integer>();
-        for (Object obj : AchievementList.e) {
-            if (obj instanceof Achievement) {
-                Achievement achievement = (Achievement) obj;
-                achievementCounts.put(achievement.f, getAchievementUnlockCount(achievement));
-            }
+        for (Achievement achievement : AchievementRegistryApi.values()) {
+            ResourceLocation key = AchievementRegistryApi.getKey(achievement);
+            String keyString = key == null ? "minecraft:legacy_" + achievement.e : key.toString();
+            String displayName = AchievementManager.getAchievementName(achievement);
+            achievementCounts.put(keyString + " (" + displayName + ")", Integer.valueOf(getAchievementUnlockCount(achievement)));
         }
         summary.put("achievementUnlocks", achievementCounts);
         
@@ -493,4 +495,3 @@ public class ServerStatistics {
         log.info("[ServerStats] Server statistics saved on shutdown.");
     }
 }
-

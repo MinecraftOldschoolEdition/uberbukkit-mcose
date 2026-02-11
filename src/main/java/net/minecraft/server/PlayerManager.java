@@ -155,25 +155,15 @@ public class PlayerManager {
                 entityplayer.e = entityplayer.locZ;
 
                 // CraftBukkit start - send nearest chunks first
-                if (i1 > 1 || i1 < -1 || j1 > 1 || j1 < -1) {
-                    final int x = i;
-                    final int z = j;
-                    List<ChunkCoordIntPair> chunksToSend = entityplayer.chunkCoordIntPairQueue;
-
+                final int x = i;
+                final int z = j;
+                List<ChunkCoordIntPair> chunksToSend = entityplayer.chunkCoordIntPairQueue;
+                if (!chunksToSend.isEmpty()) {
                     java.util.Collections.sort(chunksToSend, new java.util.Comparator<ChunkCoordIntPair>() {
                         public int compare(ChunkCoordIntPair a, ChunkCoordIntPair b) {
                             return Math.max(Math.abs(a.x - x), Math.abs(a.z - z)) - Math.max(Math.abs(b.x - x), Math.abs(b.z - z));
                         }
                     });
-                }
-                // Always bubble most-recently-added (closest to player movement) chunks to front for faster visibility
-                if (!entityplayer.chunkCoordIntPairQueue.isEmpty()) {
-                    java.util.LinkedList<ChunkCoordIntPair> q = (java.util.LinkedList<ChunkCoordIntPair>) entityplayer.chunkCoordIntPairQueue;
-                    // move last few entries (newest) to the front up to 8 items
-                    for (int n = 0; n < 8 && !q.isEmpty(); n++) {
-                        ChunkCoordIntPair last = q.removeLast();
-                        q.addFirst(last);
-                    }
                 }
                 // CraftBukkit end
             }

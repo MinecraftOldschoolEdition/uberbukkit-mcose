@@ -68,12 +68,20 @@ public class ThreadingManager {
         
         // Async chunk generation using thread-safe generators
         if (config.isAsyncChunkGenerationEnabled()) {
-            AsyncChunkGenerator chunkGen = new AsyncChunkGenerator(
-                world,
-                config.getChunkGenThreads()
-            );
-            chunkGenerators.put(world, chunkGen);
-            log.info("[Threading] Enabled async chunk generation for world '" + worldName + "'");
+            int terrainType = world.worldData != null ? world.worldData.getTerrainType() : 0;
+            if (AsyncChunkGenerator.isTerrainTypeSupported(terrainType)) {
+                AsyncChunkGenerator chunkGen = new AsyncChunkGenerator(
+                    world,
+                    config.getChunkGenThreads()
+                );
+                chunkGenerators.put(world, chunkGen);
+                log.info("[Threading] Enabled async chunk generation for world '" + worldName + "'");
+            } else {
+                log.warning("[Threading] Async chunk generation disabled for world '" + worldName +
+                    "' because terrain type " + terrainType + " (" +
+                    AsyncChunkGenerator.terrainTypeName(terrainType) +
+                    ") does not have a thread-safe generator yet.");
+            }
         }
         
         // Async lighting
@@ -160,6 +168,61 @@ public class ThreadingManager {
     public ThreadingConfig getConfig() {
         return config;
     }
+
+    public ThreadingStatsSnapshot captureStats() {
+        ThreadingStatsSnapshot snapshot = new ThreadingStatsSnapshot();
+        snapshot.pendingMainThreadTasks = taskQueue.getPendingTaskCount();
+
+        for (Map.Entry<World, AsyncChunkGenerator> entry : chunkGenerators.entrySet()) {
+            String name = entry.getKey() instanceof WorldServer
+                ? ((WorldServer) entry.getKey()).worldData.name
+                : "unknown";
+            AsyncChunkGenerator gen = entry.getValue();
+            WorldAsyncStats stats = snapshot.worlds.get(name);
+            if (stats == null) {
+                stats = new WorldAsyncStats();
+                stats.worldName = name;
+                snapshot.worlds.put(name, stats);
+            }
+            stats.chunkGenActive = gen.getActiveGenerations();
+            stats.chunkGenReady = gen.getReadyChunks();
+            stats.chunkGenTotal = gen.getTotalChunksGenerated();
+        }
+
+        for (Map.Entry<World, AsyncLightingEngine> entry : lightingEngines.entrySet()) {
+            String name = entry.getKey() instanceof WorldServer
+                ? ((WorldServer) entry.getKey()).worldData.name
+                : "unknown";
+            AsyncLightingEngine engine = entry.getValue();
+            WorldAsyncStats stats = snapshot.worlds.get(name);
+            if (stats == null) {
+                stats = new WorldAsyncStats();
+                stats.worldName = name;
+                snapshot.worlds.put(name, stats);
+            }
+            stats.lightingActive = engine.getActiveTasks();
+            stats.lightingPending = engine.getPendingTasks();
+            stats.lightingTotal = engine.getTotalUpdates();
+        }
+
+        for (Map.Entry<World, AsyncEntityProcessor> entry : entityProcessors.entrySet()) {
+            String name = entry.getKey() instanceof WorldServer
+                ? ((WorldServer) entry.getKey()).worldData.name
+                : "unknown";
+            AsyncEntityProcessor proc = entry.getValue();
+            WorldAsyncStats stats = snapshot.worlds.get(name);
+            if (stats == null) {
+                stats = new WorldAsyncStats();
+                stats.worldName = name;
+                snapshot.worlds.put(name, stats);
+            }
+            stats.entityActive = proc.getActiveTasks();
+            stats.entityPending = proc.getPendingTasks();
+            stats.entityTotal = proc.getTotalProcessed();
+        }
+
+        return snapshot;
+    }
     
     /**
      * Print statistics about async systems.
@@ -243,5 +306,22 @@ public class ThreadingManager {
         AsyncEntityProcessor entity = entityProcessors.remove(world);
         if (entity != null) entity.shutdown();
     }
-}
 
+    public static class ThreadingStatsSnapshot {
+        public int pendingMainThreadTasks;
+        public final Map<String, WorldAsyncStats> worlds = new HashMap<String, WorldAsyncStats>();
+    }
+
+    public static class WorldAsyncStats {
+        public String worldName;
+        public int chunkGenActive;
+        public int chunkGenReady;
+        public int chunkGenTotal;
+        public int lightingActive;
+        public int lightingPending;
+        public int lightingTotal;
+        public int entityActive;
+        public int entityPending;
+        public int entityTotal;
+    }
+}

@@ -13,6 +13,7 @@ import joptsimple.OptionSet;
 import org.bukkit.Bukkit;
 import org.bukkit.World.Environment;
 import org.bukkit.craftbukkit.CraftServer;
+import org.bukkit.craftbukkit.ChunkCompressionThread;
 import org.bukkit.craftbukkit.LoggerOutputStream;
 import org.bukkit.craftbukkit.command.ColouredConsoleSender;
 import org.bukkit.craftbukkit.scheduler.CraftScheduler;
@@ -33,6 +34,9 @@ import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import net.minecraft.server.event.EventBus;
+import net.minecraft.server.mod.ModLoader;
+
 import net.minecraft.server.threading.ThreadingManager;
 
 // CraftBukkit start
@@ -40,6 +44,12 @@ import net.minecraft.server.threading.ThreadingManager;
 // CraftBukkit end
 
 public class MinecraftServer implements Runnable, ICommandListener {
+
+    public enum StartupReadinessStatus {
+        BOOTING,
+        WARMING_UP,
+        READY
+    }
 
     public static Logger log = Logger.getLogger("Minecraft");
     public static HashMap trackerList = new HashMap();
@@ -84,6 +94,12 @@ public class MinecraftServer implements Runnable, ICommandListener {
     private boolean modLoaderSupport = false;
 //    private PoseidonVersionChecker poseidonVersionChecker;
     //Poseidon End
+
+    private volatile StartupReadinessStatus startupReadinessStatus = StartupReadinessStatus.BOOTING;
+    private boolean tickCatchupEnabled = true;
+    private long maxTickCatchupBacklogMs = 200L;
+    private long tickCatchupWarnIntervalMs = 30000L;
+    private long lastTickCatchupDropWarningMs = 0L;
     
     // GUI mode flag - when true, don't call System.exit() on stop
     public static boolean guiMode = false;
@@ -108,6 +124,7 @@ public class MinecraftServer implements Runnable, ICommandListener {
     }
 
     private boolean init() throws UnknownHostException { // CraftBukkit - added throws UnknownHostException
+        this.startupReadinessStatus = StartupReadinessStatus.BOOTING;
         this.consoleCommandHandler = new ConsoleCommandHandler(this);
         
         // Only start the console reader thread if NOT in GUI mode
@@ -131,6 +148,7 @@ public class MinecraftServer implements Runnable, ICommandListener {
         }
 
         modLoaderSupport = PoseidonConfig.getInstance().getBoolean("settings.support.modloader.enable", false);
+        this.loadRuntimeTuningConfig();
 
         if (modLoaderSupport) {
             log.info("EXPERIMENTAL MODLOADERMP SUPPORT ENABLED.");
@@ -225,33 +243,16 @@ public class MinecraftServer implements Runnable, ICommandListener {
 
         log.info("Preparing level \"" + s1 + "\"");
         this.a(new WorldLoaderServer(new File(".")), s1, k);
-
-        // Bootstrap registries (blocks, items, block entity types, entities, biomes, generators, world types)
+        // Bootstrap registries in deterministic order.
         try {
-            net.minecraft.server.registry.BlockRegistryBootstrap.initialize();
-            net.minecraft.server.registry.ItemRegistryBootstrap.initialize();
-            net.minecraft.server.registry.BlockEntityTypeRegistryBootstrap.initialize();
-            net.minecraft.server.registry.EntityTypeRegistryBootstrap.initialize();
-            net.minecraft.server.registry.BiomeRegistryBootstrap.initialize();
-            net.minecraft.server.registry.ChunkGeneratorTypeRegistryBootstrap.initialize();
-            net.minecraft.server.registry.WorldTypeRegistryBootstrap.initialize();
-            net.minecraft.server.registry.FluidRegistryBootstrap.initialize();
-            net.minecraft.server.registry.DimensionTypeRegistryBootstrap.initialize();
-            net.minecraft.server.registry.PaintingMotiveRegistryBootstrap.initialize();
-            net.minecraft.server.registry.SoundEventRegistryBootstrap.initialize();
-            net.minecraft.server.registry.ScreenHandlerRegistryBootstrap.initialize();
-            net.minecraft.server.registry.StatRegistryBootstrap.initialize();
-            net.minecraft.server.registry.ScheduleRegistryBootstrap.initialize();
-            net.minecraft.server.registry.SensorTypeRegistryBootstrap.initialize();
-            net.minecraft.server.registry.MemoryModuleTypeRegistryBootstrap.initialize();
-            net.minecraft.server.registry.PointOfInterestRegistryBootstrap.initialize();
-            net.minecraft.server.registry.ParticleTypeRegistryBootstrap.initialize();
-            net.minecraft.server.registry.TreeDecoratorTypeRegistryBootstrap.initialize();
-            net.minecraft.server.registry.FoliagePlacerTypeRegistryBootstrap.initialize();
-            net.minecraft.server.registry.FeatureRegistryBootstrap.initialize();
-            net.minecraft.server.registry.CarverRegistryBootstrap.initialize();
-            net.minecraft.server.registry.SurfaceBuilderRegistryBootstrap.initialize();
+            net.minecraft.server.registry.RegistryBootstrap.initialize();
         } catch (Throwable ignored) {}
+
+        try {
+            ModLoader.initialize(new File("."));
+        } catch (Throwable t) {
+            log.warning("[ModLoader] Failed during startup: " + t.getMessage());
+        }
 
         //Project Poseidon Start
         Poseidon.getServer().initializeServer();
@@ -259,7 +260,7 @@ public class MinecraftServer implements Runnable, ICommandListener {
 
         // CraftBukkit start
         long elapsed = System.nanoTime() - j;
-        String time = String.format("%.3fs", elapsed / 10000000000.0D);
+        String time = String.format("%.3fs", elapsed / 1000000000.0D);
         
         // UberBukkit - Initialize server-wide statistics tracking
         ServerStatistics.getInstance();
@@ -267,7 +268,8 @@ public class MinecraftServer implements Runnable, ICommandListener {
         
         // Start voice chat UDP server
         this.startVoiceChatServer();
-        
+
+        this.setStartupReadinessStatus(StartupReadinessStatus.READY);
         log.info("Done (" + time + ")! For help, type \"help\" or \"?\"");
 
         // log rotator process start.
@@ -284,6 +286,25 @@ public class MinecraftServer implements Runnable, ICommandListener {
             this.propertyManager.savePropertiesFile();
         }
         return true;
+    }
+
+    private void loadRuntimeTuningConfig() {
+        this.tickCatchupEnabled = PoseidonConfig.getInstance().getConfigBoolean("settings.tick-catchup.enabled", true);
+        this.maxTickCatchupBacklogMs = Math.max(50L, (long) getPoseidonConfigInt("settings.tick-catchup.max-backlog-ms", 200));
+        int warnIntervalSeconds = Math.max(1, getPoseidonConfigInt("settings.tick-catchup.warn-interval-seconds", 30));
+        this.tickCatchupWarnIntervalMs = warnIntervalSeconds * 1000L;
+    }
+
+    private int getPoseidonConfigInt(String key, int defaultValue) {
+        try {
+            Object value = PoseidonConfig.getInstance().getConfigOption(key, Integer.valueOf(defaultValue));
+            if (value instanceof Number) {
+                return ((Number) value).intValue();
+            }
+            return Integer.parseInt(String.valueOf(value));
+        } catch (Throwable ignored) {
+            return defaultValue;
+        }
     }
 
     public boolean isModloaderPresent() {
@@ -320,12 +341,11 @@ public class MinecraftServer implements Runnable, ICommandListener {
                 int typeId = 0; // Default to 0 (NORMAL/DEFAULT)
                 try {
                     String lt = this.configuredLevelType == null ? "default" : this.configuredLevelType.trim();
-                    String keyPath = lt.toLowerCase();
-                    if (keyPath.indexOf(':') < 0) keyPath = "minecraft:" + keyPath;
-                    Integer rid = net.minecraft.server.registry.Registries.WORLD_TYPE.get(new net.minecraft.server.util.ResourceLocation(keyPath));
+                    String normalizedKey = net.minecraft.server.registry.WorldTypeRegistryApi.normalizeInputIdentifier(lt);
+                    Integer rid = net.minecraft.server.registry.WorldTypeRegistryApi.getByIdentifier(lt);
                     if (rid != null) {
                         typeId = rid.intValue();
-                        log.info("[MinecraftServer] level-type resolved via registry '" + keyPath + "' => ID " + typeId);
+                        log.info("[MinecraftServer] level-type resolved via registry '" + normalizedKey + "' => ID " + typeId);
                     } else {
                         // Legacy synonyms fallback
                         if (lt.equalsIgnoreCase("ALPHA")) { typeId = 1; log.info("[MinecraftServer] Configured level-type ALPHA maps to ID 1."); }
@@ -442,6 +462,7 @@ public class MinecraftServer implements Runnable, ICommandListener {
             world.spawnMonsters = this.propertyManager.getBoolean("spawn-monsters", true) ? 1 : 0;
             world.setSpawnFlags(this.propertyManager.getBoolean("spawn-monsters", true), this.spawnAnimals);
             this.worlds.add(world);
+            EventBus.global().publish(new net.minecraft.server.event.events.WorldLoadEvent(world));
             this.serverConfigurationManager.setPlayerFileData(this.worlds.toArray(new WorldServer[0]));
         }
         // CraftBukkit end
@@ -492,6 +513,10 @@ public class MinecraftServer implements Runnable, ICommandListener {
         
         // Initialize async threading systems
         ThreadingManager.getInstance().initialize(this);
+
+        this.setStartupReadinessStatus(StartupReadinessStatus.WARMING_UP);
+        StartupWarmupCoordinator warmupCoordinator = new StartupWarmupCoordinator(this);
+        warmupCoordinator.warmupWorlds(this.worlds);
 
         this.e();
     }
@@ -561,7 +586,15 @@ public class MinecraftServer implements Runnable, ICommandListener {
         if (this.serverConfigurationManager != null) {
             this.serverConfigurationManager.savePlayers();
         }
-        
+
+        for (int wi = 0; wi < this.worlds.size(); ++wi) {
+            WorldServer world = this.worlds.get(wi);
+            EventBus.global().publish(new net.minecraft.server.event.events.WorldUnloadEvent(world));
+        }
+
+        // Shutdown chunk compression workers
+        org.bukkit.craftbukkit.ChunkCompressionThread.stopThread();
+
         // Shutdown async threading systems
         ThreadingManager.getInstance().shutdown();
 
@@ -662,6 +695,15 @@ public class MinecraftServer implements Runnable, ICommandListener {
 
                     j += l;
                     i = k;
+                    if (this.tickCatchupEnabled && j > this.maxTickCatchupBacklogMs) {
+                        long droppedMs = j - this.maxTickCatchupBacklogMs;
+                        j = this.maxTickCatchupBacklogMs;
+                        long nowMs = System.currentTimeMillis();
+                        if (nowMs - this.lastTickCatchupDropWarningMs >= this.tickCatchupWarnIntervalMs) {
+                            log.warning("Tick catch-up backlog exceeded " + this.maxTickCatchupBacklogMs + "ms; dropped " + droppedMs + "ms to preserve stable simulation timing.");
+                            this.lastTickCatchupDropWarningMs = nowMs;
+                        }
+                    }
                     if (this.worlds.get(0).everyoneDeeplySleeping()) { // CraftBukkit
                         this.h();
                         j = 0L;
@@ -724,10 +766,10 @@ public class MinecraftServer implements Runnable, ICommandListener {
     //Project Poseidon End - Tick Update
 
     private void h() {
+        long tickStartNanos = System.nanoTime();
         ServerProfiler profiler = ServerProfiler.getInstance();
         profiler.startSection("tick");
-        profiler.recordTickTime();
-        
+
         ArrayList arraylist = new ArrayList();
         Iterator iterator = trackerList.keySet().iterator();
 
@@ -752,7 +794,16 @@ public class MinecraftServer implements Runnable, ICommandListener {
         Vec3D.a();
         ++this.ticks;
 
-        ((CraftScheduler) this.server.getScheduler()).mainThreadHeartbeat(this.ticks); // CraftBukkit
+        profiler.startSection("schedulerHeartbeat");
+        CraftScheduler scheduler = (CraftScheduler) this.server.getScheduler();
+        scheduler.mainThreadHeartbeat(this.ticks); // CraftBukkit
+        profiler.recordSchedulerSample(
+            scheduler.getLastHeartbeatMovedToSynced(),
+            scheduler.getLastHeartbeatExecuted(),
+            scheduler.getLastHeartbeatLeftover(),
+            scheduler.getLastHeartbeatRuntimeNanos() / 1_000_000.0D
+        );
+        profiler.endSection();
 
         //Project Poseidon Start - Tick Update
         long currentTime = System.currentTimeMillis();
@@ -772,6 +823,9 @@ public class MinecraftServer implements Runnable, ICommandListener {
 
         //Project Poseidon End - Tick Update
 
+        profiler.startSection("networkListenTick/preWorld");
+        this.networkListenThread.a();
+        profiler.endSection();
 
         for (j = 0; j < this.worlds.size(); ++j) { // CraftBukkit
             // if (j == 0 || this.propertyManager.getBoolean("allow-nether", true)) { // CraftBukkit
@@ -805,30 +859,123 @@ public class MinecraftServer implements Runnable, ICommandListener {
         }
         // } // CraftBukkit
 
+        profiler.startSection("networkListenTick/postWorld");
         this.networkListenThread.a();
+        profiler.endSection();
+
+        profiler.startSection("playerManagerFlush");
         this.serverConfigurationManager.b();
+        profiler.endSection();
 
         // CraftBukkit start
         profiler.startSection("entityTracking");
+        String aggregateTrackingState = EntityTracker.TrackingPressureState.NORMAL.name();
+        int entityTrackingSkippedNear = 0;
+        int entityTrackingSkippedMid = 0;
+        int entityTrackingSkippedFar = 0;
+        long entityTrackingLastTransitionMillis = 0L;
         for (j = 0; j < this.worlds.size(); ++j) {
-            this.worlds.get(j).tracker.updatePlayers();
+            WorldServer world = (WorldServer) this.worlds.get(j);
+            if (world == null || world.tracker == null) {
+                continue;
+            }
+
+            world.tracker.updatePlayers();
+            EntityTracker.TrackingPressureState worldTrackingState = world.tracker.getTrackingPressureState();
+            if (worldTrackingState == EntityTracker.TrackingPressureState.PRESSURE) {
+                aggregateTrackingState = EntityTracker.TrackingPressureState.PRESSURE.name();
+            } else if (worldTrackingState == EntityTracker.TrackingPressureState.RECOVERY
+                && EntityTracker.TrackingPressureState.NORMAL.name().equals(aggregateTrackingState)) {
+                aggregateTrackingState = EntityTracker.TrackingPressureState.RECOVERY.name();
+            }
+
+            entityTrackingSkippedNear += world.tracker.consumeSkippedNearCount();
+            entityTrackingSkippedMid += world.tracker.consumeSkippedMidCount();
+            entityTrackingSkippedFar += world.tracker.consumeSkippedFarCount();
+            long worldTransitionMillis = world.tracker.getTrackingStateLastTransitionMillis();
+            if (worldTransitionMillis > entityTrackingLastTransitionMillis) {
+                entityTrackingLastTransitionMillis = worldTransitionMillis;
+            }
         }
         profiler.endSection();
+        profiler.recordEntityTrackingSample(
+            aggregateTrackingState,
+            entityTrackingSkippedNear,
+            entityTrackingSkippedMid,
+            entityTrackingSkippedFar,
+            entityTrackingLastTransitionMillis
+        );
         // CraftBukkit end
 
         for (j = 0; j < this.r.size(); ++j) {
             ((IUpdatePlayerListBox) this.r.get(j)).a();
         }
 
+        profiler.startSection("consoleCommandDispatch");
         try {
             this.b();
         } catch (Exception exception) {
             log.log(Level.WARNING, "Unexpected exception while parsing console command", exception);
+        } finally {
+            profiler.endSection();
         }
-        
+
         // Process async threading results
+        profiler.startSection("threadingProcessTick");
         ThreadingManager.getInstance().processTick();
-        
+        profiler.endSection();
+
+        int commandQueueDepth = this.s.size();
+        int inboundQueueTotal = 0;
+        int outboundHighQueueTotal = 0;
+        int outboundLowQueueTotal = 0;
+        int outboundQueuedBytesTotal = 0;
+        int pendingLogins = this.networkListenThread != null ? this.networkListenThread.getPendingLoginCount() : 0;
+        int activeHandlers = this.networkListenThread != null ? this.networkListenThread.getActiveHandlerCount() : 0;
+
+        if (this.serverConfigurationManager != null) {
+            for (int i = 0; i < this.serverConfigurationManager.players.size(); i++) {
+                EntityPlayer player = (EntityPlayer) this.serverConfigurationManager.players.get(i);
+                if (player == null || player.netServerHandler == null || player.netServerHandler.networkManager == null) {
+                    continue;
+                }
+                NetworkManager networkManager = player.netServerHandler.networkManager;
+                int inboundDepth = networkManager.getInboundQueueSize();
+                int outboundHigh = networkManager.getHighPriorityQueueSize();
+                int outboundLow = networkManager.getLowPriorityQueueSize();
+                int queuedBytes = networkManager.getQueuedBytes();
+
+                inboundQueueTotal += inboundDepth;
+                outboundHighQueueTotal += outboundHigh;
+                outboundLowQueueTotal += outboundLow;
+                outboundQueuedBytesTotal += queuedBytes;
+
+                profiler.recordPlayerQueueSample(
+                    player.name,
+                    player.netServerHandler.getQueuedPacketCount(),
+                    inboundDepth,
+                    ChunkCompressionThread.getPlayerQueueSize(player),
+                    player.netServerHandler.b()
+                );
+            }
+        }
+
+        profiler.recordQueueSample(
+            commandQueueDepth,
+            inboundQueueTotal,
+            outboundHighQueueTotal,
+            outboundLowQueueTotal,
+            outboundQueuedBytesTotal,
+            pendingLogins,
+            activeHandlers,
+            ChunkCompressionThread.getTotalQueueSize(),
+            ChunkCompressionThread.getTotalQueueCapacity()
+        );
+
+        int playerCount = this.serverConfigurationManager != null ? this.serverConfigurationManager.players.size() : 0;
+        double tickDurationMs = (System.nanoTime() - tickStartNanos) / 1_000_000.0D;
+        profiler.recordTickSample(tickDurationMs, commandQueueDepth, this.worlds.size(), playerCount);
+
         profiler.endSection(); // End "tick" section
     }
 
@@ -837,18 +984,55 @@ public class MinecraftServer implements Runnable, ICommandListener {
     }
 
     public void b() {
-        while (this.s.size() > 0) {
-            ServerCommand servercommand = (ServerCommand) this.s.remove(0);
+        while (true) {
+            ServerCommand servercommand;
+            synchronized (this.s) {
+                if (this.s.size() == 0) {
+                    break;
+                }
+                servercommand = (ServerCommand) this.s.remove(0);
+            }
+            long queueWaitMs = Math.max(0L, System.currentTimeMillis() - servercommand.enqueueTimeMillis);
 
             // CraftBukkit start - ServerCommand for preprocessing
             ServerCommandEvent event = new ServerCommandEvent(this.console, servercommand.command);
             this.server.getPluginManager().callEvent(event);
-            servercommand = new ServerCommand(event.getCommand(), servercommand.b);
+            servercommand = new ServerCommand(event.getCommand(), servercommand.b, servercommand.enqueueTimeMillis);
             // CraftBukkit end
 
             // this.consoleCommandHandler.handle(servercommand); // CraftBukkit - Removed its now called in server.dispatchCommand
+            long commandStart = System.nanoTime();
             this.server.dispatchCommand(this.console, servercommand); // CraftBukkit
+            double commandExecMs = (System.nanoTime() - commandStart) / 1_000_000.0D;
+            int remainingCommands;
+            synchronized (this.s) {
+                remainingCommands = this.s.size();
+            }
+            ServerProfiler.getInstance().recordCommandLatency(
+                extractCommandRoot(servercommand.command),
+                queueWaitMs,
+                commandExecMs,
+                remainingCommands
+            );
         }
+    }
+
+    private String extractCommandRoot(String command) {
+        if (command == null) {
+            return "unknown";
+        }
+        String trimmed = command.trim();
+        if (trimmed.length() == 0) {
+            return "unknown";
+        }
+        if (trimmed.charAt(0) == '/') {
+            trimmed = trimmed.substring(1);
+        }
+        int spaceIdx = trimmed.indexOf(' ');
+        if (spaceIdx > 0) {
+            return trimmed.substring(0, spaceIdx).toLowerCase();
+        }
+        return trimmed.toLowerCase();
     }
 
     public void a(IUpdatePlayerListBox iupdateplayerlistbox) {
@@ -899,6 +1083,20 @@ public class MinecraftServer implements Runnable, ICommandListener {
 
     public EntityTracker getTracker(int i) {
         return this.getWorldServer(i).tracker; // CraftBukkit
+    }
+
+    public boolean isStartupReady() {
+        return this.startupReadinessStatus == StartupReadinessStatus.READY;
+    }
+
+    public StartupReadinessStatus getStartupReadinessStatus() {
+        return this.startupReadinessStatus;
+    }
+
+    private void setStartupReadinessStatus(StartupReadinessStatus status) {
+        if (status != null) {
+            this.startupReadinessStatus = status;
+        }
     }
 
     public static boolean isRunning(MinecraftServer minecraftserver) {

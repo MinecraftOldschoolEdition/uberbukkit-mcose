@@ -1,22 +1,21 @@
 package net.minecraft.server.registry;
 
-import net.minecraft.server.util.ResourceLocation;
-
 /**
- * Server-side STAT registry bootstrap. The dedicated server in this codebase
- * does not expose client StatBase classes, so this bootstrap registers only
- * well-known GUID placeholders when available in the future. For now, it is a
- * no-op to keep client/server parity (the registry still exists on the server).
+ * Bootstrap for the server-side player statistics registry.
  */
 public final class StatRegistryBootstrap {
-    private StatRegistryBootstrap() {}
+    private static boolean initialized = false;
 
-    public static void initialize() {
-        // Intentionally empty: stats are client-driven in this project.
-        // The registry is created in Registries; entries can be registered
-        // by plugins or future code via Registries.STAT.register(...).
-        Registries.REGISTRIES.registerIfAbsent(new ResourceLocation("minecraft","stat"), Registries.STAT);
+    private StatRegistryBootstrap() {
+    }
+
+    public static synchronized void initialize() {
+        if (initialized) {
+            return;
+        }
+        initialized = true;
+
+        StatisticRegistryApi.bootstrapBuiltins();
+        System.out.println("[StatRegistryBootstrap] Registered " + StatisticRegistryApi.size() + " stat keys");
     }
 }
-
-

@@ -23,8 +23,7 @@ public final class DimensionTypeRegistryBootstrap {
 
     private static void register(String keyPath, Class<?> provider) {
         if (provider == null) return;
-        Registries.DIMENSION_TYPE.registerIfAbsent(new ResourceLocation("minecraft", keyPath), provider);
+        DimensionTypeRegistryApi.register(new ResourceLocation("minecraft", keyPath), provider);
     }
 }
-
 

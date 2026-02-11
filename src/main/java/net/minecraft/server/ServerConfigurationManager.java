@@ -1,5 +1,7 @@
 package net.minecraft.server;
 
+import net.minecraft.server.event.EventBus;
+
 import com.legacyminecraft.poseidon.Poseidon;
 import com.legacyminecraft.poseidon.PoseidonConfig;
 
@@ -156,11 +158,16 @@ public class ServerConfigurationManager {
             entityplayer.deathTicks = 0;
         }
         
+        // UberBukkit - Send full baseline player stats snapshot before live deltas.
+        if (entityplayer.playerStatistics != null) {
+            entityplayer.playerStatistics.sendFullSnapshotToClient();
+        }
+
         // UberBukkit - Sync all unlocked achievements to client
         if (entityplayer.achievementManager != null) {
             entityplayer.achievementManager.syncAllToClient();
         }
-        
+
         // UberBukkit - Record player join in server-wide statistics
         ServerStatistics.getInstance().recordPlayerJoin(entityplayer.name);
     }
@@ -226,6 +233,7 @@ public class ServerConfigurationManager {
         Player player = this.cserver.getPlayer(entityplayer);
         PlayerJoinEvent playerJoinEvent = new PlayerJoinEvent(player, msgPlayerJoin.replace("%player%", entityplayer.name));
         this.cserver.getPluginManager().callEvent(playerJoinEvent);
+        EventBus.global().publish(new net.minecraft.server.event.events.PlayerJoinEvent(entityplayer, worldserver));
 
         String joinMessage = playerJoinEvent.getJoinMessage();
 
@@ -281,6 +289,7 @@ public class ServerConfigurationManager {
         this.getPlayerManager(entityplayer.dimension).removePlayer(entityplayer);
         PlayerQuitEvent playerQuitEvent = new PlayerQuitEvent(this.cserver.getPlayer(entityplayer), this.msgPlayerLeave.replace("%player%", entityplayer.name));
         this.cserver.getPluginManager().callEvent(playerQuitEvent);
+        EventBus.global().publish(new net.minecraft.server.event.events.PlayerLeaveEvent(entityplayer, this.server.getWorldServer(entityplayer.dimension)));
         // CraftBukkit end
 
         this.server.chatRoomManager.removePlayer(entityplayer);
@@ -397,9 +406,9 @@ public class ServerConfigurationManager {
         // CraftBukkit start
         EntityPlayer entityplayer1 = entityplayer;
         org.bukkit.World fromWorld = entityplayer1.getBukkitEntity().getWorld();
+        boolean isBedSpawn = false;
 
         if (location == null) {
-            boolean isBedSpawn = false;
             CraftWorld cworld = (CraftWorld) this.server.server.getWorld(entityplayer.spawnWorld);
             if (cworld != null && chunkcoordinates != null) {
                 ChunkCoordinates chunkcoordinates1 = EntityHuman.getBed(cworld.getHandle(), chunkcoordinates);
@@ -428,6 +437,29 @@ public class ServerConfigurationManager {
         } else {
             location.setWorld(this.server.getWorldServer(i).getWorld());
         }
+
+        // Resolve all non-bed spawns to safe, above-ground coordinates across terrain types.
+        if (location != null) {
+            CraftWorld craftWorld = (CraftWorld) location.getWorld();
+            if (craftWorld != null) {
+                WorldServer targetWorld = craftWorld.getHandle();
+                int lx = MathHelper.floor(location.getX());
+                int ly = MathHelper.floor(location.getY());
+                int lz = MathHelper.floor(location.getZ());
+                boolean locationIsSafe = targetWorld.isSafePlayerSpawnAt(lx, ly, lz);
+
+                if (!isBedSpawn || !locationIsSafe) {
+                    boolean preferShoreline = !isBedSpawn && this.shouldPreferShorelineSpawn(targetWorld);
+                    int searchRadius = isBedSpawn ? 24 : 128;
+                    ChunkCoordinates safe = targetWorld.findSafeSpawnNear(lx, lz, searchRadius, preferShoreline);
+                    location = new Location(craftWorld, safe.x + 0.5D, safe.y + 0.01D, safe.z + 0.5D, location.getYaw(), location.getPitch());
+                    if (!isBedSpawn) {
+                        targetWorld.worldData.setSpawn(safe.x, safe.y, safe.z);
+                    }
+                }
+            }
+        }
+
         WorldServer worldserver = ((CraftWorld) location.getWorld()).getHandle();
         entityplayer1.setLocation(location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
         // CraftBukkit end
@@ -438,8 +470,35 @@ public class ServerConfigurationManager {
             entityplayer1.setPosition(entityplayer1.locX, entityplayer1.locY + 1.0D, entityplayer1.locZ);
         }
 
+        if (this.isSkyTerrainWorld(worldserver)) {
+            int safetyAttempts = 0;
+            while (safetyAttempts < 8) {
+                boolean insideSolid = this.isPlayerInsideSolidBlock(worldserver, entityplayer1);
+                boolean grounded = this.isStandingOnSolidGround(worldserver, entityplayer1);
+
+                if (!insideSolid && grounded) {
+                    break;
+                }
+
+                int x = MathHelper.floor(entityplayer1.locX);
+                int z = MathHelper.floor(entityplayer1.locZ);
+                int safeY = this.findSkyRespawnY(worldserver, x, z);
+
+                if (safeY > 0) {
+                    entityplayer1.setPosition(entityplayer1.locX, (double) safeY + 0.01D, entityplayer1.locZ);
+                } else if (insideSolid) {
+                    // Last-resort escape upward if the local column cannot currently resolve to a safe sky surface.
+                    entityplayer1.setPosition(entityplayer1.locX, entityplayer1.locY + 1.0D, entityplayer1.locZ);
+                } else {
+                    break;
+                }
+
+                ++safetyAttempts;
+            }
+        }
+
         // CraftBukkit start
-        byte actualDimension = (byte) (worldserver.getWorld().getEnvironment().getId());
+        byte actualDimension = this.getClientDimensionForWorld(worldserver);
         entityplayer1.netServerHandler.sendPacket(new Packet9Respawn((byte) (actualDimension >= 0 ? -1 : 0), worldserver.getSeed()));
         entityplayer1.netServerHandler.sendPacket(new Packet9Respawn(actualDimension, worldserver.getSeed()));
         entityplayer1.spawnIn(worldserver);
@@ -909,5 +968,207 @@ public class ServerConfigurationManager {
     public void updateClient(EntityPlayer entityplayer) {
         entityplayer.updateInventory(entityplayer.defaultContainer);
         entityplayer.C();
+    }
+
+    private byte getClientDimensionForWorld(WorldServer worldserver) {
+        if (worldserver == null || worldserver.worldProvider == null) {
+            return 0;
+        }
+
+        if (worldserver.worldProvider instanceof WorldProviderHell) {
+            return -1;
+        }
+
+        try {
+            if (worldserver.worldData != null && worldserver.worldData.getTerrainType() == 3) {
+                // Present SKY terrain worlds as client dimension 1 for proper sky provider visuals.
+                return 1;
+            }
+        } catch (Throwable ignore) {}
+
+        return (byte) worldserver.worldProvider.dimension;
+    }
+
+    private boolean isSkyTerrainWorld(WorldServer worldserver) {
+        return worldserver != null
+            && worldserver.worldData != null
+            && worldserver.worldData.getTerrainType() == 3
+            && !(worldserver.worldProvider instanceof WorldProviderHell);
+    }
+
+    private boolean shouldPreferShorelineSpawn(WorldServer worldserver) {
+        if (worldserver == null || worldserver.worldData == null) {
+            return false;
+        }
+
+        int terrainType = worldserver.worldData.getTerrainType();
+        return terrainType == 0 || terrainType == 1;
+    }
+
+    private boolean isSafeSkyRespawnAt(WorldServer worldserver, int x, int y, int z) {
+        if (worldserver == null || y <= 1 || y >= 126) {
+            return false;
+        }
+
+        int groundId = worldserver.getTypeId(x, y - 1, z);
+        if (groundId <= 0 || groundId >= Block.byId.length) {
+            return false;
+        }
+
+        Block ground = Block.byId[groundId];
+        if (ground == null || !ground.material.isSolid() || ground.material.isLiquid()) {
+            return false;
+        }
+
+        return worldserver.getTypeId(x, y, z) == 0 && worldserver.getTypeId(x, y + 1, z) == 0;
+    }
+
+    private int findSkyRespawnY(WorldServer worldserver, int x, int z) {
+        if (worldserver == null) {
+            return -1;
+        }
+
+        int y = worldserver.e(x, z); // air block above top solid
+        return this.isSafeSkyRespawnAt(worldserver, x, y, z) ? y : -1;
+    }
+
+    private boolean isStandingOnSolidGround(WorldServer worldserver, EntityPlayer entityplayer) {
+        if (worldserver == null || entityplayer == null) {
+            return false;
+        }
+
+        int x = MathHelper.floor(entityplayer.locX);
+        int y = MathHelper.floor(entityplayer.locY);
+        int z = MathHelper.floor(entityplayer.locZ);
+
+        if (y <= 1) {
+            return false;
+        }
+
+        int groundId = worldserver.getTypeId(x, y - 1, z);
+        if (groundId <= 0 || groundId >= Block.byId.length) {
+            return false;
+        }
+
+        Block ground = Block.byId[groundId];
+        return ground != null && ground.material.isSolid() && !ground.material.isLiquid();
+    }
+
+    private int computeSkySupport(WorldServer worldserver, int x, int z) {
+        int score = 0;
+        for (int dx = -2; dx <= 2; ++dx) {
+            for (int dz = -2; dz <= 2; ++dz) {
+                if (this.findSkyRespawnY(worldserver, x + dx, z + dz) > 0) {
+                    ++score;
+                }
+            }
+        }
+        return score;
+    }
+
+    private ChunkCoordinates findNearestSafeSkyRespawn(WorldServer worldserver, int centerX, int centerZ) {
+        if (worldserver == null) {
+            return null;
+        }
+
+        final int maxRadius = 256;
+        final int step = 2;
+        final int desiredSupport = 9;
+
+        int bestX = 0;
+        int bestY = -1;
+        int bestZ = 0;
+        int bestSupport = -1;
+        int bestDist = Integer.MAX_VALUE;
+
+        for (int r = 0; r <= maxRadius; r += step) {
+            int ringBestX = 0;
+            int ringBestY = -1;
+            int ringBestZ = 0;
+            int ringBestSupport = -1;
+            int ringBestDist = Integer.MAX_VALUE;
+
+            for (int x = centerX - r; x <= centerX + r; x += step) {
+                int zTop = centerZ + r;
+                int zBottom = centerZ - r;
+
+                int yTop = this.findSkyRespawnY(worldserver, x, zTop);
+                if (yTop > 0) {
+                    int support = this.computeSkySupport(worldserver, x, zTop);
+                    int dist = Math.abs(x - centerX) + Math.abs(zTop - centerZ);
+                    if (support > ringBestSupport || (support == ringBestSupport && dist < ringBestDist)) {
+                        ringBestX = x;
+                        ringBestY = yTop;
+                        ringBestZ = zTop;
+                        ringBestSupport = support;
+                        ringBestDist = dist;
+                    }
+                }
+
+                if (zBottom != zTop) {
+                    int yBottom = this.findSkyRespawnY(worldserver, x, zBottom);
+                    if (yBottom > 0) {
+                        int support = this.computeSkySupport(worldserver, x, zBottom);
+                        int dist = Math.abs(x - centerX) + Math.abs(zBottom - centerZ);
+                        if (support > ringBestSupport || (support == ringBestSupport && dist < ringBestDist)) {
+                            ringBestX = x;
+                            ringBestY = yBottom;
+                            ringBestZ = zBottom;
+                            ringBestSupport = support;
+                            ringBestDist = dist;
+                        }
+                    }
+                }
+            }
+
+            for (int z = centerZ - r + step; z <= centerZ + r - step; z += step) {
+                int xRight = centerX + r;
+                int xLeft = centerX - r;
+
+                int yRight = this.findSkyRespawnY(worldserver, xRight, z);
+                if (yRight > 0) {
+                    int support = this.computeSkySupport(worldserver, xRight, z);
+                    int dist = Math.abs(xRight - centerX) + Math.abs(z - centerZ);
+                    if (support > ringBestSupport || (support == ringBestSupport && dist < ringBestDist)) {
+                        ringBestX = xRight;
+                        ringBestY = yRight;
+                        ringBestZ = z;
+                        ringBestSupport = support;
+                        ringBestDist = dist;
+                    }
+                }
+
+                if (xLeft != xRight) {
+                    int yLeft = this.findSkyRespawnY(worldserver, xLeft, z);
+                    if (yLeft > 0) {
+                        int support = this.computeSkySupport(worldserver, xLeft, z);
+                        int dist = Math.abs(xLeft - centerX) + Math.abs(z - centerZ);
+                        if (support > ringBestSupport || (support == ringBestSupport && dist < ringBestDist)) {
+                            ringBestX = xLeft;
+                            ringBestY = yLeft;
+                            ringBestZ = z;
+                            ringBestSupport = support;
+                            ringBestDist = dist;
+                        }
+                    }
+                }
+            }
+
+            if (ringBestY > 0) {
+                if (ringBestSupport > bestSupport || (ringBestSupport == bestSupport && ringBestDist < bestDist)) {
+                    bestX = ringBestX;
+                    bestY = ringBestY;
+                    bestZ = ringBestZ;
+                    bestSupport = ringBestSupport;
+                    bestDist = ringBestDist;
+                }
+
+                if (ringBestSupport >= desiredSupport) {
+                    break;
+                }
+            }
+        }
+
+        return bestY > 0 ? new ChunkCoordinates(bestX, bestY, bestZ) : null;
     }
 }

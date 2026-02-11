@@ -16,7 +16,8 @@ public class Packet62Sound extends Packet {
     public float pitch;
 
     public Packet62Sound(String s, double d0, double d1, double d2, float f, float f1) {
-        this.sound = s;
+        String resolved = net.minecraft.server.registry.SoundEventResolver.resolve(s);
+        this.sound = resolved != null ? resolved : (s != null ? s : "");
         this.locX = d0;
         this.locY = d1;
         this.locZ = d2;

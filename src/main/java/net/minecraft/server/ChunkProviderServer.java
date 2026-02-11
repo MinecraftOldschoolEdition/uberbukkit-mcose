@@ -77,21 +77,45 @@ public class ChunkProviderServer implements IChunkProvider {
                         // Check if async generation already completed
                         ChunkGenerationData asyncData = asyncGen.pollCompletedChunk(i, j);
                         if (asyncData != null) {
+                            long applyStart = System.nanoTime();
                             // Create chunk from async-generated data using the byte[] constructor
                             chunk = new Chunk(this.world, asyncData.blocks, i, j);
                             asyncGen.applyDataToChunk(chunk, asyncData);
+                            ServerProfiler.getInstance().recordChunkIo(
+                                "async-apply",
+                                (System.nanoTime() - applyStart) / 1_000_000.0D,
+                                this.world.worldData.name
+                            );
                         } else if (!asyncGen.isChunkPending(i, j)) {
                             // Request async generation for future chunks nearby
                             // But generate this one synchronously since player needs it now
                             asyncGen.requestChunkAsync(i, j);
+                            long syncStart = System.nanoTime();
                             chunk = this.chunkProvider.getOrCreateChunk(i, j);
+                            ServerProfiler.getInstance().recordChunkIo(
+                                "generate-sync",
+                                (System.nanoTime() - syncStart) / 1_000_000.0D,
+                                this.world.worldData.name
+                            );
                         } else {
                             // Chunk is pending - generate synchronously to avoid blocking
+                            long syncStart = System.nanoTime();
                             chunk = this.chunkProvider.getOrCreateChunk(i, j);
+                            ServerProfiler.getInstance().recordChunkIo(
+                                "generate-sync",
+                                (System.nanoTime() - syncStart) / 1_000_000.0D,
+                                this.world.worldData.name
+                            );
                         }
                     } else {
                         // Fallback to sync generation
+                        long syncStart = System.nanoTime();
                         chunk = this.chunkProvider.getOrCreateChunk(i, j);
+                        ServerProfiler.getInstance().recordChunkIo(
+                            "generate-sync",
+                            (System.nanoTime() - syncStart) / 1_000_000.0D,
+                            this.world.worldData.name
+                        );
                     }
                     long genEnd = System.nanoTime();
                     double genTimeMs = (genEnd - genStart) / 1_000_000.0;
@@ -175,6 +199,7 @@ public class ChunkProviderServer implements IChunkProvider {
         if (this.e == null) {
             return null;
         } else {
+            long start = System.nanoTime();
             try {
                 Chunk chunk = this.e.a(this.world, i, j);
 
@@ -182,8 +207,11 @@ public class ChunkProviderServer implements IChunkProvider {
                     chunk.r = this.world.getTime();
                 }
 
+                ServerProfiler.getInstance().recordChunkIo("load", (System.nanoTime() - start) / 1_000_000.0D, this.world.worldData.name);
+
                 return chunk;
             } catch (Exception exception) {
+                ServerProfiler.getInstance().recordChunkIo("load", (System.nanoTime() - start) / 1_000_000.0D, this.world.worldData.name);
                 exception.printStackTrace();
                 return null;
             }
@@ -192,9 +220,12 @@ public class ChunkProviderServer implements IChunkProvider {
 
     public void saveChunkNOP(Chunk chunk) { // CraftBukkit - private -> public
         if (this.e != null) {
+            long start = System.nanoTime();
             try {
                 this.e.b(this.world, chunk);
+                ServerProfiler.getInstance().recordChunkIo("save-nop", (System.nanoTime() - start) / 1_000_000.0D, this.world.worldData.name);
             } catch (Exception exception) {
+                ServerProfiler.getInstance().recordChunkIo("save-nop", (System.nanoTime() - start) / 1_000_000.0D, this.world.worldData.name);
                 exception.printStackTrace();
             }
         }
@@ -202,10 +233,13 @@ public class ChunkProviderServer implements IChunkProvider {
 
     public void saveChunk(Chunk chunk) { // CraftBukkit - private -> public
         if (this.e != null) {
+            long start = System.nanoTime();
             try {
                 chunk.r = this.world.getTime();
                 this.e.a(this.world, chunk);
+                ServerProfiler.getInstance().recordChunkIo("save", (System.nanoTime() - start) / 1_000_000.0D, this.world.worldData.name);
             } catch (Exception ioexception) { // CraftBukkit - IOException -> Exception
+                ServerProfiler.getInstance().recordChunkIo("save", (System.nanoTime() - start) / 1_000_000.0D, this.world.worldData.name);
                 ioexception.printStackTrace();
             }
         }

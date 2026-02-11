@@ -63,25 +63,53 @@ public class AsyncChunkGenerator {
         log.info("[AsyncChunk] Started " + threadCount + " chunk generation threads for world '" + 
                  world.worldData.name + "' using " + generator.getGeneratorName());
     }
+
+    public static boolean isTerrainTypeSupported(int terrainType) {
+        return terrainType == 0 || terrainType == 2;
+    }
+
+    public static String terrainTypeName(int terrainType) {
+        if (terrainType == 0) {
+            return "DEFAULT";
+        }
+
+        if (terrainType == 1) {
+            return "ALPHA";
+        }
+
+        if (terrainType == 2) {
+            return "FLAT";
+        }
+
+        if (terrainType == 3) {
+            return "SKY";
+        }
+
+        if (terrainType == 5) {
+            return "ALPHA_SNOW";
+        }
+
+        if (terrainType == 6) {
+            return "CLASSIC";
+        }
+
+        return "UNKNOWN";
+    }
     
     /**
      * Select the appropriate thread-safe generator for this world.
      */
     private IThreadSafeGenerator selectGenerator(WorldServer world) {
-        // For now, only DEFAULT terrain type has a thread-safe generator
-        // Other types fall back to a simple flat generator
         int terrainType = world.worldData.getTerrainType();
         
         if (terrainType == 0) { // DEFAULT
             return new ThreadSafeDefaultGenerator();
         } else if (terrainType == 2) { // FLAT
             return new ThreadSafeFlatGenerator();
-        } else {
-            // Fallback - use flat for safety
-            log.warning("[AsyncChunk] No thread-safe generator for terrain type " + terrainType + 
-                       ", falling back to flat");
-            return new ThreadSafeFlatGenerator();
         }
+
+        throw new IllegalArgumentException("Unsupported async terrain type: " + terrainType +
+                " (" + terrainTypeName(terrainType) + ")");
     }
     
     /**

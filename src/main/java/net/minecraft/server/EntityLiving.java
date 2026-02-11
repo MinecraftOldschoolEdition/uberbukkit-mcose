@@ -3,6 +3,8 @@ package net.minecraft.server;
 import com.legacyminecraft.poseidon.PoseidonConfig;
 import org.bukkit.craftbukkit.TrigMath;
 import org.bukkit.craftbukkit.entity.CraftEntity;
+
+import net.minecraft.server.event.EventBus;
 import org.bukkit.event.entity.EntityDamageByBlockEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
@@ -463,6 +465,10 @@ public abstract class EntityLiving extends Entity {
             entity.a(this);
         }
 
+        if (!this.world.isStatic) {
+            EventBus.global().publish(new net.minecraft.server.event.events.EntityDeathEvent(this, entity, this.world));
+        }
+
         this.ak = true;
         if (!this.world.isStatic) {
             this.q();
@@ -663,6 +669,7 @@ public abstract class EntityLiving extends Entity {
         nbttagcompound.a("HurtTime", (short) this.hurtTicks);
         nbttagcompound.a("DeathTime", (short) this.deathTicks);
         nbttagcompound.a("AttackTime", (short) this.attackTicks);
+        nbttagcompound.a("EntityAge", this.ay);
     }
 
     public void a(NBTTagCompound nbttagcompound) {
@@ -674,6 +681,9 @@ public abstract class EntityLiving extends Entity {
         this.hurtTicks = nbttagcompound.d("HurtTime");
         this.deathTicks = nbttagcompound.d("DeathTime");
         this.attackTicks = nbttagcompound.d("AttackTime");
+        if (nbttagcompound.hasKey("EntityAge")) {
+            this.ay = nbttagcompound.e("EntityAge");
+        }
     }
 
     public boolean T() {

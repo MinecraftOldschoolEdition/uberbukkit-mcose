@@ -1,7 +1,13 @@
 package net.minecraft.server;
 
-import java.io.*;
+import java.io.ByteArrayInputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.File;
+import java.io.IOException;
+import java.io.RandomAccessFile;
 import java.util.ArrayList;
+import java.util.Locale;
 import java.util.zip.DeflaterOutputStream;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.InflaterInputStream;
@@ -9,18 +15,27 @@ import java.util.zip.InflaterInputStream;
 public class RegionFile {
 
     private static final byte[] a = new byte[4096];
+    private static final int WAL_LOG_LEVEL = getWalLogLevel();
+    private static final boolean WAL_STRICT_SYNC = isStrictWalMode();
+    private static final int WAL_SYNC_BATCH = getWalSyncBatch();
+    private static boolean walBannerLogged = false;
     private final File b;
     private RandomAccessFile c;
+    private RegionFileWAL writeAheadLog;
     private final int[] d = new int[1024];
     private final int[] e = new int[1024];
     private ArrayList f;
     private int g;
     private long h = 0L;
+    private int walPendingWrites = 0;
+    private int walCommittedWrites = 0;
+    private boolean walFirstWriteLogged = false;
 
     public RegionFile(File file1) {
         this.b = file1;
         this.b("REGION LOAD " + this.b);
         this.g = 0;
+        boolean flag = false;
 
         try {
             if (file1.exists()) {
@@ -77,8 +92,50 @@ public class RegionFile {
                 k = this.c.readInt();
                 this.e[j] = k;
             }
+
+            flag = true;
         } catch (IOException ioexception) {
             ioexception.printStackTrace();
+        }
+
+        if (flag) {
+            try {
+                this.writeAheadLog = new RegionFileWAL(this.b);
+                this.logWalBanner();
+                this.logWal(1, "enabled for " + this.b.getName() + " (mode=" + (WAL_STRICT_SYNC ? "strict" : "balanced") + ", batch=" + WAL_SYNC_BATCH + ")");
+                this.recoverFromWriteAheadLog();
+            } catch (IOException ioexception1) {
+                this.writeAheadLog = null;
+                this.logWal(1, "disabled for " + this.b.getName() + " (init failed: " + ioexception1.getMessage() + ")");
+                ioexception1.printStackTrace();
+            }
+        }
+    }
+
+    private void recoverFromWriteAheadLog() {
+        if (this.writeAheadLog != null) {
+            try {
+                ArrayList arraylist = this.writeAheadLog.readPendingWrites();
+
+                if (!arraylist.isEmpty()) {
+                    this.logWal(1, "replaying " + arraylist.size() + " pending WAL writes for " + this.b.getName());
+
+                    for (int i = 0; i < arraylist.size(); ++i) {
+                        RegionFileWAL.PendingEntry regionfilewal_pendingentry = (RegionFileWAL.PendingEntry) arraylist.get(i);
+
+                        this.a("WAL", regionfilewal_pendingentry.chunkX, regionfilewal_pendingentry.chunkZ, regionfilewal_pendingentry.length, "replay");
+                        this.writeChunk(regionfilewal_pendingentry.chunkX, regionfilewal_pendingentry.chunkZ, regionfilewal_pendingentry.data, regionfilewal_pendingentry.length);
+                    }
+
+                    this.c.getFD().sync();
+                    this.writeAheadLog.clear(true);
+                    this.walPendingWrites = 0;
+                    this.logWal(1, "replay committed for " + this.b.getName());
+                }
+            } catch (IOException ioexception) {
+                this.logWal(1, "recovery failed for " + this.b.getName() + " (" + ioexception.getMessage() + ")");
+                ioexception.printStackTrace();
+            }
         }
     }
 
@@ -167,18 +224,57 @@ public class RegionFile {
 
     protected synchronized void a(int i, int j, byte[] abyte, int k) {
         try {
-            int l = this.e(i, j);
-            int i1 = l >> 8;
-            int j1 = l & 255;
-            int k1 = (k + 5) / 4096 + 1;
+            if (this.writeAheadLog != null) {
+                this.logWal(2, "begin " + this.b.getName() + " chunk [" + i + "," + j + "] bytes=" + k);
+                if (!this.walFirstWriteLogged) {
+                    this.logWal(1, "first write observed for " + this.b.getName());
+                    this.walFirstWriteLogged = true;
+                }
 
-            if (k1 >= 256) {
-                return;
+                this.writeAheadLog.appendPendingWrite(i, j, abyte, k, WAL_STRICT_SYNC);
             }
 
+            this.writeChunk(i, j, abyte, k);
+            if (this.writeAheadLog != null) {
+                ++this.walPendingWrites;
+                ++this.walCommittedWrites;
+                if (WAL_STRICT_SYNC || this.walPendingWrites >= WAL_SYNC_BATCH) {
+                    this.flushWal("sync");
+                } else if (this.walCommittedWrites % 256 == 0) {
+                    this.logWal(1, "progress " + this.b.getName() + " committed=" + this.walCommittedWrites + " pending=" + this.walPendingWrites);
+                }
+
+                this.logWal(2, "commit " + this.b.getName() + " chunk [" + i + "," + j + "]");
+            }
+        } catch (IOException ioexception) {
+            this.logWal(1, "write failed " + this.b.getName() + " chunk [" + i + "," + j + "] (" + ioexception.getMessage() + ")");
+            ioexception.printStackTrace();
+        }
+    }
+
+    private void flushWal(String s) throws IOException {
+        if (this.writeAheadLog != null && this.walPendingWrites > 0) {
+            if (!WAL_STRICT_SYNC) {
+                this.writeAheadLog.sync();
+            }
+
+            this.c.getFD().sync();
+            this.writeAheadLog.clear(!WAL_STRICT_SYNC);
+            this.logWal(2, "flush " + this.b.getName() + " reason=" + s + " writes=" + this.walPendingWrites);
+            this.walPendingWrites = 0;
+        }
+    }
+
+    private void writeChunk(int i, int j, byte[] abyte, int k) throws IOException {
+        int l = this.e(i, j);
+        int i1 = l >> 8;
+        int j1 = l & 255;
+        int k1 = (k + 5) / 4096 + 1;
+
+        if (k1 < 256) {
             if (i1 != 0 && j1 == k1) {
                 this.a("SAVE", i, j, k, "rewrite");
-                this.a(i1, abyte, k);
+                this.writeSector(i1, abyte, k);
             } else {
                 int l1;
 
@@ -218,7 +314,7 @@ public class RegionFile {
                         this.f.set(i1 + j2, Boolean.valueOf(false));
                     }
 
-                    this.a(i1, abyte, k);
+                    this.writeSector(i1, abyte, k);
                 } else {
                     this.a("SAVE", i, j, k, "grow");
                     this.c.seek(this.c.length());
@@ -230,18 +326,16 @@ public class RegionFile {
                     }
 
                     this.g += 4096 * k1;
-                    this.a(i1, abyte, k);
+                    this.writeSector(i1, abyte, k);
                     this.a(i, j, i1 << 8 | k1);
                 }
             }
 
             this.b(i, j, (int) (System.currentTimeMillis() / 1000L));
-        } catch (IOException ioexception) {
-            ioexception.printStackTrace();
         }
     }
 
-    private void a(int i, byte[] abyte, int j) throws IOException {
+    private void writeSector(int i, byte[] abyte, int j) throws IOException {
         this.b(" " + i);
         this.c.seek((long) (i * 4096));
         this.c.writeInt(j + 1);
@@ -274,6 +368,52 @@ public class RegionFile {
     }
 
     public void b() throws IOException {
-        this.c.close();
+        try {
+            if (this.writeAheadLog != null) {
+                this.flushWal("close");
+                this.logWal(1, "close " + this.b.getName());
+                this.writeAheadLog.close();
+            }
+        } finally {
+            this.c.close();
+        }
+    }
+
+    private void logWal(int i, String s) {
+        if (WAL_LOG_LEVEL >= i) {
+            System.out.println("[McRegion WAL] " + s);
+        }
+    }
+
+    private synchronized void logWalBanner() {
+        if (!walBannerLogged && WAL_LOG_LEVEL > 0) {
+            String s = WAL_LOG_LEVEL >= 2 ? "verbose" : "basic";
+
+            System.out.println("[McRegion WAL] active mode=" + (WAL_STRICT_SYNC ? "strict" : "balanced") + ", batch=" + WAL_SYNC_BATCH + ", log=" + s);
+            walBannerLogged = true;
+        }
+    }
+
+    private static boolean isStrictWalMode() {
+        String s = System.getProperty("mcregion.wal.mode", "balanced");
+
+        return "strict".equals(s.toLowerCase(Locale.ROOT));
+    }
+
+    private static int getWalSyncBatch() {
+        Integer integer = Integer.getInteger("mcregion.wal.syncBatch");
+
+        return integer != null && integer.intValue() > 0 ? integer.intValue() : 64;
+    }
+
+    private static int getWalLogLevel() {
+        String s = System.getProperty("mcregion.wal.log", "off");
+        String s1 = s.toLowerCase(Locale.ROOT);
+
+        if (!"0".equals(s1) && !"false".equals(s1) && !"off".equals(s1)) {
+            return !"2".equals(s1) && !"verbose".equals(s1) && !"debug".equals(s1) ? 1 : 2;
+        } else {
+            return 0;
+        }
     }
 }

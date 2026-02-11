@@ -1,5 +1,8 @@
 package net.minecraft.server;
 
+import net.minecraft.server.event.EventBus;
+import net.minecraft.server.event.events.CraftingCompleteEvent;
+
 public class SlotResult extends Slot {
 
     private final IInventory d;
@@ -17,6 +20,7 @@ public class SlotResult extends Slot {
 
     public void a(ItemStack itemstack) {
         itemstack.b(this.e.world, this.e);
+        EventBus.global().publish(new CraftingCompleteEvent(this.e, this.e.world, itemstack, itemstack == null ? 0 : itemstack.count, null));
         
         // === CORE PROGRESSION ===
         if (itemstack.id == Block.WORKBENCH.id) {

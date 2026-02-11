@@ -5,6 +5,7 @@ import com.legacyminecraft.poseidon.PoseidonConfig;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Set;
 
 public class EntityTracker {
@@ -21,6 +22,40 @@ public class EntityTracker {
     private int vehicleUpdateFrequency;
     private int projectileUpdateFrequency;
     private int itemUpdateFrequency;
+    private boolean actionPriorityModeEnabled;
+    private boolean adaptiveActionPriorityMode;
+    private int actionPriorityStartupTicks;
+    private int enterLowQueueThreshold;
+    private int exitLowQueueThreshold;
+    private int enterHighQueueThreshold;
+    private int exitHighQueueThreshold;
+    private int enterPlayerQueuedThreshold;
+    private int exitPlayerQueuedThreshold;
+    private int minPressureTicks;
+    private int minRecoveryTicks;
+    private int nearChunkRadius;
+    private int midChunkRadius;
+
+    private TrackingPressureState trackingPressureState = TrackingPressureState.NORMAL;
+    private int pressureTicks = 0;
+    private int recoveryTicks = 0;
+    private int recoveryCooldownTicks = 0;
+    private long trackingStateLastTransitionMillis = System.currentTimeMillis();
+    private int skippedNearThisTick = 0;
+    private int skippedMidThisTick = 0;
+    private int skippedFarThisTick = 0;
+
+    public static enum TrackingPressureState {
+        NORMAL,
+        PRESSURE,
+        RECOVERY
+    }
+
+    private static enum TrackingDistanceBand {
+        NEAR,
+        MID,
+        FAR
+    }
 
     public EntityTracker(MinecraftServer minecraftserver, int i) {
         this.c = minecraftserver;
@@ -38,6 +73,31 @@ public class EntityTracker {
     private void loadTrackingConfig() {
         PoseidonConfig config = PoseidonConfig.getInstance();
         boolean enabled = config.getConfigBoolean("settings.entity-tracking.enabled", true);
+        this.actionPriorityModeEnabled = config.getConfigBoolean("settings.entity-tracking.action-priority.enabled", true);
+        String mode = getConfigString(config, "settings.entity-tracking.action-priority.mode", "adaptive");
+        this.adaptiveActionPriorityMode = "adaptive".equalsIgnoreCase(mode);
+        int startupSeconds = getConfigInt(config, "settings.entity-tracking.action-priority.startup-seconds", 20);
+        this.actionPriorityStartupTicks = Math.max(0, startupSeconds) * 20;
+        this.enterLowQueueThreshold = Math.max(1, getConfigInt(config, "settings.entity-tracking.action-priority.enter-low-queue", 96));
+        this.exitLowQueueThreshold = Math.max(1, getConfigInt(config, "settings.entity-tracking.action-priority.exit-low-queue", 48));
+        this.enterHighQueueThreshold = Math.max(1, getConfigInt(config, "settings.entity-tracking.action-priority.enter-high-queue", 20));
+        this.exitHighQueueThreshold = Math.max(1, getConfigInt(config, "settings.entity-tracking.action-priority.exit-high-queue", 8));
+        this.enterPlayerQueuedThreshold = Math.max(1, getConfigInt(config, "settings.entity-tracking.action-priority.enter-player-queued", 96));
+        this.exitPlayerQueuedThreshold = Math.max(1, getConfigInt(config, "settings.entity-tracking.action-priority.exit-player-queued", 48));
+        this.minPressureTicks = Math.max(1, getConfigInt(config, "settings.entity-tracking.action-priority.min-pressure-ticks", 10));
+        this.minRecoveryTicks = Math.max(1, getConfigInt(config, "settings.entity-tracking.action-priority.min-recovery-ticks", 80));
+        this.nearChunkRadius = Math.max(0, getConfigInt(config, "settings.entity-tracking.action-priority.near-chunk-radius", 2));
+        this.midChunkRadius = Math.max(this.nearChunkRadius + 1, getConfigInt(config, "settings.entity-tracking.action-priority.mid-chunk-radius", 4));
+
+        if (this.exitLowQueueThreshold > this.enterLowQueueThreshold) {
+            this.exitLowQueueThreshold = this.enterLowQueueThreshold;
+        }
+        if (this.exitHighQueueThreshold > this.enterHighQueueThreshold) {
+            this.exitHighQueueThreshold = this.enterHighQueueThreshold;
+        }
+        if (this.exitPlayerQueuedThreshold > this.enterPlayerQueuedThreshold) {
+            this.exitPlayerQueuedThreshold = this.enterPlayerQueuedThreshold;
+        }
         
         if (enabled) {
             this.mobUpdateFrequency = getConfigInt(config, "settings.entity-tracking.mob-update-frequency", 2);
@@ -74,6 +134,18 @@ public class EntityTracker {
         }
     }
 
+    private String getConfigString(PoseidonConfig config, String key, String defaultValue) {
+        try {
+            Object value = config.getConfigOption(key, defaultValue);
+            if (value == null) {
+                return defaultValue;
+            }
+            return String.valueOf(value);
+        } catch (Exception e) {
+            return defaultValue;
+        }
+    }
+
     // CraftBukkit - synchronized
     public synchronized void track(Entity entity) {
         if (entity instanceof EntityPlayer) {
@@ -102,17 +174,17 @@ public class EntityTracker {
         } else if (entity instanceof EntityItem) {
             this.a(entity, 64, itemUpdateFrequency, true);
         } else if (entity instanceof EntityMinecart) {
-            this.a(entity, 80, vehicleUpdateFrequency, true); // uberbukkit - smoother vehicles
+            this.a(entity, 80, this.vehicleUpdateFrequency, true); // uberbukkit - smoother vehicles
         } else if (entity instanceof EntityBoat) {
-            this.a(entity, 80, vehicleUpdateFrequency, true); // uberbukkit - smoother vehicles
+            this.a(entity, 80, this.vehicleUpdateFrequency, true); // uberbukkit - smoother vehicles
         } else if (entity instanceof EntitySquid) {
-            this.a(entity, 64, mobUpdateFrequency, true); // uberbukkit - smoother mobs
+            this.a(entity, 64, this.mobUpdateFrequency, true); // uberbukkit - smoother mobs
         } else if (entity instanceof EntitySnowman) {
-            this.a(entity, 160, mobUpdateFrequency, true); // uberbukkit - smoother mobs, added velocity
+            this.a(entity, 160, this.mobUpdateFrequency, true); // uberbukkit - smoother mobs, added velocity
         } else if (entity instanceof EntityHerobrine) {
-            this.a(entity, 160, mobUpdateFrequency, true); // Herobrine - track like other mobs
+            this.a(entity, 160, this.mobUpdateFrequency, true); // Herobrine - track like other mobs
         } else if (entity instanceof IAnimal) {
-            this.a(entity, 80, mobUpdateFrequency, true); // uberbukkit - smoother mobs
+            this.a(entity, 80, this.mobUpdateFrequency, true); // uberbukkit - smoother mobs
         } else if (entity instanceof EntityTNTPrimed) {
             this.a(entity, 160, projectileUpdateFrequency, true); // Smoother TNT
         } else if (entity instanceof EntityFallingSand) {
@@ -122,6 +194,181 @@ public class EntityTracker {
         } else if (entity instanceof EntityMapHanging) {
             this.a(entity, 160, Integer.MAX_VALUE, false);
         }
+    }
+
+    private TrackingPressureState evaluateTrackingPressureState() {
+        if (!this.actionPriorityModeEnabled || !this.adaptiveActionPriorityMode) {
+            this.pressureTicks = 0;
+            this.recoveryTicks = 0;
+            this.recoveryCooldownTicks = 0;
+            return transitionTrackingState(TrackingPressureState.NORMAL);
+        }
+
+        QueuePressureSnapshot pressure = collectQueuePressureSnapshot();
+        boolean startupPressure = this.c.ticks <= this.actionPriorityStartupTicks;
+        boolean enterPressure = startupPressure
+            || pressure.lowQueueMax >= this.enterLowQueueThreshold
+            || pressure.highQueueMax >= this.enterHighQueueThreshold
+            || pressure.playerQueuedMax >= this.enterPlayerQueuedThreshold;
+        boolean lowPressure = !startupPressure
+            && pressure.lowQueueMax <= this.exitLowQueueThreshold
+            && pressure.highQueueMax <= this.exitHighQueueThreshold
+            && pressure.playerQueuedMax <= this.exitPlayerQueuedThreshold;
+
+        if (enterPressure) {
+            this.pressureTicks++;
+        } else {
+            this.pressureTicks = 0;
+        }
+        if (lowPressure) {
+            this.recoveryTicks++;
+        } else {
+            this.recoveryTicks = 0;
+        }
+
+        if (this.trackingPressureState == TrackingPressureState.NORMAL) {
+            if (this.pressureTicks >= this.minPressureTicks) {
+                this.recoveryCooldownTicks = this.minRecoveryTicks;
+                this.recoveryTicks = 0;
+                return transitionTrackingState(TrackingPressureState.PRESSURE);
+            }
+            return this.trackingPressureState;
+        }
+
+        if (this.trackingPressureState == TrackingPressureState.PRESSURE) {
+            if (this.recoveryTicks >= this.minRecoveryTicks) {
+                this.recoveryCooldownTicks = this.minRecoveryTicks;
+                this.pressureTicks = 0;
+                this.recoveryTicks = 0;
+                return transitionTrackingState(TrackingPressureState.RECOVERY);
+            }
+            return this.trackingPressureState;
+        }
+
+        if (this.pressureTicks >= this.minPressureTicks) {
+            this.recoveryCooldownTicks = this.minRecoveryTicks;
+            this.recoveryTicks = 0;
+            return transitionTrackingState(TrackingPressureState.PRESSURE);
+        }
+
+        if (lowPressure) {
+            if (this.recoveryCooldownTicks > 0) {
+                this.recoveryCooldownTicks--;
+            }
+        } else {
+            this.recoveryCooldownTicks = this.minRecoveryTicks;
+        }
+
+        if (this.recoveryCooldownTicks <= 0) {
+            this.pressureTicks = 0;
+            this.recoveryTicks = 0;
+            return transitionTrackingState(TrackingPressureState.NORMAL);
+        }
+
+        return this.trackingPressureState;
+    }
+
+    private TrackingPressureState transitionTrackingState(TrackingPressureState state) {
+        if (this.trackingPressureState != state) {
+            this.trackingPressureState = state;
+            this.trackingStateLastTransitionMillis = System.currentTimeMillis();
+        }
+        return this.trackingPressureState;
+    }
+
+    private QueuePressureSnapshot collectQueuePressureSnapshot() {
+        QueuePressureSnapshot pressure = new QueuePressureSnapshot();
+        if (this.c.serverConfigurationManager == null) {
+            return pressure;
+        }
+
+        for (int i = 0; i < this.c.serverConfigurationManager.players.size(); i++) {
+            EntityPlayer player = (EntityPlayer) this.c.serverConfigurationManager.players.get(i);
+            if (player == null || player.netServerHandler == null || player.netServerHandler.networkManager == null) {
+                continue;
+            }
+
+            NetworkManager nm = player.netServerHandler.networkManager;
+            int high = nm.getHighPriorityQueueSize();
+            int low = nm.getLowPriorityQueueSize();
+            int queued = player.netServerHandler.getQueuedPacketCount();
+
+            if (high > pressure.highQueueMax) {
+                pressure.highQueueMax = high;
+            }
+            if (low > pressure.lowQueueMax) {
+                pressure.lowQueueMax = low;
+            }
+            if (queued > pressure.playerQueuedMax) {
+                pressure.playerQueuedMax = queued;
+            }
+        }
+        return pressure;
+    }
+
+    private boolean isPressureThrottleCandidate(Entity entity) {
+        if (entity instanceof EntityPlayer) {
+            return false;
+        }
+        return entity instanceof EntityLiving || entity instanceof EntityBoat || entity instanceof EntityMinecart;
+    }
+
+    private TrackingDistanceBand getDistanceBand(Entity entity, List players) {
+        if (players == null || players.isEmpty()) {
+            return TrackingDistanceBand.FAR;
+        }
+
+        int entityChunkX = entity.bH;
+        int entityChunkZ = entity.bJ;
+        int nearest = Integer.MAX_VALUE;
+        for (int i = 0; i < players.size(); i++) {
+            EntityPlayer player = (EntityPlayer) players.get(i);
+            if (player == null) {
+                continue;
+            }
+            int distance = Math.max(Math.abs(player.bH - entityChunkX), Math.abs(player.bJ - entityChunkZ));
+            if (distance < nearest) {
+                nearest = distance;
+                if (nearest <= this.nearChunkRadius) {
+                    return TrackingDistanceBand.NEAR;
+                }
+            }
+        }
+
+        if (nearest <= this.midChunkRadius) {
+            return TrackingDistanceBand.MID;
+        }
+        return TrackingDistanceBand.FAR;
+    }
+
+    private TrackingDistanceBand getSkipBand(EntityTrackerEntry entry, TrackingPressureState state, List players) {
+        if (state != TrackingPressureState.PRESSURE) {
+            return null;
+        }
+
+        Entity entity = entry.tracker;
+        if (!isPressureThrottleCandidate(entity)) {
+            return null;
+        }
+
+        TrackingDistanceBand band = getDistanceBand(entity, players);
+        if (band == TrackingDistanceBand.NEAR) {
+            return null;
+        }
+
+        int tick = this.c.ticks + entity.id;
+        if (band == TrackingDistanceBand.MID) {
+            // Mild staggering in pressure keeps mid-distance movement smoother than far entities.
+            if (tick % 3 == 0) {
+                return TrackingDistanceBand.MID;
+            }
+            return null;
+        }
+
+        if ((tick & 1) != 0) {
+            return TrackingDistanceBand.FAR;
+        }
+        return null;
     }
 
     public void a(Entity entity, int i, int j) {
@@ -171,15 +418,36 @@ public class EntityTracker {
     public synchronized void updatePlayers() {
         ArrayList arraylist = new ArrayList();
         Iterator iterator = this.a.iterator();
+        List players = this.c.getWorldServer(this.e).players;
+        TrackingPressureState state = evaluateTrackingPressureState();
+        int skippedNear = 0;
+        int skippedMid = 0;
+        int skippedFar = 0;
 
         while (iterator.hasNext()) {
             EntityTrackerEntry entitytrackerentry = (EntityTrackerEntry) iterator.next();
 
-            entitytrackerentry.track(this.c.getWorldServer(this.e).players);
+            TrackingDistanceBand skipBand = getSkipBand(entitytrackerentry, state, players);
+            if (skipBand != null) {
+                if (skipBand == TrackingDistanceBand.NEAR) {
+                    skippedNear++;
+                } else if (skipBand == TrackingDistanceBand.MID) {
+                    skippedMid++;
+                } else {
+                    skippedFar++;
+                }
+                continue;
+            }
+
+            entitytrackerentry.track(players);
             if (entitytrackerentry.m && entitytrackerentry.tracker instanceof EntityPlayer) {
                 arraylist.add((EntityPlayer) entitytrackerentry.tracker);
             }
         }
+
+        this.skippedNearThisTick = skippedNear;
+        this.skippedMidThisTick = skippedMid;
+        this.skippedFarThisTick = skippedFar;
 
         for (int i = 0; i < arraylist.size(); ++i) {
             EntityPlayer entityplayer = (EntityPlayer) arraylist.get(i);
@@ -193,6 +461,40 @@ public class EntityTracker {
                 }
             }
         }
+    }
+
+    public synchronized TrackingPressureState getTrackingPressureState() {
+        return this.trackingPressureState;
+    }
+
+    public synchronized String getTrackingPressureStateName() {
+        return this.trackingPressureState.name();
+    }
+
+    public synchronized long getTrackingStateLastTransitionMillis() {
+        return this.trackingStateLastTransitionMillis;
+    }
+
+    public synchronized int getNearChunkRadius() {
+        return this.nearChunkRadius;
+    }
+
+    public synchronized int consumeSkippedNearCount() {
+        int value = this.skippedNearThisTick;
+        this.skippedNearThisTick = 0;
+        return value;
+    }
+
+    public synchronized int consumeSkippedMidCount() {
+        int value = this.skippedMidThisTick;
+        this.skippedMidThisTick = 0;
+        return value;
+    }
+
+    public synchronized int consumeSkippedFarCount() {
+        int value = this.skippedFarThisTick;
+        this.skippedFarThisTick = 0;
+        return value;
     }
 
     // CraftBukkit - synchronized
@@ -236,5 +538,11 @@ public class EntityTracker {
                 entitytrackerentry.b(entityplayer);
             }
         }
+    }
+
+    private static class QueuePressureSnapshot {
+        private int highQueueMax;
+        private int lowQueueMax;
+        private int playerQueuedMax;
     }
 }

@@ -11,6 +11,7 @@ public class OpenInvStopCommand extends Command {
         super(name);
         this.description = "Stop periodic syncing for admin panel";
         this.usageMessage = "/" + name + " <playername>";
+        this.setPermission("uberbukkit.openinv");
     }
 
     @Override

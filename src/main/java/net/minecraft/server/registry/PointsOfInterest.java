@@ -3,24 +3,54 @@ package net.minecraft.server.registry;
 import net.minecraft.server.World;
 import net.minecraft.server.util.ResourceLocation;
 
+import java.util.Collection;
+import java.util.Set;
+
 public final class PointsOfInterest {
     private PointsOfInterest() {}
 
+    public static boolean register(ResourceLocation key, PointOfInterestType value) {
+        return PointOfInterestRegistryApi.register(key, value);
+    }
+
+    public static PointOfInterestType get(ResourceLocation key) {
+        return PointOfInterestRegistryApi.get(key);
+    }
+
+    public static PointOfInterestType getByIdentifier(String any) {
+        return PointOfInterestRegistryApi.getByIdentifier(any);
+    }
+
+    public static ResourceLocation getKey(PointOfInterestType value) {
+        return PointOfInterestRegistryApi.getKey(value);
+    }
+
+    public static Set<ResourceLocation> keys() {
+        return PointOfInterestRegistryApi.keys();
+    }
+
+    public static Collection<PointOfInterestType> values() {
+        return PointOfInterestRegistryApi.values();
+    }
+
+    public static int size() {
+        return PointOfInterestRegistryApi.size();
+    }
+
+    public static String normalizeInputIdentifier(String any) {
+        return PointOfInterestRegistryApi.normalizeInputIdentifier(any);
+    }
+
+    public static String canonicalizeIdentifier(String any) {
+        return PointOfInterestRegistryApi.canonicalizeIdentifier(any);
+    }
+
     public static boolean isMatch(String path, int blockId) {
-        try {
-            PointOfInterestType t = Registries.POINT_OF_INTEREST_TYPE.get(new ResourceLocation("minecraft", path));
-            if (t == null) return false;
-            int[] ids = t.getBlockIds();
-            for (int i = 0; i < ids.length; i++) if (ids[i] == blockId) return true;
-        } catch (Throwable ignored) {}
-        return false;
+        return PointOfInterestRegistryApi.matches(path, blockId);
     }
 
     public static int[] getIdsFor(String path) {
-        try {
-            PointOfInterestType t = Registries.POINT_OF_INTEREST_TYPE.get(new ResourceLocation("minecraft", path));
-            return t != null ? t.getBlockIds() : new int[0];
-        } catch (Throwable ignored) { return new int[0]; }
+        return PointOfInterestRegistryApi.getBlockIds(path);
     }
 
     /** Find nearest matching block within a cubic radius, returns packed x,y,z or Integer.MIN_VALUE if none. */
@@ -56,5 +86,4 @@ public final class PointsOfInterest {
 
     public static int pack(int x, int y, int z) { return (x & 0x3FFFFF) | ((y & 0xFF) << 22) | ((z & 0x3FFFFF) << 30); }
 }
-
 

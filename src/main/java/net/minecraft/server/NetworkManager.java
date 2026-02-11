@@ -32,6 +32,7 @@ public class NetworkManager {
     private DataOutputStream output;
     private boolean l = true;
     private List m = Collections.synchronizedList(new ArrayList());
+    private List urgentQueue = Collections.synchronizedList(new ArrayList());
     private List highPriorityQueue = Collections.synchronizedList(new ArrayList());
     private List lowPriorityQueue = Collections.synchronizedList(new ArrayList());
     private NetHandler p;
@@ -47,7 +48,16 @@ public class NetworkManager {
     public static int[] e = new int[256];
     public int f = 0;
     private int lowPriorityQueueDelay = 50;
+    private int highPriorityBurstCount = 0;
+    private int inboundPriorityBurstCount = 0;
+    private static final int INBOUND_PRIORITY_BACKLOG_THRESHOLD = 2;
+    private static final int INBOUND_PRIORITY_SCAN_LIMIT = 64;
+    private static final int INBOUND_PRIORITY_BURST_LIMIT = 6;
+    private static final int LOW_PRIORITY_COALESCE_SCAN_LIMIT = 320;
+    private static final int LOW_PRIORITY_MOVEMENT_HARD_CAP = 420;
     private final boolean firePacketEvents;
+    private final int movementCoalesceThreshold;
+    private final int movementDropHardCap;
 
     private final boolean spamDetection;
 
@@ -66,6 +76,8 @@ public class NetworkManager {
         this.firePacketEvents = PoseidonConfig.getInstance().getBoolean("settings.packet-events.enabled", false);
         this.spamDetection = PoseidonConfig.getInstance().getBoolean("settings.packet-spam-detection.enabled", true);
         this.threshold = PoseidonConfig.getInstance().getInt("settings.packet-spam-detection.threshold", 1000);
+        this.movementCoalesceThreshold = Math.max(1, PoseidonConfig.getInstance().getInt("settings.entity-tracking.action-priority.enter-low-queue", 96));
+        this.movementDropHardCap = Math.max(64, LOW_PRIORITY_MOVEMENT_HARD_CAP);
 
         //Debug for packet spam detection
 //        System.out.println("[Poseidon] Packet spam detection is " + (this.spamDetection ? "enabled" : "disabled") + " with a threshold of " + this.threshold + " packets");
@@ -122,6 +134,16 @@ public class NetworkManager {
         this.p = nethandler;
     }
 
+    private String getProfilerPlayerName() {
+        if (this.p instanceof NetServerHandler) {
+            NetServerHandler handler = (NetServerHandler) this.p;
+            if (handler.player != null) {
+                return handler.player.name;
+            }
+        }
+        return null;
+    }
+
     public void queue(Packet packet) {
         if (!this.q) {
             Object object = this.g;
@@ -133,14 +155,198 @@ public class NetworkManager {
             if (this.pvn != 0) packet.pvn = this.pvn;
 
             synchronized (this.g) {
-                this.x += packet.a() + 1;
-                if (packet.k) {
+                boolean urgent = isOutboundUrgentPacket(packet);
+                boolean lowPriority = packet.k || isOutboundLowPriorityPacket(packet);
+                if (urgent) {
+                    this.urgentQueue.add(packet);
+                } else if (lowPriority) {
+                    if (shouldDropLowPriorityPacket(packet)) {
+                        return;
+                    }
                     this.lowPriorityQueue.add(packet);
                 } else {
                     this.highPriorityQueue.add(packet);
                 }
+                this.x += packet.a() + 1;
             }
         }
+    }
+
+    private boolean shouldDropLowPriorityPacket(Packet packet) {
+        if (packet == null) {
+            return true;
+        }
+
+        int entityId = getMovementEntityId(packet);
+        if (entityId != Integer.MIN_VALUE && this.lowPriorityQueue.size() >= this.movementCoalesceThreshold) {
+            int queueSizeBeforeCoalesce = this.lowPriorityQueue.size();
+            int removed = coalesceMovementPackets(entityId);
+            if (removed > 0) {
+                if (queueSizeBeforeCoalesce >= this.movementDropHardCap) {
+                    ServerProfiler.getInstance().recordMovementPacketDropped(removed);
+                } else {
+                    ServerProfiler.getInstance().recordMovementPacketCoalesced(removed);
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private int coalesceMovementPackets(int entityId) {
+        int scanned = 0;
+        int removed = 0;
+        for (int idx = this.lowPriorityQueue.size() - 1; idx >= 0 && scanned < LOW_PRIORITY_COALESCE_SCAN_LIMIT; idx--, scanned++) {
+            Packet queued = (Packet) this.lowPriorityQueue.get(idx);
+            if (queued == null) {
+                continue;
+            }
+
+            int queuedEntityId = getMovementEntityId(queued);
+            if (queuedEntityId == entityId) {
+                this.lowPriorityQueue.remove(idx);
+                this.x -= queued.a() + 1;
+                removed++;
+            }
+        }
+        return removed;
+    }
+
+    private int getMovementEntityId(Packet packet) {
+        if (packet instanceof Packet30Entity) {
+            return ((Packet30Entity) packet).a;
+        }
+        if (packet instanceof Packet28EntityVelocity) {
+            return ((Packet28EntityVelocity) packet).a;
+        }
+        if (packet instanceof Packet34EntityTeleport) {
+            return ((Packet34EntityTeleport) packet).a;
+        }
+        return Integer.MIN_VALUE;
+    }
+
+    private boolean isOutboundUrgentPacket(Packet packet) {
+        if (packet == null) {
+            return false;
+        }
+        switch (packet.b()) {
+            case 1:   // login
+            case 3:   // chat / command response
+            case 6:   // spawn position
+            case 8:   // health
+            case 9:   // respawn
+            case 70:  // bed / animation that affects player state
+            case 100: // open window
+            case 101: // close window
+            case 103: // set slot
+            case 104: // window items
+            case 105: // update progress bar
+            case 106: // transaction
+            case 255: // kick
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private boolean isOutboundLowPriorityPacket(Packet packet) {
+        if (packet == null) {
+            return false;
+        }
+        switch (packet.b()) {
+            case 4:   // time update
+            case 20:  // named entity spawn
+            case 22:  // collect item
+            case 23:  // vehicle spawn
+            case 24:  // mob spawn
+            case 28:  // entity velocity
+            case 29:  // destroy entity
+            case 30:  // entity
+            case 31:  // rel move
+            case 32:  // look
+            case 33:  // rel move + look
+            case 34:  // teleport
+            case 39:  // attach entity
+            case 50:  // pre-chunk
+            case 51:  // map chunk
+            case 52:  // multiblock change
+            case 200: // stats
+            case 201: // tab/player info
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private boolean isInboundCriticalPacketId(int packetId) {
+        switch (packetId) {
+            case 3:   // chat + commands
+            case 7:   // use entity (combat)
+            case 14:  // digging
+            case 15:  // place/interact
+            case 16:  // held item switch
+            case 18:  // arm animation
+            case 19:  // entity action
+            case 101: // close window
+            case 102: // window click
+            case 106: // transaction
+            case 130: // sign update
+            case 205: // client command
+            case 250: // plugin payload
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private Packet pollNextInboundPacket() {
+        synchronized (this.m) {
+            int size = this.m.size();
+            if (size <= 0) {
+                return null;
+            }
+
+            boolean startupPriorityBoost = isStartupPriorityBoostWindow();
+            int burstLimit = startupPriorityBoost ? 24 : INBOUND_PRIORITY_BURST_LIMIT;
+            int scanLimitCap = startupPriorityBoost ? Math.min(size, INBOUND_PRIORITY_SCAN_LIMIT * 2) : Math.min(size, INBOUND_PRIORITY_SCAN_LIMIT);
+
+            if (size < INBOUND_PRIORITY_BACKLOG_THRESHOLD || this.inboundPriorityBurstCount >= burstLimit) {
+                this.inboundPriorityBurstCount = 0;
+                return (Packet) this.m.remove(0);
+            }
+
+            for (int idx = 0; idx < scanLimitCap; idx++) {
+                Packet candidate = (Packet) this.m.get(idx);
+                if (candidate == null) {
+                    continue;
+                }
+                if (isInboundCriticalPacketId(candidate.b())) {
+                    this.inboundPriorityBurstCount++;
+                    return (Packet) this.m.remove(idx);
+                }
+            }
+
+            this.inboundPriorityBurstCount = 0;
+            return (Packet) this.m.remove(0);
+        }
+    }
+
+    private boolean isStartupPriorityBoostWindow() {
+        if (!(this.p instanceof NetServerHandler)) {
+            return false;
+        }
+
+        NetServerHandler handler = (NetServerHandler) this.p;
+        if (handler.player == null || handler.player.world == null || !(handler.player.world instanceof WorldServer)) {
+            return false;
+        }
+
+        WorldServer worldServer = (WorldServer) handler.player.world;
+        if (worldServer.server == null) {
+            return false;
+        }
+
+        return worldServer.server.ticks < 1200;
     }
 
     private boolean f() {
@@ -152,6 +358,30 @@ public class NetworkManager {
             int i;
             int[] aint;
 
+            if (!this.urgentQueue.isEmpty() && (this.f == 0 || System.currentTimeMillis() - ((Packet) this.urgentQueue.get(0)).timestamp >= (long) this.f)) {
+                object = this.g;
+                synchronized (this.g) {
+                    packet = (Packet) this.urgentQueue.remove(0);
+                    this.x -= packet.a() + 1;
+                }
+
+                long queueWaitMs = Math.max(0L, System.currentTimeMillis() - packet.timestamp);
+                Packet.a(packet, this.output);
+                aint = e;
+                i = packet.b();
+                aint[i] += packet.a() + 1;
+                ++this.highPriorityBurstCount;
+                ServerProfiler.getInstance().recordPacketEgress(
+                    i,
+                    packet.getClass().getSimpleName(),
+                    queueWaitMs,
+                    true,
+                    packet.a() + 1,
+                    getProfilerPlayerName()
+                );
+                flag = true;
+            }
+
             if (!this.highPriorityQueue.isEmpty() && (this.f == 0 || System.currentTimeMillis() - ((Packet) this.highPriorityQueue.get(0)).timestamp >= (long) this.f)) {
                 object = this.g;
                 synchronized (this.g) {
@@ -159,26 +389,50 @@ public class NetworkManager {
                     this.x -= packet.a() + 1;
                 }
 
+                long queueWaitMs = Math.max(0L, System.currentTimeMillis() - packet.timestamp);
                 Packet.a(packet, this.output);
                 aint = e;
                 i = packet.b();
                 aint[i] += packet.a() + 1;
+                ++this.highPriorityBurstCount;
+                ServerProfiler.getInstance().recordPacketEgress(
+                    i,
+                    packet.getClass().getSimpleName(),
+                    queueWaitMs,
+                    true,
+                    packet.a() + 1,
+                    getProfilerPlayerName()
+                );
                 flag = true;
             }
 
             // CraftBukkit - don't allow low priority packet to be sent unless it was placed in the queue before the first packet on the high priority queue
-            if ((flag || this.lowPriorityQueueDelay-- <= 0) && !this.lowPriorityQueue.isEmpty() && (this.highPriorityQueue.isEmpty() || ((Packet) this.highPriorityQueue.get(0)).timestamp > ((Packet) this.lowPriorityQueue.get(0)).timestamp)) {
+            boolean allowLowPriorityFairness = this.highPriorityBurstCount >= 3;
+            if ((flag || this.lowPriorityQueueDelay-- <= 0 || allowLowPriorityFairness)
+                    && !this.lowPriorityQueue.isEmpty()
+                    && this.urgentQueue.isEmpty()
+                    && (this.highPriorityQueue.isEmpty() || allowLowPriorityFairness || ((Packet) this.highPriorityQueue.get(0)).timestamp > ((Packet) this.lowPriorityQueue.get(0)).timestamp)) {
                 object = this.g;
                 synchronized (this.g) {
                     packet = (Packet) this.lowPriorityQueue.remove(0);
                     this.x -= packet.a() + 1;
                 }
 
+                long queueWaitMs = Math.max(0L, System.currentTimeMillis() - packet.timestamp);
                 Packet.a(packet, this.output);
                 aint = e;
                 i = packet.b();
                 aint[i] += packet.a() + 1;
                 this.lowPriorityQueueDelay = 0;
+                this.highPriorityBurstCount = 0;
+                ServerProfiler.getInstance().recordPacketEgress(
+                    i,
+                    packet.getClass().getSimpleName(),
+                    queueWaitMs,
+                    false,
+                    packet.a() + 1,
+                    getProfilerPlayerName()
+                );
                 flag = true;
             }
 
@@ -209,6 +463,7 @@ public class NetworkManager {
 
                 aint[i] += packet.a() + 1;
                 this.m.add(packet);
+                ServerProfiler.getInstance().recordPacketIngress(i, packet.getClass().getSimpleName(), this.m.size());
                 flag = true;
             } else {
                 this.a("disconnect.endOfStream", new Object[0]);
@@ -299,7 +554,14 @@ public class NetworkManager {
 
 
         while (!this.m.isEmpty() && i-- >= 0) {
-            Packet packet = (Packet) this.m.remove(0);
+            Packet packet = pollNextInboundPacket();
+            if (packet == null) {
+                break;
+            }
+            String profilerPlayer = getProfilerPlayerName();
+            int packetId = packet.b();
+            double queueWaitMs = Math.max(0L, System.currentTimeMillis() - packet.timestamp);
+            long processStart = System.nanoTime();
 
             //Poseidon Start - Packet Receive Event
             if (firePacketEvents && this.p instanceof NetServerHandler) {
@@ -317,6 +579,8 @@ public class NetworkManager {
             //Poseidon End
 
             //            packet.a(this.p);
+            double processMs = (System.nanoTime() - processStart) / 1_000_000.0D;
+            ServerProfiler.getInstance().recordPacketProcess(packetId, packet.getClass().getSimpleName(), queueWaitMs, processMs, profilerPlayer);
         }
 
         this.a();
@@ -338,6 +602,34 @@ public class NetworkManager {
 
     public int e() {
         return this.lowPriorityQueue.size();
+    }
+
+    public int getQueuedPacketCount() {
+        synchronized (this.g) {
+            return this.urgentQueue.size() + this.highPriorityQueue.size() + this.lowPriorityQueue.size();
+        }
+    }
+
+    public int getHighPriorityQueueSize() {
+        synchronized (this.g) {
+            return this.urgentQueue.size() + this.highPriorityQueue.size();
+        }
+    }
+
+    public int getLowPriorityQueueSize() {
+        synchronized (this.g) {
+            return this.lowPriorityQueue.size();
+        }
+    }
+
+    public int getInboundQueueSize() {
+        return this.m.size();
+    }
+
+    public int getQueuedBytes() {
+        synchronized (this.g) {
+            return this.x;
+        }
     }
 
     static boolean a(NetworkManager networkmanager) {

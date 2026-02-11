@@ -202,31 +202,40 @@ public class ConsoleCommandHandler {
                                         s3 = astring[1];
                                         entityplayer2 = serverconfigurationmanager.i(s3);
                                         if (entityplayer2 != null) {
-                                            try {
-                                                k = Integer.parseInt(astring[2]);
-                                                if (Item.byId[k] != null) {
-                                                    this.print(s1, "Giving " + entityplayer2.name + " some " + k);
-                                                    int l = 1;
-
-                                                    if (astring.length > 3) {
-                                                        l = this.a(astring[3], 1);
-                                                    }
-
-                                                    if (l < 1) {
-                                                        l = 1;
-                                                    }
-
-                                                    if (l > 64) {
-                                                        l = 64;
-                                                    }
-
-                                                    entityplayer2.b(new ItemStack(k, l, 0));
-                                                } else {
-                                                    icommandlistener.sendMessage("There\'s no item with id " + k);
-                                                }
-                                            } catch (NumberFormatException numberformatexception) {
-                                                icommandlistener.sendMessage("There\'s no item with id " + astring[2]);
+                                            String itemArg = astring[2];
+                                            if (net.minecraft.server.registry.RegistryKeyPolicy.looksNumeric(itemArg)) {
+                                                icommandlistener.sendMessage("Numeric item IDs are disabled. Use item keys.");
+                                                return true;
                                             }
+                                            String normalized = net.minecraft.server.registry.ItemRegistry.normalizeInputIdentifier(itemArg);
+                                            if (normalized == null) {
+                                                icommandlistener.sendMessage("Unknown item key: " + itemArg);
+                                                return true;
+                                            }
+                                            Item giveItem = net.minecraft.server.registry.ItemRegistry.get(new net.minecraft.server.util.ResourceLocation(normalized));
+                                            if (giveItem == null) {
+                                                icommandlistener.sendMessage("Unknown item key: " + itemArg);
+                                                return true;
+                                            }
+                                            k = giveItem.id;
+                                            this.print(s1, "Giving " + entityplayer2.name + " some " + normalized);
+                                            int l = 1;
+
+                                            if (astring.length > 3) {
+                                                l = this.a(astring[3], 1);
+                                            }
+
+                                            if (l < 1) {
+                                                l = 1;
+                                            }
+
+                                            if (l > 64) {
+                                                l = 64;
+                                            }
+
+                                            int dmg = net.minecraft.server.registry.ItemRegistry.getDefaultDamage(normalized);
+                                            if (dmg < 0) dmg = 0;
+                                            entityplayer2.b(new ItemStack(k, l, dmg));
                                         } else {
                                             icommandlistener.sendMessage("Can\'t find user " + s3);
                                         }
@@ -392,7 +401,7 @@ public class ConsoleCommandHandler {
         icommandlistener.sendMessage("   op <player>               turns a player into an op");
         icommandlistener.sendMessage("   deop <player>             removes op status from a player");
         icommandlistener.sendMessage("   tp <player1> <player2>    moves one player to the same location as another player");
-        icommandlistener.sendMessage("   give <player> <id> [num]  gives a player a resource");
+        icommandlistener.sendMessage("   give <player> <item> [num]  gives a player a resource");
         icommandlistener.sendMessage("   tell <player> <message>   sends a private message to a player");
         icommandlistener.sendMessage("   stop                      gracefully stops the server");
         icommandlistener.sendMessage("   save-all                  forces a server-wide level save");
@@ -401,7 +410,7 @@ public class ConsoleCommandHandler {
         icommandlistener.sendMessage("   list                      lists all currently connected players");
         icommandlistener.sendMessage("   say <message>             broadcasts a message to all players");
         icommandlistener.sendMessage("   time <add|set> <amount>   adds to or sets the world time (0-24000)");
-        icommandlistener.sendMessage("   profile <start|stop|report|save|clear>  performance profiler commands");
+        icommandlistener.sendMessage("   profile <start|stop|report|save|snapshot|clear|status>  performance profiler commands");
     }
 
     private void print(String s, String s1) {
@@ -453,11 +462,12 @@ public class ConsoleCommandHandler {
         ServerProfiler profiler = ServerProfiler.getInstance();
         
         if (parts.length < 2) {
-            listener.sendMessage("Usage: profile <start|stop|report|save|clear|status>");
+            listener.sendMessage("Usage: profile <start|stop|report|save|snapshot|clear|status>");
             listener.sendMessage("  start  - Start profiling");
             listener.sendMessage("  stop   - Stop profiling");
-            listener.sendMessage("  report - Show detailed report in console");
-            listener.sendMessage("  save   - Save report to file");
+            listener.sendMessage("  report - Show compact summary and key findings");
+            listener.sendMessage("  save   - Save report bundle (.txt + .json)");
+            listener.sendMessage("  snapshot - Capture immediate always-on snapshot");
             listener.sendMessage("  clear  - Clear profiling data");
             listener.sendMessage("  status - Show current profiler status");
             return;
@@ -472,15 +482,35 @@ public class ConsoleCommandHandler {
             profiler.stop();
             this.print(senderName, "Profiler stopped. Use 'profile report' to view or 'profile save' to save.");
         } else if ("report".equals(subcommand)) {
-            String report = profiler.generateReport();
-            // Split report into lines and send each
+            ServerProfiler.ProfileSnapshot snapshot = profiler.captureSnapshot(profiler.isEnabled());
+            String report = profiler.generateReportText(snapshot);
+            String[] lines = report.split("\n");
+            int maxLines = Math.min(lines.length, 80);
+            for (int i = 0; i < maxLines; i++) {
+                listener.sendMessage(lines[i]);
+            }
+            if (lines.length > maxLines) {
+                listener.sendMessage("... (" + (lines.length - maxLines) + " additional lines omitted)");
+                ServerProfiler.ReportBundle bundle = profiler.saveReportBundle(snapshot);
+                if (bundle != null) {
+                    this.print(senderName, "Detailed report bundle saved: txt=" + bundle.textPath + ", json=" + bundle.jsonPath);
+                }
+            }
+        } else if ("snapshot".equals(subcommand)) {
+            ServerProfiler.ProfileSnapshot snapshot = profiler.captureSnapshot(false);
+            String report = profiler.generateReportText(snapshot);
+            int linesSent = 0;
             for (String line : report.split("\n")) {
+                if (linesSent++ >= 40) {
+                    listener.sendMessage("... snapshot truncated, use 'profile save' for full report bundle.");
+                    break;
+                }
                 listener.sendMessage(line);
             }
         } else if ("save".equals(subcommand)) {
-            String path = profiler.saveReport();
-            if (path != null) {
-                this.print(senderName, "Report saved to: " + path);
+            ServerProfiler.ReportBundle bundle = profiler.saveReportBundle();
+            if (bundle != null) {
+                this.print(senderName, "Report bundle saved: txt=" + bundle.textPath + ", json=" + bundle.jsonPath);
             } else {
                 listener.sendMessage("Failed to save report. Check console for errors.");
             }
@@ -491,7 +521,7 @@ public class ConsoleCommandHandler {
             listener.sendMessage(profiler.getStatusSummary());
         } else {
             listener.sendMessage("Unknown profile subcommand: " + subcommand);
-            listener.sendMessage("Use: profile <start|stop|report|save|clear|status>");
+            listener.sendMessage("Use: profile <start|stop|report|save|snapshot|clear|status>");
         }
     }
 }

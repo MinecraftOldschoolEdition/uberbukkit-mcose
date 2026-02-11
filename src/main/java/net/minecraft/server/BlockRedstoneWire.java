@@ -1,6 +1,7 @@
 package net.minecraft.server;
 
 import org.bukkit.event.block.BlockRedstoneEvent;
+import net.minecraft.server.registry.BlockCapabilityRegistryApi;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -344,14 +345,12 @@ public class BlockRedstoneWire extends Block {
             return true;
         } else if (i1 == 0) {
             return false;
-        } else if (Block.byId[i1].isPowerSource()) {
-            return true;
-        } else if (i1 != Block.DIODE_OFF.id && i1 != Block.DIODE_ON.id) {
-            return false;
-        } else {
+        } else if (i1 == Block.DIODE_OFF.id || i1 == Block.DIODE_ON.id) {
             int j1 = iblockaccess.getData(i, j, k);
 
             return l == BedBlockTextures.b[j1 & 3];
+        } else {
+            return BlockCapabilityRegistryApi.isRedstonePowerSource(Block.byId[i1]);
         }
     }
 }

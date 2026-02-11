@@ -40,7 +40,7 @@ public final class ScheduleRegistryBootstrap {
     private static void reg(String path, Schedule schedule) {
         try {
             ResourceLocation key = new ResourceLocation("minecraft", path);
-            Registries.SCHEDULE.registerIfAbsent(key, schedule);
+            ScheduleRegistryApi.register(key, schedule);
         } catch (Throwable ignored) {}
     }
 
@@ -58,5 +58,4 @@ public final class ScheduleRegistryBootstrap {
         } catch (Throwable ignored) { return true; }
     }
 }
-
 

@@ -11,10 +11,12 @@ public class MuteCommand extends Command {
         super(name);
         this.description = "Toggle mute on a player (blocks chat messages)";
         this.usageMessage = "/" + name + " <playername>";
+        this.setPermission("uberbukkit.command.mute");
     }
 
     @Override
     public boolean execute(CommandSender sender, String label, String[] args) {
+        if (!testPermission(sender)) return true;
         if (args.length < 1) { sender.sendMessage("Usage: /" + label + " <playername>"); return true; }
         String target = args[0];
         boolean nowMuted = AdminRegistry.toggleMuted(target);

@@ -19,10 +19,12 @@ public class FlushInvCommand extends Command {
         super("flushinv");
         this.description = "Empties the inventory queue into player's inventory or on the ground";
         this.usageMessage = "/flushinv";
+        this.setPermission("uberbukkit.command.flushinv");
     }
 
     @Override
     public boolean execute(CommandSender sender, String currentAlias, String[] args) {
+        if (!testPermission(sender)) return true;
         Player player = null;
         if (args.length != 1 && sender instanceof Player) {
             player = (Player) sender;

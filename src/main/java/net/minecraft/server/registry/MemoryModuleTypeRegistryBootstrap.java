@@ -22,8 +22,7 @@ public final class MemoryModuleTypeRegistryBootstrap {
     }
 
     private static void reg(String path, MemoryModuleType type) {
-        try { Registries.MEMORY_MODULE_TYPE.registerIfAbsent(new ResourceLocation("minecraft", path), type); } catch (Throwable ignored) {}
+        try { MemoryModuleTypeRegistryApi.register(new ResourceLocation("minecraft", path), type); } catch (Throwable ignored) {}
     }
 }
-
 

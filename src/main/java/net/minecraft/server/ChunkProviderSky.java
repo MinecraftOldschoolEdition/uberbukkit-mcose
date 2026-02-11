@@ -3,6 +3,10 @@ package net.minecraft.server;
 import java.util.Random;
 
 public class ChunkProviderSky implements IChunkProvider {
+    private static final int SKY_EXTRA_TREE_ATTEMPTS = 6;
+    private static final int SKY_COLD_EXTRA_TREE_ATTEMPTS = 2;
+    private static final int SKY_SANDSTONE_SUPPORT_BASE = 4;
+    private static final int SKY_SANDSTONE_SUPPORT_VARIATION = 4;
 
     private Random j;
     private NoiseGeneratorOctaves k;
@@ -140,7 +144,7 @@ public class ChunkProviderSky implements IChunkProvider {
                             --j1;
                             abyte[l1] = b1;
                             if (j1 == 0 && b1 == Block.SAND.id) {
-                                j1 = this.j.nextInt(4);
+                                j1 = SKY_SANDSTONE_SUPPORT_BASE + this.j.nextInt(SKY_SANDSTONE_SUPPORT_VARIATION);
                                 b1 = (byte) Block.SANDSTONE.id;
                             }
                         }
@@ -276,6 +280,26 @@ public class ChunkProviderSky implements IChunkProvider {
 
     public boolean isChunkLoaded(int i, int j) {
         return true;
+    }
+
+    private boolean isTundraLikeSkyBiome(BiomeBase biomebase) {
+        return biomebase == BiomeBase.TUNDRA || biomebase == BiomeBase.ICE_DESERT;
+    }
+
+    private int getSkyExtraTreeAttemptsForBiome(BiomeBase biomebase) {
+        return this.isTundraLikeSkyBiome(biomebase) ? SKY_COLD_EXTRA_TREE_ATTEMPTS : SKY_EXTRA_TREE_ATTEMPTS;
+    }
+
+    private WorldGenerator getSpruceTreeGenerator() {
+        return (WorldGenerator) (this.j.nextInt(3) == 0 ? new WorldGenTaiga1() : new WorldGenTaiga2());
+    }
+
+    private WorldGenerator getSkyTreeGeneratorForBiome(BiomeBase biomebase) {
+        if (biomebase == BiomeBase.TAIGA || this.isTundraLikeSkyBiome(biomebase)) {
+            return this.getSpruceTreeGenerator();
+        }
+
+        return biomebase.a(this.j);
     }
 
     public void getChunkAt(IChunkProvider ichunkprovider, int i, int j) {
@@ -423,10 +447,31 @@ public class ChunkProviderSky implements IChunkProvider {
         for (i2 = 0; i2 < l1; ++i2) {
             j2 = k + this.j.nextInt(16) + 8;
             k2 = l + this.j.nextInt(16) + 8;
-            WorldGenerator worldgenerator = biomebase.a(this.j);
+            WorldGenerator worldgenerator = this.getSkyTreeGeneratorForBiome(biomebase);
 
             worldgenerator.a(1.0D, 1.0D, 1.0D);
             worldgenerator.a(this.p, this.j, j2, this.p.getHighestBlockYAt(j2, k2), k2);
+        }
+
+        for (i2 = 0; i2 < this.getSkyExtraTreeAttemptsForBiome(biomebase); ++i2) {
+            j2 = k + this.j.nextInt(16) + 8;
+            k2 = l + this.j.nextInt(16) + 8;
+            int i3 = this.p.getHighestBlockYAt(j2, k2);
+
+            while (i3 > 1 && !this.p.getMaterial(j2, i3 - 1, k2).isSolid()) {
+                --i3;
+            }
+
+            if (i3 > 1) {
+                int j3 = this.p.getTypeId(j2, i3 - 1, k2);
+
+                if (j3 == Block.GRASS.id || j3 == Block.DIRT.id) {
+                    WorldGenerator worldgenerator = this.getSkyTreeGeneratorForBiome(biomebase);
+
+                    worldgenerator.a(1.0D, 1.0D, 1.0D);
+                    worldgenerator.a(this.p, this.j, j2, i3, k2);
+                }
+            }
         }
 
         int l2;

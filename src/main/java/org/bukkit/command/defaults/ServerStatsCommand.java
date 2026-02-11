@@ -5,9 +5,11 @@ import org.bukkit.command.CommandSender;
 
 import net.minecraft.server.ServerStatistics;
 import net.minecraft.server.StatisticList;
-import net.minecraft.server.AchievementList;
+import net.minecraft.server.AchievementManager;
 import net.minecraft.server.Achievement;
 import net.minecraft.server.Statistic;
+import net.minecraft.server.registry.AchievementRegistryApi;
+import net.minecraft.server.util.ResourceLocation;
 
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -136,15 +138,17 @@ public class ServerStatsCommand extends VanillaCommand {
     
     private void showAchievementStats(CommandSender sender, ServerStatistics stats) {
         sender.sendMessage(ChatColor.GOLD + "=== Achievement Unlock Counts ===");
-        
-        for (Object obj : AchievementList.e) {
-            if (obj instanceof Achievement) {
-                Achievement achievement = (Achievement) obj;
-                int count = stats.getAchievementUnlockCount(achievement);
-                if (count > 0) {
-                    sender.sendMessage(ChatColor.GRAY + achievement.f + ": " + ChatColor.WHITE + count + " players");
-                }
+
+        for (Achievement achievement : AchievementRegistryApi.values()) {
+            int count = stats.getAchievementUnlockCount(achievement);
+            if (count <= 0) {
+                continue;
             }
+
+            ResourceLocation key = AchievementRegistryApi.getKey(achievement);
+            String keyString = key == null ? "minecraft:legacy_" + achievement.e : key.toString();
+            String displayName = AchievementManager.getAchievementName(achievement);
+            sender.sendMessage(ChatColor.GRAY + keyString + ChatColor.DARK_GRAY + " (" + displayName + ")" + ChatColor.GRAY + ": " + ChatColor.WHITE + count + " players");
         }
     }
     
@@ -223,4 +227,3 @@ public class ServerStatsCommand extends VanillaCommand {
         return completions;
     }
 }
-

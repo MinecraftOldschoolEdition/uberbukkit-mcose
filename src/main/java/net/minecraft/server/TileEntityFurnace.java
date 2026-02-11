@@ -7,7 +7,7 @@ import org.bukkit.event.inventory.FurnaceBurnEvent;
 import org.bukkit.event.inventory.FurnaceSmeltEvent;
 // CraftBukkit end
 
-import uk.betacraft.uberbukkit.Uberbukkit;
+import net.minecraft.server.registry.ItemCapabilityRegistryApi;
 
 public class TileEntityFurnace extends TileEntity implements IInventory {
 
@@ -85,6 +85,10 @@ public class TileEntityFurnace extends TileEntity implements IInventory {
         this.burnTime = nbttagcompound.d("BurnTime");
         this.cookTime = nbttagcompound.d("CookTime");
         this.ticksForCurrentFuel = this.fuelTime(this.items[1]);
+        if (this.burnTime > 0 && this.ticksForCurrentFuel <= 0) {
+            // Preserve fuel bar scale after load when consumed fuel is no longer in slot 1.
+            this.ticksForCurrentFuel = this.burnTime;
+        }
     }
 
     public void b(NBTTagCompound nbttagcompound) {
@@ -292,27 +296,14 @@ public class TileEntityFurnace extends TileEntity implements IInventory {
     }
 
     private int fuelTime(ItemStack itemstack) {
-        if (itemstack == null) {
-            return 0;
-        } else {
-            int i = itemstack.getItem().id;
-
-            return i < 256 && Block.byId[i].material == Material.WOOD ? 300 : (i == Item.STICK.id ? 100 : (i == Item.COAL.id ? 1600 : (i == Item.LAVA_BUCKET.id ? 20000 : (Uberbukkit.getTargetPVN() >= 11 ? (i == Block.SAPLING.id ? 100 : 0) : 0))));
-        }
+        return ItemCapabilityRegistryApi.getFuelTicks(itemstack);
     }
 
     /**
      * Static check if an item can be used as fuel.
      */
     public static boolean isFuel(ItemStack itemstack) {
-        if (itemstack == null) return false;
-        int i = itemstack.getItem().id;
-        if (i < 256 && Block.byId[i] != null && Block.byId[i].material == Material.WOOD) return true;
-        if (i == Item.STICK.id) return true;
-        if (i == Item.COAL.id) return true;
-        if (i == Item.LAVA_BUCKET.id) return true;
-        if (Uberbukkit.getTargetPVN() >= 11 && i == Block.SAPLING.id) return true;
-        return false;
+        return ItemCapabilityRegistryApi.isFuel(itemstack);
     }
 
     public boolean a_(EntityHuman entityhuman) {

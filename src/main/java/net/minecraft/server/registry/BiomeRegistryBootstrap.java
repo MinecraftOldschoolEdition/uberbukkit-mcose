@@ -27,19 +27,19 @@ public final class BiomeRegistryBootstrap {
                     if (name == null || name.length() == 0) name = f.getName();
                     String snake = toSnakeCase(name);
                     ResourceLocation key = new ResourceLocation("minecraft", snake);
-                    Registries.BIOME.registerIfAbsent(key, biome);
+                    BiomeRegistryApi.register(key, biome);
                     // also allow field-name alias if different
                     String fname = toSnakeCase(f.getName());
                     if (!fname.equals(snake)) {
-                        Registries.BIOME.registerIfAbsent(new ResourceLocation("minecraft", fname), biome);
+                        BiomeRegistryApi.register(new ResourceLocation("minecraft", fname), biome);
                     }
                 } catch (Throwable ignored) {}
             }
             // World-type-specific aliases
-            try { Registries.BIOME.registerIfAbsent(new ResourceLocation("minecraft", "alpha_plains"), BiomeBase.PLAINS); } catch (Throwable ignored) {}
-            try { if (BiomeBase.TAIGA != null) Registries.BIOME.registerIfAbsent(new ResourceLocation("minecraft", "alpha_taiga"), BiomeBase.TAIGA); } catch (Throwable ignored) {}
-            try { Registries.BIOME.registerIfAbsent(new ResourceLocation("minecraft", "flat_plains"), BiomeBase.PLAINS); } catch (Throwable ignored) {}
-            try { Registries.BIOME.registerIfAbsent(new ResourceLocation("minecraft", "classic_plains"), BiomeBase.PLAINS); } catch (Throwable ignored) {}
+            try { BiomeRegistryApi.register(new ResourceLocation("minecraft", "alpha_plains"), BiomeBase.PLAINS); } catch (Throwable ignored) {}
+            try { if (BiomeBase.TAIGA != null) BiomeRegistryApi.register(new ResourceLocation("minecraft", "alpha_taiga"), BiomeBase.TAIGA); } catch (Throwable ignored) {}
+            try { BiomeRegistryApi.register(new ResourceLocation("minecraft", "flat_plains"), BiomeBase.PLAINS); } catch (Throwable ignored) {}
+            try { BiomeRegistryApi.register(new ResourceLocation("minecraft", "classic_plains"), BiomeBase.PLAINS); } catch (Throwable ignored) {}
         } catch (Throwable ignored) {}
     }
 
@@ -59,5 +59,4 @@ public final class BiomeRegistryBootstrap {
         return out.toString();
     }
 }
-
 

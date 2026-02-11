@@ -23,7 +23,7 @@ public class HelpCommand extends VanillaCommand {
         sender.sendMessage("op <player>               turns a player into an op");
         sender.sendMessage("deop <player>             removes op status from a player");
         sender.sendMessage("tp <player1> <player2>    moves one player to the same location as another player");
-        sender.sendMessage("give <player> <id> [num]  gives a player a resource");
+        sender.sendMessage("give <player> <item> [num]  gives a player a resource");
         sender.sendMessage("tell <player> <message>   sends a private message to a player");
         sender.sendMessage("stop                      gracefully stops the server");
         sender.sendMessage("save-all                  forces a server-wide level save");

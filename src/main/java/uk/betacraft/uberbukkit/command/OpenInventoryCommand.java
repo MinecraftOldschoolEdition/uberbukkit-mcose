@@ -23,6 +23,7 @@ public class OpenInventoryCommand extends Command {
         this.usageMessage = "/" + name + " <playername>";
         // Keep legacy names working
         this.setAliases(Arrays.asList("openinventory", "openinv"));
+        this.setPermission("uberbukkit.openinv");
     }
 
     @Override

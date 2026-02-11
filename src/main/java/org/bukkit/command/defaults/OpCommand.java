@@ -5,6 +5,7 @@ import org.bukkit.ChatColor;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
+import org.bukkit.craftbukkit.entity.CraftPlayer;
 import org.bukkit.entity.Player;
 
 public class OpCommand extends VanillaCommand {
@@ -29,10 +30,29 @@ public class OpCommand extends VanillaCommand {
         player.setOp(true);
 
         if (player instanceof Player) {
-            ((Player) player).sendMessage(ChatColor.YELLOW + "You are now op!");
+            Player onlinePlayer = (Player) player;
+            onlinePlayer.sendMessage(ChatColor.YELLOW + "You are now op!");
+            refreshAutocompleteTree(onlinePlayer);
+        }
+
+        if (sender instanceof Player) {
+            refreshAutocompleteTree((Player) sender);
         }
 
         return true;
+    }
+
+    private void refreshAutocompleteTree(Player player) {
+        if (player == null) {
+            return;
+        }
+        if (!(player instanceof CraftPlayer)) {
+            return;
+        }
+        try {
+            ((CraftPlayer) player).getHandle().netServerHandler.refreshCommandAutocompleteTree();
+        } catch (Throwable ignored) {
+        }
     }
 
     @Override

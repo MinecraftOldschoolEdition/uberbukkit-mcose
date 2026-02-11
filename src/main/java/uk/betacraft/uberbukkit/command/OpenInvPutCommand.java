@@ -12,6 +12,7 @@ public class OpenInvPutCommand extends Command {
         super(name);
         this.description = "Move an item from target player slot into viewer's specific inventory slot (swap if occupied)";
         this.usageMessage = "/" + name + " <player> <fromIdx> <viewerSlot> [expId expCnt expDmg tx]";
+        this.setPermission("uberbukkit.openinv");
     }
 
     @Override

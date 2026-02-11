@@ -2,6 +2,9 @@ package net.minecraft.server.registry;
 
 import net.minecraft.server.util.ResourceLocation;
 
+import java.util.Collection;
+import java.util.Set;
+
 /**
  * Bootstrap class that registers all vanilla structure types.
  * Structure types are registered to Registries.STRUCTURE_TYPE.
@@ -41,7 +44,7 @@ public final class StructureTypes {
             )
             .build();
         
-        Registries.STRUCTURE_TYPE.register(DUNGEON, type);
+        StructureTypeRegistryApi.register(DUNGEON, type);
     }
     
     private static void registerHerobrineShrine() {
@@ -50,14 +53,41 @@ public final class StructureTypes {
             .displayName("Herobrine Shrine")
             .build();
         
-        Registries.STRUCTURE_TYPE.register(HEROBRINE_SHRINE, type);
+        StructureTypeRegistryApi.register(HEROBRINE_SHRINE, type);
     }
     
     /**
      * Gets a structure type by its resource location.
      */
     public static StructureType get(ResourceLocation id) {
-        return Registries.STRUCTURE_TYPE.get(id);
+        return StructureTypeRegistryApi.get(id);
+    }
+
+    public static StructureType getByIdentifier(String any) {
+        return StructureTypeRegistryApi.getByIdentifier(any);
+    }
+
+    public static ResourceLocation getKey(StructureType value) {
+        return StructureTypeRegistryApi.getKey(value);
+    }
+
+    public static Set<ResourceLocation> keys() {
+        return StructureTypeRegistryApi.keys();
+    }
+
+    public static Collection<StructureType> values() {
+        return StructureTypeRegistryApi.values();
+    }
+
+    public static int size() {
+        return StructureTypeRegistryApi.size();
+    }
+
+    public static String normalizeInputIdentifier(String any) {
+        return StructureTypeRegistryApi.normalizeInputIdentifier(any);
+    }
+
+    public static String canonicalizeIdentifier(String any) {
+        return StructureTypeRegistryApi.canonicalizeIdentifier(any);
     }
 }
-

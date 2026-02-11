@@ -20,8 +20,7 @@ public final class WorldTypeRegistryBootstrap {
     }
 
     private static void register(String path, int id) {
-        Registries.WORLD_TYPE.registerIfAbsent(new ResourceLocation("minecraft", path), Integer.valueOf(id));
+        WorldTypeRegistryApi.register(new ResourceLocation("minecraft", path), Integer.valueOf(id));
     }
 }
-
 

@@ -1,283 +1,262 @@
 package net.minecraft.server;
 
+import net.minecraft.server.registry.StatisticRegistryApi;
+
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 /**
- * Tracks per-player statistics and achievements server-side.
- * This mirrors the single-player statistics system.
+ * Tracks per-player non-achievement statistics server-side.
+ * Achievement ownership is centralized in {@link AchievementManager}.
  */
 public class PlayerStatistics {
-    
-    // Fallback achievement display names (in case translation file fails)
-    private static final Map<Integer, String> ACHIEVEMENT_NAMES = new HashMap<Integer, String>();
-    static {
-        ACHIEVEMENT_NAMES.put(5242880, "Taking Inventory");
-        ACHIEVEMENT_NAMES.put(5242881, "Getting Wood");
-        ACHIEVEMENT_NAMES.put(5242882, "Benchmarking");
-        ACHIEVEMENT_NAMES.put(5242883, "Time to Mine!");
-        ACHIEVEMENT_NAMES.put(5242884, "Hot Topic");
-        ACHIEVEMENT_NAMES.put(5242885, "Acquire Hardware");
-        ACHIEVEMENT_NAMES.put(5242886, "Time to Farm!");
-        ACHIEVEMENT_NAMES.put(5242887, "Bake Bread");
-        ACHIEVEMENT_NAMES.put(5242888, "The Lie");
-        ACHIEVEMENT_NAMES.put(5242889, "Getting an Upgrade");
-        ACHIEVEMENT_NAMES.put(5242890, "Delicious Fish");
-        ACHIEVEMENT_NAMES.put(5242891, "On A Rail");
-        ACHIEVEMENT_NAMES.put(5242892, "Time to Strike!");
-        ACHIEVEMENT_NAMES.put(5242893, "Monster Hunter");
-        ACHIEVEMENT_NAMES.put(5242894, "Cow Tipper");
-        ACHIEVEMENT_NAMES.put(5242895, "When Pigs Fly");
-        ACHIEVEMENT_NAMES.put(5242896, "DIAMONDS!");
-        ACHIEVEMENT_NAMES.put(5242897, "We Need to Go Deeper");
-        ACHIEVEMENT_NAMES.put(5242898, "Librarian");
-        ACHIEVEMENT_NAMES.put(5242899, "KABOOM!");
-        ACHIEVEMENT_NAMES.put(5242900, "Hot Stuff");
-        ACHIEVEMENT_NAMES.put(5242901, "Pork Chop");
-        ACHIEVEMENT_NAMES.put(5242902, "Sweet Dreams");
-        ACHIEVEMENT_NAMES.put(5242903, "Pathfinder");
-        ACHIEVEMENT_NAMES.put(5242904, "DJ");
-        ACHIEVEMENT_NAMES.put(5242905, "Sniper Duel");
-        ACHIEVEMENT_NAMES.put(5242906, "Pushin' Around");
-        ACHIEVEMENT_NAMES.put(5242907, "Tick Tock");
-        ACHIEVEMENT_NAMES.put(5242908, "Overkill");
-        ACHIEVEMENT_NAMES.put(5242909, "Have a Shearful Day");
-        ACHIEVEMENT_NAMES.put(5242910, "Egg Hunt");
-        ACHIEVEMENT_NAMES.put(5242911, "Rainbow Collection");
-    }
-    
+
+    private static final int ACHIEVEMENT_STAT_BASE = 5242880;
+    private static final int MAX_PACKET200_DELTA = Byte.MAX_VALUE;
+    private static final String SNAPSHOT_CHANNEL = "MCOSE|StatsSync";
+    private static final int SNAPSHOT_VERSION = 1;
+    private static final int SNAPSHOT_ENTRIES_PER_CHUNK = 3000;
+
     private final EntityPlayer player;
-    
-    // Statistics: statistic ID -> value
+
+    // statistic ID -> value
     private final Map<Integer, Integer> statistics = new HashMap<Integer, Integer>();
-    
-    // Unlocked achievements: achievement ID
-    private final Set<Integer> unlockedAchievements = new HashSet<Integer>();
-    
-    // Pending achievements to announce (cleared after sending)
-    private final Set<Achievement> pendingAchievements = new HashSet<Achievement>();
-    
+
     public PlayerStatistics(EntityPlayer player) {
         this.player = player;
     }
-    
+
     /**
-     * Increment a statistic by the given amount.
+     * Compatibility entry point.
      */
-    public void addStatistic(Statistic statistic, int amount) {
-        if (statistic == null || amount <= 0) return;
-        
-        int currentValue = statistics.containsKey(statistic.e) ? statistics.get(statistic.e) : 0;
-        int newValue = currentValue + amount;
-        statistics.put(statistic.e, newValue);
-        
-        // Report to server-wide statistics
-        ServerStatistics.getInstance().recordStatistic(player.name, statistic, amount);
-        
-        // Check if this is an achievement
-        if (statistic instanceof Achievement) {
-            unlockAchievement((Achievement) statistic);
+    public synchronized void addStatistic(Statistic statistic, int amount) {
+        recordIncrement(statistic, amount);
+    }
+
+    /**
+     * Authoritative stat increment path for non-achievement player statistics.
+     */
+    public synchronized void recordIncrement(Statistic statistic, int amount) {
+        if (statistic == null || amount <= 0) {
+            return;
         }
-        
-        // Send statistic update packet to client
-        if (player.netServerHandler != null && player.protocol.canReceivePacket(200)) {
-            player.netServerHandler.sendPacket(new Packet200Statistic(statistic.e, amount));
+
+        // Route all achievement updates through AchievementManager so persistence and sync stay consistent.
+        if (statistic instanceof Achievement) {
+            if (player.achievementManager != null) {
+                player.achievementManager.unlock((Achievement) statistic);
+            }
+            return;
+        }
+
+        Integer key = Integer.valueOf(statistic.e);
+        int currentValue = statistics.containsKey(key) ? statistics.get(key).intValue() : 0;
+        long next = (long) currentValue + (long) amount;
+        int newValue = next > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) next;
+        int appliedDelta = newValue - currentValue;
+        if (appliedDelta <= 0) {
+            return;
+        }
+
+        statistics.put(key, Integer.valueOf(newValue));
+        ServerStatistics.getInstance().recordStatistic(player.name, statistic, appliedDelta);
+        sendLiveDelta(statistic.e, appliedDelta);
+    }
+
+    private void sendLiveDelta(int statId, int amount) {
+        if (amount <= 0) {
+            return;
+        }
+        if (player.netServerHandler == null || player.protocol == null || !player.protocol.canReceivePacket(200)) {
+            return;
+        }
+
+        int remaining = amount;
+        while (remaining > 0) {
+            int chunk = Math.min(MAX_PACKET200_DELTA, remaining);
+            player.netServerHandler.sendPacket(new Packet200Statistic(statId, chunk));
+            remaining -= chunk;
         }
     }
-    
+
+    /**
+     * Send a full absolute stats snapshot to the client (join baseline sync).
+     */
+    public synchronized void sendFullSnapshotToClient() {
+        if (player.netServerHandler == null || player.protocol == null || !player.protocol.canReceivePacket(250)) {
+            return;
+        }
+
+        Map<Integer, Integer> snapshot = new HashMap<Integer, Integer>(statistics);
+        List<Integer> sortedStatIds = new ArrayList<Integer>();
+        for (Map.Entry<Integer, Integer> entry : snapshot.entrySet()) {
+            if (entry.getKey() == null || entry.getValue() == null || entry.getValue().intValue() < 0) {
+                continue;
+            }
+            sortedStatIds.add(entry.getKey());
+        }
+        Collections.sort(sortedStatIds);
+
+        int totalChunks = Math.max(1, (sortedStatIds.size() + SNAPSHOT_ENTRIES_PER_CHUNK - 1) / SNAPSHOT_ENTRIES_PER_CHUNK);
+        for (int chunkIndex = 0; chunkIndex < totalChunks; ++chunkIndex) {
+            int start = chunkIndex * SNAPSHOT_ENTRIES_PER_CHUNK;
+            int end = Math.min(sortedStatIds.size(), start + SNAPSHOT_ENTRIES_PER_CHUNK);
+            int entryCount = end - start;
+
+            ByteArrayOutputStream baos = new ByteArrayOutputStream(16 + Math.max(0, entryCount) * 8);
+            DataOutputStream out = new DataOutputStream(baos);
+            try {
+                out.writeInt(SNAPSHOT_VERSION);
+                out.writeInt(chunkIndex);
+                out.writeInt(totalChunks);
+                out.writeInt(entryCount);
+
+                for (int i = start; i < end; ++i) {
+                    Integer statId = sortedStatIds.get(i);
+                    Integer value = snapshot.get(statId);
+                    out.writeInt(statId.intValue());
+                    out.writeInt(value.intValue());
+                }
+
+                player.netServerHandler.sendPacket(new Packet250CustomPayload(SNAPSHOT_CHANNEL, baos.toByteArray()));
+            } catch (IOException ex) {
+                System.err.println("[PlayerStatistics] Failed to send stat snapshot chunk to " + player.name + ": " + ex.getMessage());
+                break;
+            } finally {
+                try {
+                    out.close();
+                } catch (IOException ignored) {
+                }
+            }
+        }
+    }
+
     /**
      * Get the current value of a statistic.
      */
-    public int getStatistic(Statistic statistic) {
-        if (statistic == null) return 0;
-        return statistics.containsKey(statistic.e) ? statistics.get(statistic.e) : 0;
+    public synchronized int getStatistic(Statistic statistic) {
+        if (statistic == null) {
+            return 0;
+        }
+
+        Integer value = statistics.get(Integer.valueOf(statistic.e));
+        return value == null ? 0 : value.intValue();
     }
-    
+
     /**
-     * Check if an achievement is unlocked.
+     * Compatibility helper, delegated to AchievementManager.
      */
     public boolean hasAchievement(Achievement achievement) {
-        if (achievement == null) return false;
-        return unlockedAchievements.contains(achievement.e);
+        return player.achievementManager != null && player.achievementManager.hasAchievement(achievement);
     }
-    
+
     /**
-     * Unlock an achievement.
+     * Compatibility helper, delegated to AchievementManager.
      */
     public void unlockAchievement(Achievement achievement) {
-        if (achievement == null) return;
-        
-        // Check if already unlocked
-        if (unlockedAchievements.contains(achievement.e)) {
-            return;
-        }
-        
-        // Check if prerequisite is met
-        if (achievement.c != null && !hasAchievement(achievement.c)) {
-            return;
-        }
-        
-        // Unlock the achievement
-        unlockedAchievements.add(achievement.e);
-        pendingAchievements.add(achievement);
-        
-        // Report to server-wide statistics
-        ServerStatistics.getInstance().recordAchievement(player.name, achievement);
-        
-        // Announce to player and server
-        announceAchievement(achievement);
-    }
-    
-    /**
-     * Announce an achievement unlock.
-     */
-    private void announceAchievement(Achievement achievement) {
-        // Get achievement display name with fallback chain
-        String achievementName = null;
-        
-        // Try the translated name from the Statistic.f field
-        if (achievement.f != null && !achievement.f.startsWith("achievement.")) {
-            achievementName = achievement.f;
-        }
-        
-        // Fallback to our hardcoded map
-        if (achievementName == null || achievementName.startsWith("achievement.")) {
-            String fallback = ACHIEVEMENT_NAMES.get(achievement.e);
-            if (fallback != null) {
-                achievementName = fallback;
-            }
-        }
-        
-        // Ultimate fallback
-        if (achievementName == null) {
-            achievementName = "Unknown Achievement";
-        }
-        
-        // Send to player via chat
-        String message = "\u00A7e" + player.name + " has just earned the achievement \u00A7a[" + achievementName + "]";
-        
-        // Try to get the MinecraftServer from multiple sources
-        MinecraftServer server = player.b;
-        if (server == null && player.world instanceof WorldServer) {
-            server = ((WorldServer) player.world).server;
-        }
-        
-        // Broadcast to all players on the server (if advertiseAchievements gamerule is enabled)
-        if (server != null && server.serverConfigurationManager != null) {
-            // Check gamerule - default to true if we can't check
-            boolean shouldBroadcast = true;
-            try {
-                WorldServer overworld = server.getWorldServer(0);
-                if (overworld != null && overworld.worldData != null) {
-                    shouldBroadcast = overworld.worldData.getAdvertiseAchievements();
-                }
-            } catch (Exception e) {
-                // Default to broadcasting if we can't check
-                shouldBroadcast = true;
-            }
-            
-            if (shouldBroadcast) {
-                server.serverConfigurationManager.sendAll(new Packet3Chat(message));
-                // Also log to console
-                MinecraftServer.log.info(player.name + " has just earned the achievement [" + achievementName + "]");
-            } else {
-                // Only send to the player who earned it
-                if (player.netServerHandler != null) {
-                    player.netServerHandler.sendPacket(new Packet3Chat(message));
-                }
-            }
-        } else {
-            // Fallback: just send to the player if server not available
-            if (player.netServerHandler != null) {
-                player.netServerHandler.sendPacket(new Packet3Chat(message));
-            }
-        }
-        
-        // Send achievement packet to client (if supported)
-        if (player.netServerHandler != null && player.protocol.canReceivePacket(200)) {
-            player.netServerHandler.sendPacket(new Packet200Statistic(achievement.e, 1));
+        if (player.achievementManager != null) {
+            player.achievementManager.unlock(achievement);
         }
     }
-    
+
     /**
      * Save statistics to NBT.
      */
-    public void saveToNBT(NBTTagCompound nbt) {
-        // Save statistics
+    public synchronized void saveToNBT(NBTTagCompound nbt) {
         NBTTagCompound statsNbt = new NBTTagCompound();
         for (Map.Entry<Integer, Integer> entry : statistics.entrySet()) {
-            statsNbt.a("stat_" + entry.getKey(), entry.getValue());
+            if (entry.getKey() == null || entry.getValue() == null) {
+                continue;
+            }
+
+            int statId = entry.getKey().intValue();
+            int value = entry.getValue().intValue();
+            if (statId < 0 || value < 0) {
+                continue;
+            }
+
+            statsNbt.a("stat_" + statId, value);
         }
         nbt.a("Statistics", statsNbt);
-        
-        // Save achievements as NBTTagList of ints
-        NBTTagList achievementList = new NBTTagList();
-        for (Integer id : unlockedAchievements) {
-            NBTTagCompound achievementTag = new NBTTagCompound();
-            achievementTag.a("id", id);
-            achievementList.a(achievementTag);
-        }
-        nbt.a("Achievements", achievementList);
     }
-    
+
     /**
      * Load statistics from NBT.
      */
-    public void loadFromNBT(NBTTagCompound nbt) {
-        // Load statistics
-        if (nbt.hasKey("Statistics")) {
-            NBTTagCompound statsNbt = nbt.k("Statistics");
-            for (String key : statsNbt.getKeys()) {
-                if (key.startsWith("stat_")) {
-                    try {
-                        int statId = Integer.parseInt(key.substring(5));
-                        int value = statsNbt.e(key);
-                        statistics.put(statId, value);
-                    } catch (NumberFormatException e) {
-                        // Skip invalid entries
-                    }
-                }
-            }
+    public synchronized void loadFromNBT(NBTTagCompound nbt) {
+        statistics.clear();
+
+        if (nbt == null || !nbt.hasKey("Statistics")) {
+            return;
         }
-        
-        // Load achievements from NBTTagList
-        if (nbt.hasKey("Achievements")) {
-            NBTTagList achievementList = nbt.l("Achievements");
-            for (int i = 0; i < achievementList.c(); i++) {
-                NBTTagCompound achievementTag = (NBTTagCompound) achievementList.a(i);
-                unlockedAchievements.add(achievementTag.e("id"));
+
+        NBTTagCompound statsNbt = nbt.k("Statistics");
+        for (String key : statsNbt.getKeys()) {
+            if (!key.startsWith("stat_")) {
+                continue;
+            }
+
+            try {
+                int statId = Integer.parseInt(key.substring(5));
+                int value = statsNbt.e(key);
+
+                if (statId < 0 || value < 0) {
+                    System.err.println("[PlayerStatistics] Ignoring malformed stat entry key=" + key + " value=" + value);
+                    continue;
+                }
+
+                if (statId >= ACHIEVEMENT_STAT_BASE) {
+                    // Achievements are tracked by AchievementManager.
+                    continue;
+                }
+
+                if (StatisticRegistryApi.getByStatId(statId) == null) {
+                    System.err.println("[PlayerStatistics] Unknown stat id in save for " + player.name + ": " + statId + " (keeping value for compatibility)");
+                }
+
+                statistics.put(Integer.valueOf(statId), Integer.valueOf(value));
+            } catch (NumberFormatException ignored) {
+                System.err.println("[PlayerStatistics] Invalid stat key in save for " + player.name + ": " + key);
             }
         }
     }
-    
+
     /**
      * Get all statistics as a map.
      */
-    public Map<Integer, Integer> getAllStatistics() {
+    public synchronized Map<Integer, Integer> getAllStatistics() {
         return new HashMap<Integer, Integer>(statistics);
     }
-    
+
     /**
-     * Get all unlocked achievement IDs.
+     * Compatibility helper, delegated to AchievementManager.
      */
     public Set<Integer> getUnlockedAchievementIds() {
-        return new HashSet<Integer>(unlockedAchievements);
+        if (player.achievementManager == null) {
+            return new HashSet<Integer>();
+        }
+
+        return player.achievementManager.getUnlockedAchievementIds();
     }
-    
+
     /**
-     * Clear pending achievements (called after client sync).
+     * Compatibility no-op; pending achievement queue is no longer tracked here.
      */
     public void clearPendingAchievements() {
-        pendingAchievements.clear();
     }
-    
+
     /**
-     * Get pending achievements for client sync.
+     * Compatibility helper; pending achievement queue is no longer tracked here.
      */
     public Set<Achievement> getPendingAchievements() {
-        return new HashSet<Achievement>(pendingAchievements);
+        return new HashSet<Achievement>();
     }
 }
-

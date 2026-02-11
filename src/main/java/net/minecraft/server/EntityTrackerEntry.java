@@ -9,6 +9,11 @@ import org.bukkit.entity.Player;
 
 public class EntityTrackerEntry {
 
+    private static final double VELOCITY_PACKET_DEADBAND = 0.03D;
+    private static final double VELOCITY_PACKET_FORCE_DELTA = 0.09D;
+    private static final int VELOCITY_PACKET_MIN_INTERVAL_TICKS = 3;
+    private static final int LIVING_RELATIVE_SYNC_MAX_TICKS = 120;
+
     public Entity tracker;
     // uberbukkit
     public boolean b_ = false;
@@ -32,6 +37,7 @@ public class EntityTrackerEntry {
     private boolean r = false;
     private boolean isMoving;
     private int t = 0;
+    private int velocityPacketCooldown = 0;
     public boolean m = false;
     public Set trackedPlayers = new HashSet();
 
@@ -55,6 +61,34 @@ public class EntityTrackerEntry {
         return this.tracker.id;
     }
 
+    private EntityTracker resolveEntityTracker() {
+        if (this.tracker == null || this.tracker.world == null || !(this.tracker.world instanceof WorldServer)) {
+            return null;
+        }
+        return ((WorldServer) this.tracker.world).tracker;
+    }
+
+    private boolean isNearAnyPlayer(List players, int nearChunkRadius) {
+        if (players == null || players.isEmpty()) {
+            return false;
+        }
+
+        int entityChunkX = this.tracker.bH;
+        int entityChunkZ = this.tracker.bJ;
+        for (int i = 0; i < players.size(); i++) {
+            EntityPlayer player = (EntityPlayer) players.get(i);
+            if (player == null) {
+                continue;
+            }
+
+            int distance = Math.max(Math.abs(player.bH - entityChunkX), Math.abs(player.bJ - entityChunkZ));
+            if (distance <= nearChunkRadius) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public void track(List list) {
         this.m = false;
         if (!this.r || this.tracker.e(this.o, this.p, this.q) > 16.0D) {
@@ -66,7 +100,19 @@ public class EntityTrackerEntry {
             this.scanPlayers(list);
         }
 
-        if (++this.l % this.c == 0 || this.tracker.airBorne || this.tracker.aa().a()) {
+        DataWatcher datawatcher = this.tracker.aa();
+        boolean hasMetadataUpdate = datawatcher.a();
+        EntityTracker entityTracker = resolveEntityTracker();
+        EntityTracker.TrackingPressureState pressureState = entityTracker != null ? entityTracker.getTrackingPressureState() : EntityTracker.TrackingPressureState.NORMAL;
+        boolean nearLivingEntity = entityTracker != null
+            && this.tracker instanceof EntityLiving
+            && !(this.tracker instanceof EntityPlayer)
+            && isNearAnyPlayer(list, entityTracker.getNearChunkRadius());
+        if (this.velocityPacketCooldown > 0) {
+            this.velocityPacketCooldown--;
+        }
+
+        if (++this.l % this.c == 0 || this.tracker.airBorne || hasMetadataUpdate) {
             ++this.t; // Poseidon - moved below
 
             // encoded means multiplied by 32
@@ -79,6 +125,7 @@ public class EntityTrackerEntry {
             int encodedDiffX = newEncodedPosX - this.d;
             int encodedDiffY = newEncodedPosY - this.e;
             int encodedDiffZ = newEncodedPosZ - this.f;
+            int maxRelativeSyncTicks = this.tracker instanceof EntityLiving && !(this.tracker instanceof EntityPlayer) ? LIVING_RELATIVE_SYNC_MAX_TICKS : 400;
             Object packet = null;
             // mob movement fix, credit to Oldmana#7086 from the Modification Station discord server
             // https://discordapp.com/channels/397834523028488203/397839387465089054/684637208199823377
@@ -101,7 +148,7 @@ public class EntityTrackerEntry {
             }
             // CraftBukkit end
 
-            if (encodedDiffX >= -128 && encodedDiffX < 128 && encodedDiffY >= -128 && encodedDiffY < 128 && encodedDiffZ >= -128 && encodedDiffZ < 128 && this.t <= 400) {
+            if (encodedDiffX >= -128 && encodedDiffX < 128 && encodedDiffY >= -128 && encodedDiffY < 128 && encodedDiffZ >= -128 && encodedDiffZ < 128 && this.t <= maxRelativeSyncTicks) {
                 // entity has moved less than 4 blocks
                 if (needsPositionUpdate && needsRotationUpdate) {
                     packet = new Packet33RelEntityMoveLook(this.tracker.id, (byte) encodedDiffX, (byte) encodedDiffY, (byte) encodedDiffZ, (byte) newEncodedRotationYaw, (byte) newEncodedRotationPitch);
@@ -131,14 +178,24 @@ public class EntityTrackerEntry {
                 double d0 = this.tracker.motX - this.i;
                 double d1 = this.tracker.motY - this.j;
                 double d2 = this.tracker.motZ - this.k;
-                double d3 = 0.02D;
+                double d3 = VELOCITY_PACKET_DEADBAND;
+                double d5 = VELOCITY_PACKET_FORCE_DELTA;
+                int minVelocityIntervalTicks = VELOCITY_PACKET_MIN_INTERVAL_TICKS;
+                if (pressureState != EntityTracker.TrackingPressureState.PRESSURE && nearLivingEntity) {
+                    d3 = VELOCITY_PACKET_DEADBAND * 0.5D;
+                    d5 = VELOCITY_PACKET_FORCE_DELTA * 0.75D;
+                    minVelocityIntervalTicks = 1;
+                }
                 double d4 = d0 * d0 + d1 * d1 + d2 * d2;
 
-                if (d4 > d3 * d3 || d4 > 0.0D && this.tracker.motX == 0.0D && this.tracker.motY == 0.0D && this.tracker.motZ == 0.0D) {
+                boolean sendVelocity = d4 > d3 * d3 || d4 > 0.0D && this.tracker.motX == 0.0D && this.tracker.motY == 0.0D && this.tracker.motZ == 0.0D;
+                boolean forcedVelocity = d4 > d5 * d5;
+                if (sendVelocity && (forcedVelocity || this.velocityPacketCooldown <= 0)) {
                     this.i = this.tracker.motX;
                     this.j = this.tracker.motY;
                     this.k = this.tracker.motZ;
                     this.a((Packet) (new Packet28EntityVelocity(this.tracker.id, this.i, this.j, this.k)));
+                    this.velocityPacketCooldown = minVelocityIntervalTicks;
                 }
             }
 
@@ -147,9 +204,7 @@ public class EntityTrackerEntry {
             }
 
 
-            DataWatcher datawatcher = this.tracker.aa();
-
-            if (datawatcher.a()) {
+            if (hasMetadataUpdate) {
                 this.b((Packet) (new Packet40EntityMetadata(this.tracker.id, datawatcher)));
             }
 
@@ -260,8 +315,8 @@ public class EntityTrackerEntry {
 
     public void b(EntityPlayer entityplayer) {
         if (entityplayer != this.tracker) {
-            double d0 = entityplayer.locX - (double) (this.d / 32);
-            double d1 = entityplayer.locZ - (double) (this.f / 32);
+            double d0 = entityplayer.locX - (double) this.d / 32.0D;
+            double d1 = entityplayer.locZ - (double) this.f / 32.0D;
 
             if (d0 >= (double) (-this.b) && d0 <= (double) this.b && d1 >= (double) (-this.b) && d1 <= (double) this.b) {
                 if (!this.trackedPlayers.contains(entityplayer) && this.d(entityplayer)) {

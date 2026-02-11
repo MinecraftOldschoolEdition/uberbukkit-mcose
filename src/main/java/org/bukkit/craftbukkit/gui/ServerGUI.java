@@ -3,6 +3,7 @@ package org.bukkit.craftbukkit.gui;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.EntityPlayer;
 import org.bukkit.craftbukkit.CraftServer;
+import org.bukkit.util.config.Configuration;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;
@@ -83,6 +84,7 @@ public class ServerGUI extends JFrame {
     private JTextField levelNameField;
     private JTextField levelSeedField;
     private JTextField maxPlayersField;
+    private JTextField viewDistanceField;
     private JTextField motdField;
     private JComboBox<String> levelTypeCombo;
     private JComboBox<String> gamemodeCombo;
@@ -105,7 +107,22 @@ public class ServerGUI extends JFrame {
     private JSpinner lightingThreadsSpinner;
     private JCheckBox asyncEntityCheck;
     private JSpinner entityThreadsSpinner;
+    private JSpinner chunkCompressionThreadsSpinner;
+    private JSpinner chunkCompressionQueueCapacitySpinner;
+    private JSpinner chunkCompressionHighWatermarkSpinner;
+    private JSpinner chunkCompressionLowWatermarkSpinner;
     private JButton saveThreadingButton;
+
+    // Startup readiness / tick catchup UI
+    private JCheckBox startupReadinessEnabledCheck;
+    private JCheckBox startupHoldLoginCheck;
+    private JCheckBox tickCatchupEnabledCheck;
+    private JSpinner startupOverworldRadiusSpinner;
+    private JSpinner startupNetherRadiusSpinner;
+    private JSpinner startupJoinerExtraRadiusSpinner;
+    private JSpinner startupMaxHoldSecondsSpinner;
+    private JSpinner tickCatchupMaxBacklogSpinner;
+    private JButton saveStartupReadinessButton;
     
     // Log storage for filtering
     private List<LogEntry> allLogs = new ArrayList<>();
@@ -1116,8 +1133,17 @@ public class ServerGUI extends JFrame {
         propsGrid.add(difficultyCombo, gbc);
         
         row++;
+
+        // View Distance
+        gbc.gridx = 0; gbc.gridy = row; gbc.weightx = 0;
+        propsGrid.add(createLabel("View Distance:"), gbc);
+        gbc.gridx = 1; gbc.weightx = 0.5;
+        viewDistanceField = createTextField("10");
+        viewDistanceField.setPreferredSize(new Dimension(80, 25));
+        propsGrid.add(viewDistanceField, gbc);
         
         // MOTD (full width)
+        row++;
         gbc.gridx = 0; gbc.gridy = row; gbc.weightx = 0;
         propsGrid.add(createLabel("MOTD:"), gbc);
         gbc.gridx = 1; gbc.gridwidth = 3; gbc.weightx = 1;
@@ -1282,6 +1308,57 @@ public class ServerGUI extends JFrame {
         threadingGrid.add(entityThreadsSpinner, tgbc);
         
         trow++;
+
+        // Chunk compression workers
+        tgbc.gridx = 0; tgbc.gridy = trow; tgbc.weightx = 0;
+        threadingGrid.add(createLabel("Chunk Compression Workers:"), tgbc);
+
+        tgbc.gridx = 1; tgbc.weightx = 0;
+        chunkCompressionThreadsSpinner = new JSpinner(new SpinnerNumberModel(Math.max(1, Runtime.getRuntime().availableProcessors() / 3), 1, 16, 1));
+        chunkCompressionThreadsSpinner.setPreferredSize(new Dimension(60, 25));
+        styleSpinner(chunkCompressionThreadsSpinner);
+        threadingGrid.add(chunkCompressionThreadsSpinner, tgbc);
+
+        tgbc.gridx = 2; tgbc.weightx = 0;
+        threadingGrid.add(createLabel("(striped by player id)"), tgbc);
+
+        trow++;
+
+        // Chunk compression queue capacity
+        tgbc.gridx = 0; tgbc.gridy = trow; tgbc.weightx = 0;
+        threadingGrid.add(createLabel("Compression Queue Capacity:"), tgbc);
+
+        tgbc.gridx = 1; tgbc.weightx = 0;
+        chunkCompressionQueueCapacitySpinner = new JSpinner(new SpinnerNumberModel(10240, 128, 200000, 128));
+        chunkCompressionQueueCapacitySpinner.setPreferredSize(new Dimension(90, 25));
+        styleSpinner(chunkCompressionQueueCapacitySpinner);
+        threadingGrid.add(chunkCompressionQueueCapacitySpinner, tgbc);
+
+        tgbc.gridx = 2; tgbc.weightx = 0;
+        threadingGrid.add(createLabel("(total packets)"), tgbc);
+
+        trow++;
+
+        // Backpressure watermarks
+        tgbc.gridx = 0; tgbc.gridy = trow; tgbc.weightx = 0;
+        threadingGrid.add(createLabel("Backpressure High %:"), tgbc);
+
+        tgbc.gridx = 1; tgbc.weightx = 0;
+        chunkCompressionHighWatermarkSpinner = new JSpinner(new SpinnerNumberModel(85, 1, 100, 1));
+        chunkCompressionHighWatermarkSpinner.setPreferredSize(new Dimension(60, 25));
+        styleSpinner(chunkCompressionHighWatermarkSpinner);
+        threadingGrid.add(chunkCompressionHighWatermarkSpinner, tgbc);
+
+        tgbc.gridx = 2; tgbc.weightx = 0;
+        threadingGrid.add(createLabel("Low %:"), tgbc);
+
+        tgbc.gridx = 3; tgbc.weightx = 0;
+        chunkCompressionLowWatermarkSpinner = new JSpinner(new SpinnerNumberModel(50, 1, 100, 1));
+        chunkCompressionLowWatermarkSpinner.setPreferredSize(new Dimension(60, 25));
+        styleSpinner(chunkCompressionLowWatermarkSpinner);
+        threadingGrid.add(chunkCompressionLowWatermarkSpinner, tgbc);
+
+        trow++;
         
         // Save button row
         JPanel threadingSaveRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 5));
@@ -1311,6 +1388,106 @@ public class ServerGUI extends JFrame {
         
         // Load threading config
         loadThreadingConfig();
+
+        // Startup readiness / tick catch-up section
+        JPanel startupSection = createSection("Startup Readiness");
+        startupSection.setMaximumSize(new Dimension(Integer.MAX_VALUE, 220));
+
+        JPanel startupGrid = new JPanel(new GridBagLayout());
+        startupGrid.setBackground(BG_PANEL);
+        GridBagConstraints sgbc = new GridBagConstraints();
+        sgbc.insets = new Insets(3, 5, 3, 10);
+        sgbc.anchor = GridBagConstraints.WEST;
+        sgbc.fill = GridBagConstraints.HORIZONTAL;
+
+        int srow = 0;
+
+        sgbc.gridx = 0; sgbc.gridy = srow; sgbc.gridwidth = 2; sgbc.weightx = 1;
+        startupReadinessEnabledCheck = createCheckBox("Enable Startup Readiness Gate", true);
+        startupGrid.add(startupReadinessEnabledCheck, sgbc);
+
+        srow++;
+        sgbc.gridx = 0; sgbc.gridy = srow; sgbc.gridwidth = 2;
+        startupHoldLoginCheck = createCheckBox("Hold pre-ready logins and auto-join when warmup completes", true);
+        startupGrid.add(startupHoldLoginCheck, sgbc);
+
+        srow++;
+        sgbc.gridx = 0; sgbc.gridy = srow; sgbc.gridwidth = 2;
+        tickCatchupEnabledCheck = createCheckBox("Enable Tick Catch-up Clamp", true);
+        startupGrid.add(tickCatchupEnabledCheck, sgbc);
+
+        srow++;
+        sgbc.gridwidth = 1;
+        sgbc.gridx = 0; sgbc.gridy = srow; sgbc.weightx = 0;
+        startupGrid.add(createLabel("Overworld Radius (chunks):"), sgbc);
+        sgbc.gridx = 1;
+        startupOverworldRadiusSpinner = new JSpinner(new SpinnerNumberModel(14, 0, 64, 1));
+        startupOverworldRadiusSpinner.setPreferredSize(new Dimension(70, 25));
+        styleSpinner(startupOverworldRadiusSpinner);
+        startupGrid.add(startupOverworldRadiusSpinner, sgbc);
+
+        srow++;
+        sgbc.gridx = 0; sgbc.gridy = srow;
+        startupGrid.add(createLabel("Nether Radius (chunks):"), sgbc);
+        sgbc.gridx = 1;
+        startupNetherRadiusSpinner = new JSpinner(new SpinnerNumberModel(8, 0, 64, 1));
+        startupNetherRadiusSpinner.setPreferredSize(new Dimension(70, 25));
+        styleSpinner(startupNetherRadiusSpinner);
+        startupGrid.add(startupNetherRadiusSpinner, sgbc);
+
+        srow++;
+        sgbc.gridx = 0; sgbc.gridy = srow;
+        startupGrid.add(createLabel("Joiner Extra Radius:"), sgbc);
+        sgbc.gridx = 1;
+        startupJoinerExtraRadiusSpinner = new JSpinner(new SpinnerNumberModel(4, 0, 32, 1));
+        startupJoinerExtraRadiusSpinner.setPreferredSize(new Dimension(70, 25));
+        styleSpinner(startupJoinerExtraRadiusSpinner);
+        startupGrid.add(startupJoinerExtraRadiusSpinner, sgbc);
+
+        srow++;
+        sgbc.gridx = 0; sgbc.gridy = srow;
+        startupGrid.add(createLabel("Max Hold Seconds:"), sgbc);
+        sgbc.gridx = 1;
+        startupMaxHoldSecondsSpinner = new JSpinner(new SpinnerNumberModel(60, 5, 600, 1));
+        startupMaxHoldSecondsSpinner.setPreferredSize(new Dimension(70, 25));
+        styleSpinner(startupMaxHoldSecondsSpinner);
+        startupGrid.add(startupMaxHoldSecondsSpinner, sgbc);
+
+        srow++;
+        sgbc.gridx = 0; sgbc.gridy = srow;
+        startupGrid.add(createLabel("Tick Catch-up Backlog (ms):"), sgbc);
+        sgbc.gridx = 1;
+        tickCatchupMaxBacklogSpinner = new JSpinner(new SpinnerNumberModel(200, 50, 2000, 10));
+        tickCatchupMaxBacklogSpinner.setPreferredSize(new Dimension(90, 25));
+        styleSpinner(tickCatchupMaxBacklogSpinner);
+        startupGrid.add(tickCatchupMaxBacklogSpinner, sgbc);
+
+        srow++;
+        JPanel startupSaveRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 5));
+        startupSaveRow.setBackground(BG_PANEL);
+        saveStartupReadinessButton = new JButton("Save Startup Readiness");
+        styleButton(saveStartupReadinessButton, SUCCESS_COLOR, Color.WHITE);
+        saveStartupReadinessButton.addActionListener(e -> saveStartupReadinessConfig());
+        startupSaveRow.add(saveStartupReadinessButton);
+
+        JButton reloadStartupButton = new JButton("Reload");
+        styleButton(reloadStartupButton, ACCENT_COLOR, Color.WHITE);
+        reloadStartupButton.addActionListener(e -> loadStartupReadinessConfig());
+        startupSaveRow.add(reloadStartupButton);
+
+        JLabel startupNote = new JLabel("  (Server restart required for startup policy changes)");
+        startupNote.setForeground(new Color(150, 150, 150));
+        startupNote.setFont(new Font("Segoe UI", Font.ITALIC, 11));
+        startupSaveRow.add(startupNote);
+
+        sgbc.gridx = 0; sgbc.gridy = srow; sgbc.gridwidth = 2;
+        startupGrid.add(startupSaveRow, sgbc);
+
+        startupSection.add(startupGrid);
+        optionsContent.add(startupSection);
+        optionsContent.add(Box.createVerticalStrut(10));
+
+        loadStartupReadinessConfig();
         
         // Server info section
         JPanel infoSection = createSection("Server Information");
@@ -1481,6 +1658,7 @@ public class ServerGUI extends JFrame {
             levelNameField.setText(props.getProperty("level-name", "world"));
             levelSeedField.setText(props.getProperty("level-seed", ""));
             maxPlayersField.setText(props.getProperty("max-players", "20"));
+            viewDistanceField.setText(props.getProperty("view-distance", "10"));
             motdField.setText(props.getProperty("motd", "A Minecraft Server"));
             
             // Level type
@@ -1543,6 +1721,7 @@ public class ServerGUI extends JFrame {
             props.setProperty("level-name", levelNameField.getText().trim());
             props.setProperty("level-seed", levelSeedField.getText().trim());
             props.setProperty("max-players", maxPlayersField.getText().trim());
+            props.setProperty("view-distance", viewDistanceField.getText().trim());
             props.setProperty("motd", motdField.getText());
             props.setProperty("level-type", (String) levelTypeCombo.getSelectedItem());
             // Save gamemode as string (survival, creative, hardcore)
@@ -1583,6 +1762,7 @@ public class ServerGUI extends JFrame {
         levelNameField.setEnabled(enabled);
         levelSeedField.setEnabled(enabled);
         maxPlayersField.setEnabled(enabled);
+        viewDistanceField.setEnabled(enabled);
         motdField.setEnabled(enabled);
         levelTypeCombo.setEnabled(enabled);
         gamemodeCombo.setEnabled(enabled);
@@ -1607,6 +1787,7 @@ public class ServerGUI extends JFrame {
             levelNameField.setText("world");
             levelSeedField.setText("");
             maxPlayersField.setText("20");
+            viewDistanceField.setText("10");
             motdField.setText("A Minecraft Server");
         }
     }
@@ -1629,6 +1810,10 @@ public class ServerGUI extends JFrame {
             lightingThreadsSpinner.setValue(defaultThreads);
             asyncEntityCheck.setSelected(false);
             entityThreadsSpinner.setValue(defaultThreads);
+            chunkCompressionThreadsSpinner.setValue(Math.max(1, Runtime.getRuntime().availableProcessors() / 3));
+            chunkCompressionQueueCapacitySpinner.setValue(10240);
+            chunkCompressionHighWatermarkSpinner.setValue(85);
+            chunkCompressionLowWatermarkSpinner.setValue(50);
             return;
         }
         
@@ -1648,6 +1833,10 @@ public class ServerGUI extends JFrame {
             
             asyncEntityCheck.setSelected(Boolean.parseBoolean(props.getProperty("async.entity-processing.enabled", "false")));
             entityThreadsSpinner.setValue(Integer.parseInt(props.getProperty("async.entity-processing.threads", String.valueOf(defaultThreads))));
+            chunkCompressionThreadsSpinner.setValue(Integer.parseInt(props.getProperty("chunk-compression.threads", String.valueOf(Math.max(1, Runtime.getRuntime().availableProcessors() / 3)))));
+            chunkCompressionQueueCapacitySpinner.setValue(Integer.parseInt(props.getProperty("chunk-compression.queue-capacity", "10240")));
+            chunkCompressionHighWatermarkSpinner.setValue(Integer.parseInt(props.getProperty("chunk-compression.high-watermark-percent", "85")));
+            chunkCompressionLowWatermarkSpinner.setValue(Integer.parseInt(props.getProperty("chunk-compression.low-watermark-percent", "50")));
             
         } catch (Exception e) {
             appendLog("[GUI] Error loading threading.properties: " + e.getMessage(), LogType.ERROR);
@@ -1675,6 +1864,17 @@ public class ServerGUI extends JFrame {
             
             props.setProperty("async.entity-processing.enabled", String.valueOf(asyncEntityCheck.isSelected()));
             props.setProperty("async.entity-processing.threads", String.valueOf(entityThreadsSpinner.getValue()));
+            props.setProperty("chunk-compression.threads", String.valueOf(chunkCompressionThreadsSpinner.getValue()));
+            props.setProperty("chunk-compression.queue-capacity", String.valueOf(chunkCompressionQueueCapacitySpinner.getValue()));
+
+            int high = ((Number) chunkCompressionHighWatermarkSpinner.getValue()).intValue();
+            int low = ((Number) chunkCompressionLowWatermarkSpinner.getValue()).intValue();
+            if (high < low) {
+                high = low;
+                chunkCompressionHighWatermarkSpinner.setValue(Integer.valueOf(high));
+            }
+            props.setProperty("chunk-compression.high-watermark-percent", String.valueOf(high));
+            props.setProperty("chunk-compression.low-watermark-percent", String.valueOf(low));
             
             // Preserve max-tasks-per-tick if it exists, otherwise set default
             if (!props.containsKey("threading.max-tasks-per-tick")) {
@@ -1692,6 +1892,66 @@ public class ServerGUI extends JFrame {
             
         } catch (IOException e) {
             appendLog("[GUI] Error saving threading.properties: " + e.getMessage(), LogType.ERROR);
+        }
+    }
+
+    private void loadStartupReadinessConfig() {
+        File configFile = new File("poseidon.yml");
+        if (!configFile.exists()) {
+            startupReadinessEnabledCheck.setSelected(true);
+            startupHoldLoginCheck.setSelected(true);
+            tickCatchupEnabledCheck.setSelected(true);
+            startupOverworldRadiusSpinner.setValue(14);
+            startupNetherRadiusSpinner.setValue(8);
+            startupJoinerExtraRadiusSpinner.setValue(4);
+            startupMaxHoldSecondsSpinner.setValue(60);
+            tickCatchupMaxBacklogSpinner.setValue(200);
+            return;
+        }
+
+        try {
+            Configuration config = new Configuration(configFile);
+            config.load();
+
+            startupReadinessEnabledCheck.setSelected(config.getBoolean("settings.startup-readiness.enabled", true));
+            startupHoldLoginCheck.setSelected(config.getBoolean("settings.startup-readiness.hold-login-enabled", true));
+            tickCatchupEnabledCheck.setSelected(config.getBoolean("settings.tick-catchup.enabled", true));
+            startupOverworldRadiusSpinner.setValue(Integer.valueOf(config.getInt("settings.startup-readiness.overworld-radius-chunks", 14)));
+            startupNetherRadiusSpinner.setValue(Integer.valueOf(config.getInt("settings.startup-readiness.nether-radius-chunks", 8)));
+            startupJoinerExtraRadiusSpinner.setValue(Integer.valueOf(config.getInt("settings.startup-readiness.joiner-extra-radius-chunks", 4)));
+            startupMaxHoldSecondsSpinner.setValue(Integer.valueOf(config.getInt("settings.startup-readiness.max-hold-seconds", 60)));
+            tickCatchupMaxBacklogSpinner.setValue(Integer.valueOf(config.getInt("settings.tick-catchup.max-backlog-ms", 200)));
+        } catch (Exception e) {
+            appendLog("[GUI] Error loading poseidon.yml startup settings: " + e.getMessage(), LogType.ERROR);
+        }
+    }
+
+    private void saveStartupReadinessConfig() {
+        File configFile = new File("poseidon.yml");
+        try {
+            Configuration config = new Configuration(configFile);
+            config.load();
+
+            config.setProperty("settings.startup-readiness.enabled", Boolean.valueOf(startupReadinessEnabledCheck.isSelected()));
+            config.setProperty("settings.startup-readiness.hold-login-enabled", Boolean.valueOf(startupHoldLoginCheck.isSelected()));
+            config.setProperty("settings.startup-readiness.overworld-radius-chunks", Integer.valueOf(((Number) startupOverworldRadiusSpinner.getValue()).intValue()));
+            config.setProperty("settings.startup-readiness.nether-radius-chunks", Integer.valueOf(((Number) startupNetherRadiusSpinner.getValue()).intValue()));
+            config.setProperty("settings.startup-readiness.joiner-extra-radius-chunks", Integer.valueOf(((Number) startupJoinerExtraRadiusSpinner.getValue()).intValue()));
+            config.setProperty("settings.startup-readiness.max-hold-seconds", Integer.valueOf(((Number) startupMaxHoldSecondsSpinner.getValue()).intValue()));
+            config.setProperty("settings.tick-catchup.enabled", Boolean.valueOf(tickCatchupEnabledCheck.isSelected()));
+            config.setProperty("settings.tick-catchup.max-backlog-ms", Integer.valueOf(((Number) tickCatchupMaxBacklogSpinner.getValue()).intValue()));
+
+            if (config.getProperty("settings.startup-readiness.progress-log-interval-seconds") == null) {
+                config.setProperty("settings.startup-readiness.progress-log-interval-seconds", Integer.valueOf(2));
+            }
+            if (config.getProperty("settings.tick-catchup.warn-interval-seconds") == null) {
+                config.setProperty("settings.tick-catchup.warn-interval-seconds", Integer.valueOf(30));
+            }
+
+            config.save();
+            appendLog("[GUI] Startup readiness settings saved successfully.", LogType.INFO);
+        } catch (Exception e) {
+            appendLog("[GUI] Error saving poseidon.yml startup settings: " + e.getMessage(), LogType.ERROR);
         }
     }
     
@@ -2404,4 +2664,3 @@ public class ServerGUI extends JFrame {
         }
     }
 }
-

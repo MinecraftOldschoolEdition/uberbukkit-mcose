@@ -25,9 +25,8 @@ public final class FoliagePlacerTypeRegistryBootstrap {
     }
 
     private static void reg(String path, FoliagePlacerType t) {
-        try { Registries.FOLIAGE_PLACER_TYPE.registerIfAbsent(new ResourceLocation("minecraft", path), t); } catch (Throwable ignored) {}
+        try { FoliagePlacerTypeRegistryApi.register(new ResourceLocation("minecraft", path), t); } catch (Throwable ignored) {}
     }
 }
-
 
 

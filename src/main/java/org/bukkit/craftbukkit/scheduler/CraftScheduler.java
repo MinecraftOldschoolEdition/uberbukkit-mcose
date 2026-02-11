@@ -33,6 +33,10 @@ public class CraftScheduler implements BukkitScheduler, Runnable {
     // This lock locks the mainThreadQueue and the currentTick value
     private final Lock mainThreadLock = new ReentrantLock();
     private final Lock syncedTasksLock = new ReentrantLock();
+    private volatile int lastHeartbeatMovedToSynced = 0;
+    private volatile int lastHeartbeatExecuted = 0;
+    private volatile int lastHeartbeatLeftover = 0;
+    private volatile long lastHeartbeatRuntimeNanos = 0L;
 
     public void run() {
 
@@ -111,6 +115,11 @@ public class CraftScheduler implements BukkitScheduler, Runnable {
 
     // If the main thread cannot obtain the lock, it doesn't wait
     public void mainThreadHeartbeat(long currentTick) {
+        long heartbeatStart = System.nanoTime();
+        int movedToSynced = 0;
+        int executedTasks = 0;
+        int leftoverSynced = 0;
+
         if (syncedTasksLock.tryLock()) {
             try {
                 if (mainThreadLock.tryLock()) {
@@ -118,6 +127,7 @@ public class CraftScheduler implements BukkitScheduler, Runnable {
                         this.currentTick = currentTick;
                         while (!mainThreadQueue.isEmpty()) {
                             syncedTasks.addLast(mainThreadQueue.removeFirst());
+                            movedToSynced++;
                         }
                     } finally {
                         mainThreadLock.unlock();
@@ -126,6 +136,7 @@ public class CraftScheduler implements BukkitScheduler, Runnable {
                 long breakTime = System.currentTimeMillis() + 35; // max time spent in loop = 35ms
                 while (!syncedTasks.isEmpty() && System.currentTimeMillis() <= breakTime) {
                     CraftTask task = syncedTasks.removeFirst();
+                    executedTasks++;
                     try {
                         task.getTask().run();
                     } catch (Throwable t) {
@@ -136,10 +147,16 @@ public class CraftScheduler implements BukkitScheduler, Runnable {
                         }
                     }
                 }
+                leftoverSynced = syncedTasks.size();
             } finally {
                 syncedTasksLock.unlock();
             }
         }
+
+        this.lastHeartbeatMovedToSynced = movedToSynced;
+        this.lastHeartbeatExecuted = executedTasks;
+        this.lastHeartbeatLeftover = leftoverSynced;
+        this.lastHeartbeatRuntimeNanos = System.nanoTime() - heartbeatStart;
     }
 
     long getCurrentTick() {
@@ -384,6 +401,40 @@ public class CraftScheduler implements BukkitScheduler, Runnable {
             newTaskList.add((BukkitTask) craftTask);
         }
         return newTaskList;
+    }
+
+    public int getLastHeartbeatMovedToSynced() {
+        return this.lastHeartbeatMovedToSynced;
+    }
+
+    public int getLastHeartbeatExecuted() {
+        return this.lastHeartbeatExecuted;
+    }
+
+    public int getLastHeartbeatLeftover() {
+        return this.lastHeartbeatLeftover;
+    }
+
+    public long getLastHeartbeatRuntimeNanos() {
+        return this.lastHeartbeatRuntimeNanos;
+    }
+
+    public int getMainThreadQueueSize() {
+        mainThreadLock.lock();
+        try {
+            return mainThreadQueue.size();
+        } finally {
+            mainThreadLock.unlock();
+        }
+    }
+
+    public int getSyncedQueueSize() {
+        syncedTasksLock.lock();
+        try {
+            return syncedTasks.size();
+        } finally {
+            syncedTasksLock.unlock();
+        }
     }
 
 }

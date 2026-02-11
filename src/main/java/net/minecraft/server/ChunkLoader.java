@@ -2,9 +2,11 @@ package net.minecraft.server;
 
 import java.io.*;
 import java.util.Iterator;
+import java.util.List;
 
 public class ChunkLoader implements IChunkLoader {
 
+    private static final boolean TILE_TICK_LOG = Boolean.getBoolean("mcregion.tileticks.log");
     private File a;
     private boolean b;
 
@@ -155,6 +157,47 @@ public class ChunkLoader implements IChunkLoader {
         }
 
         nbttagcompound.a("TileEntities", (NBTBase) nbttaglist1);
+        List list = world.getPendingBlockTicksForChunk(chunk.x, chunk.z);
+
+        if (list != null && !list.isEmpty()) {
+            NBTTagList nbttaglist2 = new NBTTagList();
+            long blockTickTime = world.getBlockTickTime();
+            int savedTicks = 0;
+            Iterator iterator1 = list.iterator();
+
+            while (iterator1.hasNext()) {
+                NextTickListEntry nextticklistentry = (NextTickListEntry) iterator1.next();
+
+                if (nextticklistentry == null || nextticklistentry.d <= 0 || nextticklistentry.d >= Block.byId.length || Block.byId[nextticklistentry.d] == null) {
+                    continue;
+                }
+
+                NBTTagCompound nbttagcompound2 = new NBTTagCompound();
+
+                nbttagcompound2.a("i", nextticklistentry.d);
+                nbttagcompound2.a("x", nextticklistentry.a);
+                nbttagcompound2.a("y", nextticklistentry.b);
+                nbttagcompound2.a("z", nextticklistentry.c);
+                long remainingDelay = nextticklistentry.e - blockTickTime;
+
+                if (remainingDelay < 0L) {
+                    remainingDelay = 0L;
+                } else if (remainingDelay > 2147483647L) {
+                    remainingDelay = 2147483647L;
+                }
+
+                nbttagcompound2.a("t", (int) remainingDelay);
+                nbttaglist2.a((NBTBase) nbttagcompound2);
+                ++savedTicks;
+            }
+
+            if (savedTicks > 0) {
+                nbttagcompound.a("TileTicks", (NBTBase) nbttaglist2);
+                if (TILE_TICK_LOG) {
+                    System.out.println("[Chunk TileTicks] save chunk [" + chunk.x + "," + chunk.z + "] ticks=" + savedTicks);
+                }
+            }
+        }
     }
 
     public static Chunk a(World world, NBTTagCompound nbttagcompound) {
@@ -206,6 +249,53 @@ public class ChunkLoader implements IChunkLoader {
 
                 if (tileentity != null) {
                     chunk.a(tileentity);
+                }
+            }
+        }
+
+        if (nbttagcompound.hasKey("TileTicks")) {
+            NBTTagList nbttaglist2 = nbttagcompound.l("TileTicks");
+            int restoredTicks = 0;
+
+            if (nbttaglist2 != null) {
+                for (int i1 = 0; i1 < nbttaglist2.c(); ++i1) {
+                    NBTBase nbtbase = nbttaglist2.a(i1);
+
+                    if (!(nbtbase instanceof NBTTagCompound)) {
+                        continue;
+                    }
+
+                    NBTTagCompound nbttagcompound3 = (NBTTagCompound) nbtbase;
+
+                    if (!nbttagcompound3.hasKey("i") || !nbttagcompound3.hasKey("x") || !nbttagcompound3.hasKey("y") || !nbttagcompound3.hasKey("z") || !nbttagcompound3.hasKey("t")) {
+                        continue;
+                    }
+
+                    int blockId = nbttagcompound3.e("i");
+                    if (blockId <= 0 || blockId >= Block.byId.length || Block.byId[blockId] == null) {
+                        continue;
+                    }
+
+                    int x = nbttagcompound3.e("x");
+                    int y = nbttagcompound3.e("y");
+                    int z = nbttagcompound3.e("z");
+                    if ((x >> 4) != i || (z >> 4) != j || y < 0 || y >= 128) {
+                        continue;
+                    }
+
+                    int delay = nbttagcompound3.e("t");
+                    if (delay < 0) {
+                        delay = 0;
+                    }
+
+                    world.scheduleBlockUpdateFromLoad(x, y, z, blockId, delay);
+                    ++restoredTicks;
+                }
+            }
+
+            if (restoredTicks > 0) {
+                if (TILE_TICK_LOG) {
+                    System.out.println("[Chunk TileTicks] load chunk [" + i + "," + j + "] ticks=" + restoredTicks);
                 }
             }
         }

@@ -19,9 +19,8 @@ public final class SurfaceBuilderRegistryBootstrap {
     }
 
     private static void reg(String path, SurfaceBuilderType t) {
-        try { Registries.SURFACE_BUILDER.registerIfAbsent(new ResourceLocation("minecraft", path), t); } catch (Throwable ignored) {}
+        try { SurfaceBuilderRegistryApi.register(new ResourceLocation("minecraft", path), t); } catch (Throwable ignored) {}
     }
 }
-
 
 

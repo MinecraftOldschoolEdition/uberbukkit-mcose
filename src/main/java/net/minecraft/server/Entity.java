@@ -943,6 +943,7 @@ public abstract class Entity {
         nbttagcompound.a("Fire", (short) this.fireTicks);
         nbttagcompound.a("Air", (short) this.airTicks);
         nbttagcompound.a("OnGround", this.onGround);
+        nbttagcompound.a("TicksExisted", this.ticksLived);
         // CraftBukkit start
         nbttagcompound.setLong("WorldUUIDLeast", this.world.getUUID().getLeastSignificantBits());
         nbttagcompound.setLong("WorldUUIDMost", this.world.getUUID().getMostSignificantBits());
@@ -983,6 +984,9 @@ public abstract class Entity {
         this.fireTicks = nbttagcompound.d("Fire");
         this.airTicks = nbttagcompound.d("Air");
         this.onGround = nbttagcompound.m("OnGround");
+        if (nbttagcompound.hasKey("TicksExisted")) {
+            this.ticksLived = nbttagcompound.e("TicksExisted");
+        }
         this.setPosition(this.locX, this.locY, this.locZ);
 
         // CraftBukkit start

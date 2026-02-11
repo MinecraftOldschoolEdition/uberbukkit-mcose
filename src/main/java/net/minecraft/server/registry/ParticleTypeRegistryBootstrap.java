@@ -30,8 +30,7 @@ public final class ParticleTypeRegistryBootstrap {
     }
 
     private static void reg(String path, ParticleType t) {
-        try { Registries.PARTICLE_TYPE.registerIfAbsent(new ResourceLocation("minecraft", path), t); } catch (Throwable ignored) {}
+        try { ParticleTypeRegistryApi.register(new ResourceLocation("minecraft", path), t); } catch (Throwable ignored) {}
     }
 }
-
 

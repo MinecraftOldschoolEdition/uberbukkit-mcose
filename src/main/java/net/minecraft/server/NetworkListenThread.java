@@ -89,6 +89,14 @@ public class NetworkListenThread {
         }
     }
 
+    public int getPendingLoginCount() {
+        return this.g.size();
+    }
+
+    public int getActiveHandlerCount() {
+        return this.h.size();
+    }
+
     static ServerSocket a(NetworkListenThread networklistenthread) {
         return networklistenthread.d;
     }

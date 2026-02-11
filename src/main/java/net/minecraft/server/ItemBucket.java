@@ -15,7 +15,7 @@ public class ItemBucket extends Item {
 
     public ItemBucket(int i, int j) {
         super(i);
-        this.maxStackSize = 1;
+        this.maxStackSize = j == 0 ? 16 : 1;
         this.a = j;
     }
 
@@ -63,7 +63,7 @@ public class ItemBucket extends Item {
                         // CraftBukkit end
 
                         world.setTypeId(i, j, k, 0);
-                        return new ItemStack(itemInHand.getTypeId(), itemInHand.getAmount(), data); // CraftBukkit
+                        return this.convertEmptyBucketToFilled(itemstack, entityhuman, new ItemStack(itemInHand.getTypeId(), itemInHand.getAmount(), data)); // CraftBukkit
                     }
 
                     if (world.getMaterial(i, j, k) == Material.LAVA && world.getData(i, j, k) == 0) {
@@ -81,7 +81,7 @@ public class ItemBucket extends Item {
                         world.setTypeId(i, j, k, 0);
                         // MCOSE: Hot Stuff achievement for picking up lava
                         entityhuman.a(AchievementList.hotStuff, 1);
-                        return new ItemStack(itemInHand.getTypeId(), itemInHand.getAmount(), data); // CraftBukkit
+                        return this.convertEmptyBucketToFilled(itemstack, entityhuman, new ItemStack(itemInHand.getTypeId(), itemInHand.getAmount(), data)); // CraftBukkit
                     }
                 } else {
                     if (this.a < 0) {
@@ -94,7 +94,7 @@ public class ItemBucket extends Item {
 
                         CraftItemStack itemInHand = (CraftItemStack) event.getItemStack();
                         byte data = itemInHand.getData() == null ? (byte) 0 : itemInHand.getData().getData();
-                        return new ItemStack(itemInHand.getTypeId(), itemInHand.getAmount(), data);
+                        return this.convertFilledBucketToResult(itemstack, entityhuman, new ItemStack(itemInHand.getTypeId(), itemInHand.getAmount(), data));
                     }
 
                     int clickedX = i, clickedY = j, clickedZ = k;
@@ -147,7 +147,7 @@ public class ItemBucket extends Item {
                         CraftItemStack itemInHand = (CraftItemStack) event.getItemStack();
                         byte data = itemInHand.getData() == null ? (byte) 0 : itemInHand.getData().getData();
 
-                        return new ItemStack(itemInHand.getTypeId(), itemInHand.getAmount(), data);
+                        return this.convertFilledBucketToResult(itemstack, entityhuman, new ItemStack(itemInHand.getTypeId(), itemInHand.getAmount(), data));
                         // CraftBukkit end
                     }
                 }
@@ -162,11 +162,55 @@ public class ItemBucket extends Item {
 
                 CraftItemStack itemInHand = (CraftItemStack) event.getItemStack();
                 byte data = itemInHand.getData() == null ? (byte) 0 : itemInHand.getData().getData();
-                return new ItemStack(itemInHand.getTypeId(), itemInHand.getAmount(), data);
+                return this.convertEmptyBucketToFilled(itemstack, entityhuman, new ItemStack(itemInHand.getTypeId(), itemInHand.getAmount(), data));
                 // CraftBukkit end
             }
 
             return itemstack;
         }
+    }
+
+    private ItemStack convertEmptyBucketToFilled(ItemStack emptyStack, EntityHuman player, ItemStack filledResult) {
+        if (emptyStack == null || filledResult == null) {
+            return emptyStack;
+        }
+
+        if (emptyStack.count <= 1 || player == null || player.inventory == null) {
+            return filledResult;
+        }
+
+        --emptyStack.count;
+        if (emptyStack.count < 0) {
+            emptyStack.count = 0;
+        }
+
+        ItemStack toInsert = filledResult.cloneItemStack();
+        boolean added = player.inventory.pickup(toInsert);
+        if (!added && toInsert.count > 0) {
+            player.b(toInsert);
+        }
+        return emptyStack;
+    }
+
+    private ItemStack convertFilledBucketToResult(ItemStack filledStack, EntityHuman player, ItemStack resultStack) {
+        if (filledStack == null || resultStack == null) {
+            return filledStack;
+        }
+
+        if (filledStack.count <= 1 || player == null || player.inventory == null) {
+            return resultStack;
+        }
+
+        --filledStack.count;
+        if (filledStack.count < 0) {
+            filledStack.count = 0;
+        }
+
+        ItemStack toInsert = resultStack.cloneItemStack();
+        boolean added = player.inventory.pickup(toInsert);
+        if (!added && toInsert.count > 0) {
+            player.b(toInsert);
+        }
+        return filledStack;
     }
 }

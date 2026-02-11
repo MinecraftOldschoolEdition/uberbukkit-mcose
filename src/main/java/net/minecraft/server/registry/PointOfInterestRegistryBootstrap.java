@@ -24,8 +24,7 @@ public final class PointOfInterestRegistryBootstrap {
     }
 
     private static void reg(String path, PointOfInterestType type) {
-        try { Registries.POINT_OF_INTEREST_TYPE.registerIfAbsent(new ResourceLocation("minecraft", path), type); } catch (Throwable ignored) {}
+        try { PointOfInterestRegistryApi.register(new ResourceLocation("minecraft", path), type); } catch (Throwable ignored) {}
     }
 }
-
 

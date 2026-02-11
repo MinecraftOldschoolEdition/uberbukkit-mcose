@@ -25,6 +25,7 @@ import me.devcody.uberbukkit.math.Vec3i;
 import uk.betacraft.uberbukkit.UberbukkitConfig;
 import uk.betacraft.uberbukkit.alpha.inventory.ProcessPacket5;
 import uk.betacraft.uberbukkit.packet.Packet62Sound;
+import net.minecraft.server.registry.PlayerCapabilityRegistryApi;
 import uk.betacraft.uberbukkit.protocol.Protocol;
 
 // CraftBukkit start
@@ -39,6 +40,7 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
     public List chunkCoordIntPairQueue = new LinkedList();
     public Set playerChunkCoordIntPairs = new HashSet();
     public final List removeQueue = new LinkedList(); // poseidon
+    private int lastChunkStreamTick = Integer.MIN_VALUE;
     private int bL = -99999999;
     private int bM = 60;
     private ItemStack[] bN = new ItemStack[] { null, null, null, null, null };
@@ -58,17 +60,20 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
         ChunkCoordinates chunkcoordinates = world.getSpawn();
         int i = chunkcoordinates.x;
         int j = chunkcoordinates.z;
-        int k = chunkcoordinates.y;
+        int searchRadius = 64;
+        boolean preferShorelineSpawn = world.worldData != null &&
+            (world.worldData.getTerrainType() == 0 || world.worldData.getTerrainType() == 1);
 
         if (!world.worldProvider.e) {
-            k = world.f(i, j); //Project Poseidon: This finds a solid block, this needs to be left outside of the setting
             if ((boolean) PoseidonConfig.getInstance().getProperty("world-settings.randomize-spawn")) { //Project Poseidon: Moved randomizing X and Y axis into a config option
                 i += this.random.nextInt(20) - 10;
                 j += this.random.nextInt(20) - 10;
+                searchRadius = 80;
             }
         }
 
-        this.setPositionRotation((double) i + 0.5D, (double) k, (double) j + 0.5D, 0.0F, 0.0F);
+        ChunkCoordinates safeSpawn = world.findSafeSpawnNear(i, j, searchRadius, preferShorelineSpawn);
+        this.setPositionRotation((double) safeSpawn.x + 0.5D, (double) safeSpawn.y + 0.01D, (double) safeSpawn.z + 0.5D, 0.0F, 0.0F);
         this.b = minecraftserver;
         this.bs = 0.0F;
         this.name = s;
@@ -113,7 +118,11 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
     }
 
     public void setGameMode(int gameMode) {
+        int previous = this.gameMode;
         this.gameMode = gameMode;
+        if (previous != gameMode) {
+            PlayerCapabilityRegistryApi.handleGameModeUpdate(this, previous, gameMode);
+        }
         this.updateContainer();
     }
 
@@ -359,26 +368,108 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
         }
 
         // Poseidon start
-        if (flag && !this.chunkCoordIntPairQueue.isEmpty()) {
+        if (flag && !this.chunkCoordIntPairQueue.isEmpty() && this.lastChunkStreamTick != MinecraftServer.currentTick) {
+            this.lastChunkStreamTick = MinecraftServer.currentTick;
             if (PoseidonConfig.getInstance().getBoolean("settings.faster-packets.enabled", true)) {
                 ArrayList arraylist = new ArrayList();
-                Iterator iterator1 = this.chunkCoordIntPairQueue.iterator();
                 ArrayList arraylist1 = new ArrayList();
+                int pendingChunkPackets = this.netServerHandler.getQueuedPacketCount() + ChunkCompressionThread.getPlayerQueueSize(this);
+                int totalCompressionQueue = ChunkCompressionThread.getTotalQueueSize();
+                int maxChunksThisTick = 16;
+                int serverAgeTicks = this.b != null ? this.b.ticks : Integer.MAX_VALUE;
+                boolean startupTrafficGuard = serverAgeTicks >= 0 && serverAgeTicks < 1200;
 
-                while (iterator1.hasNext() && arraylist.size() < 20) {
-                    ChunkCoordIntPair chunkcoordintpair = (ChunkCoordIntPair) iterator1.next();
+                // Keep chunk stream moving even under backlog so fast flight does not leave stripe-like gaps.
+                if (pendingChunkPackets > 220) {
+                    maxChunksThisTick = 3;
+                } else if (pendingChunkPackets > 160) {
+                    maxChunksThisTick = 5;
+                } else if (pendingChunkPackets > 110) {
+                    maxChunksThisTick = 7;
+                } else if (pendingChunkPackets > 70) {
+                    maxChunksThisTick = 10;
+                } else if (pendingChunkPackets > 36) {
+                    maxChunksThisTick = 13;
+                }
 
-                    iterator1.remove();
-                    if (chunkcoordintpair != null && this.world.isLoaded(chunkcoordintpair.x << 4, 0, chunkcoordintpair.z << 4)) {
-                        // CraftBukkit start - Get tile entities directly from the chunk instead of the world
-                        Chunk chunk = this.world.getChunkAt(chunkcoordintpair.x, chunkcoordintpair.z);
-                        arraylist.add(chunk);
-                        arraylist1.addAll(chunk.tileEntities.values());
-                        // CraftBukkit end
-                    } else if (chunkcoordintpair != null) {
-                        // If not yet loaded, push back to the end of the queue instead of dropping it
-                        this.chunkCoordIntPairQueue.add(chunkcoordintpair);
+                double horizontalSpeedSq = this.motX * this.motX + this.motZ * this.motZ;
+                if (horizontalSpeedSq > 0.12D * 0.12D) {
+                    maxChunksThisTick += 6;
+                } else if (horizontalSpeedSq > 0.06D * 0.06D) {
+                    maxChunksThisTick += 3;
+                }
+                if (maxChunksThisTick > 24) {
+                    maxChunksThisTick = 24;
+                }
+
+                if (startupTrafficGuard) {
+                    // During the first minute after boot, ramp chunk output gradually to keep interaction packets responsive.
+                    int startupCap;
+                    if (serverAgeTicks < 200) {
+                        startupCap = 4;
+                    } else if (serverAgeTicks < 400) {
+                        startupCap = 6;
+                    } else if (serverAgeTicks < 800) {
+                        startupCap = 8;
+                    } else {
+                        startupCap = 10;
                     }
+
+                    if (pendingChunkPackets > 180) {
+                        startupCap = Math.min(startupCap, 2);
+                    } else if (pendingChunkPackets > 120) {
+                        startupCap = Math.min(startupCap, 4);
+                    } else if (pendingChunkPackets > 80) {
+                        startupCap = Math.min(startupCap, 6);
+                    }
+
+                    maxChunksThisTick = Math.min(maxChunksThisTick, startupCap);
+                }
+
+                if (ChunkCompressionThread.isAboveHighWatermark()) {
+                    maxChunksThisTick = Math.min(maxChunksThisTick, 2);
+                } else if (ChunkCompressionThread.isAboveLowWatermark()) {
+                    maxChunksThisTick = Math.min(maxChunksThisTick, 6);
+                }
+                if (totalCompressionQueue > (ChunkCompressionThread.getTotalQueueCapacity() * 9) / 10) {
+                    maxChunksThisTick = Math.min(maxChunksThisTick, 1);
+                }
+
+                LinkedList queue = this.chunkCoordIntPairQueue instanceof LinkedList ?
+                    (LinkedList) this.chunkCoordIntPairQueue :
+                    new LinkedList(this.chunkCoordIntPairQueue);
+                if (queue != this.chunkCoordIntPairQueue) {
+                    this.chunkCoordIntPairQueue = queue;
+                }
+
+                int attempts = Math.min(queue.size(), maxChunksThisTick * 4);
+                while (attempts-- > 0 && arraylist.size() < maxChunksThisTick && !queue.isEmpty()) {
+                    ChunkCoordIntPair chunkcoordintpair = (ChunkCoordIntPair) queue.getFirst();
+
+                    if (chunkcoordintpair == null) {
+                        queue.removeFirst();
+                        continue;
+                    }
+
+                    if (!this.world.isLoaded(chunkcoordintpair.x << 4, 0, chunkcoordintpair.z << 4)) {
+                        // If not yet loaded, push back to the end of the queue instead of dropping it
+                        queue.removeFirst();
+                        queue.addLast(chunkcoordintpair);
+                        continue;
+                    }
+
+                    if (!ChunkCompressionThread.canAcceptChunk(this)) {
+                        // Compression path saturated; defer remaining chunk sends for this tick.
+                        break;
+                    }
+
+                    queue.removeFirst();
+
+                    // CraftBukkit start - Get tile entities directly from the chunk instead of the world
+                    Chunk chunk = this.world.getChunkAt(chunkcoordintpair.x, chunkcoordintpair.z);
+                    arraylist.add(chunk);
+                    arraylist1.addAll(chunk.tileEntities.values());
+                    // CraftBukkit end
                 }
 
                 if (!arraylist.isEmpty()) {
@@ -387,8 +478,7 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
                     while (iterator2.hasNext()) {
                         Chunk chunk = (Chunk) iterator2.next();
 
-                        // Send pre-chunk ensure first to avoid invisible chunks on some clients
-                        this.netServerHandler.sendPacket(new Packet50PreChunk(chunk.x, chunk.z, true));
+                        // PreChunk is already sent by PlayerInstance when the player starts watching this chunk.
                         this.netServerHandler.sendPacket(new Packet51MapChunk(chunk.x * 16, 0, chunk.z * 16, 16, 128, 16, this.getWorldServer()));
                         this.getWorldServer().tracker.a(this, chunk);
                     }
@@ -407,7 +497,8 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
                 if (chunkcoordintpair != null) {
                     boolean flag1 = false;
 
-                    if (this.netServerHandler.b() + ChunkCompressionThread.getPlayerQueueSize(this) < 4) { // CraftBukkit - Add check against Chunk Packets in the ChunkCompressionThread.
+                    if (this.netServerHandler.getQueuedPacketCount() + ChunkCompressionThread.getPlayerQueueSize(this) < 6
+                        && ChunkCompressionThread.canAcceptChunk(this)) { // CraftBukkit - Add check against Chunk Packets in the ChunkCompressionThread.
                         flag1 = true;
                     }
 
@@ -701,32 +792,22 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
     }
 
     public void a(Statistic statistic, int i) {
-        if (statistic != null) {
-            // Use centralized AchievementManager for all achievement operations
-            if (statistic instanceof Achievement) {
-                Achievement achievement = (Achievement) statistic;
-                if (this.achievementManager != null) {
-                    this.achievementManager.unlock(achievement);
-                } else if (this.playerStatistics != null) {
-                    // Fallback to old system if AchievementManager not initialized
-                    this.playerStatistics.addStatistic(statistic, i);
-                }
-            } else {
-                // Handle regular stats
-                if (this.playerStatistics != null) {
-                    this.playerStatistics.addStatistic(statistic, i);
-                }
-                
-                // Send packet to client for non-achievement stats
-                if (!statistic.g && this.netServerHandler != null) {
-                    int remaining = i;
-                    while (remaining > 100) {
-                        this.netServerHandler.sendPacket(new Packet200Statistic(statistic.e, 100));
-                        remaining -= 100;
-                    }
-                    this.netServerHandler.sendPacket(new Packet200Statistic(statistic.e, remaining));
-                }
+        if (statistic == null) {
+            return;
+        }
+
+        if (statistic instanceof Achievement) {
+            Achievement achievement = (Achievement) statistic;
+            if (this.achievementManager != null) {
+                this.achievementManager.unlock(achievement);
+            } else if (this.playerStatistics != null) {
+                this.playerStatistics.addStatistic(statistic, i);
             }
+            return;
+        }
+
+        if (this.playerStatistics != null) {
+            this.playerStatistics.recordIncrement(statistic, i);
         }
     }
 

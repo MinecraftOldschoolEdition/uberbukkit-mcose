@@ -17,6 +17,11 @@ import com.legacyminecraft.poseidon.packets.ArtificialPacket53BlockChange;
 import uk.betacraft.uberbukkit.packet.Packet62Sound;
 import uk.betacraft.uberbukkit.packet.Packet63Digging;
 
+import net.minecraft.server.event.EventBus;
+import net.minecraft.server.event.events.BlockPlaceEvent;
+import net.minecraft.server.event.events.UseItemEvent;
+import net.minecraft.server.registry.PlayerCapabilityRegistryApi;
+
 public class ItemInWorldManager {
 
     private WorldServer world;
@@ -277,6 +282,18 @@ public class ItemInWorldManager {
     }
 
     public boolean c(int i, int j, int k) {
+        int l = this.world.getTypeId(i, j, k);
+        int i1 = this.world.getData(i, j, k);
+
+        if (this.player instanceof EntityPlayer && !PlayerCapabilityRegistryApi.canAffectBlocks((EntityPlayer) this.player)) {
+            return false;
+        }
+
+        net.minecraft.server.event.events.BlockBreakEvent nmsBreakEvent = new net.minecraft.server.event.events.BlockBreakEvent(this.player, this.world, i, j, k, l, i1);
+        EventBus.global().publish(nmsBreakEvent);
+        if (nmsBreakEvent.isCancelled()) {
+            return false;
+        }
         // CraftBukkit start
         if (this.player instanceof EntityPlayer) {
             org.bukkit.block.Block block = this.world.getWorld().getBlockAt(i, j, k);
@@ -295,9 +312,6 @@ public class ItemInWorldManager {
             }
         }
         // CraftBukkit end
-
-        int l = this.world.getTypeId(i, j, k);
-        int i1 = this.world.getData(i, j, k);
 
         this.world.a(this.player, 2001, i, j, k, l + this.world.getData(i, j, k) * 256);
         boolean flag = this.b(i, j, k);
@@ -320,6 +334,15 @@ public class ItemInWorldManager {
     }
 
     public boolean useItem(EntityHuman entityhuman, World world, ItemStack itemstack) {
+        if (entityhuman instanceof EntityPlayer && !PlayerCapabilityRegistryApi.canAffectBlocks((EntityPlayer) entityhuman)) {
+            return false;
+        }
+
+        UseItemEvent useItemEvent = new UseItemEvent(entityhuman, world, itemstack);
+        EventBus.global().publish(useItemEvent);
+        if (useItemEvent.isCancelled()) {
+            return false;
+        }
         int i = (itemstack == null ? 0 : itemstack.count);
         ItemStack itemstack1 = (itemstack == null ? null : itemstack.a(world, entityhuman));
 
@@ -343,6 +366,15 @@ public class ItemInWorldManager {
     }
 
     public boolean interact(EntityHuman entityhuman, World world, ItemStack itemstack, int i, int j, int k, int l) {
+        if (entityhuman instanceof EntityPlayer && !PlayerCapabilityRegistryApi.canAffectBlocks((EntityPlayer) entityhuman)) {
+            return false;
+        }
+
+        BlockPlaceEvent blockPlaceEvent = new BlockPlaceEvent(entityhuman, world, i, j, k, l, itemstack);
+        EventBus.global().publish(blockPlaceEvent);
+        if (blockPlaceEvent.isCancelled()) {
+            return false;
+        }
         int i1 = world.getTypeId(i, j, k);
 
         // CraftBukkit start - Interact

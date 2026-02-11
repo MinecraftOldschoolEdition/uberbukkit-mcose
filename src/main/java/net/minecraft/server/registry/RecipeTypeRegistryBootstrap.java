@@ -11,25 +11,24 @@ public final class RecipeTypeRegistryBootstrap {
     
     private RecipeTypeRegistryBootstrap() {}
     
-    public static void initialize() {
+    public static synchronized void initialize() {
         if (initialized) return;
         initialized = true;
         
         // Register crafting recipe types
-        Registries.RECIPE_TYPE.register(
+        RecipeTypeRegistryApi.register(
             new ResourceLocation("minecraft", "crafting_shaped"),
             RecipeType.CRAFTING_SHAPED
         );
-        Registries.RECIPE_TYPE.register(
+        RecipeTypeRegistryApi.register(
             new ResourceLocation("minecraft", "crafting_shapeless"),
             RecipeType.CRAFTING_SHAPELESS
         );
-        Registries.RECIPE_TYPE.register(
+        RecipeTypeRegistryApi.register(
             new ResourceLocation("minecraft", "smelting"),
             RecipeType.SMELTING
         );
         
-        System.out.println("[RecipeTypeRegistryBootstrap] Registered " + Registries.RECIPE_TYPE.keys().size() + " recipe types");
+        System.out.println("[RecipeTypeRegistryBootstrap] Registered " + RecipeTypeRegistryApi.size() + " recipe types");
     }
 }
-

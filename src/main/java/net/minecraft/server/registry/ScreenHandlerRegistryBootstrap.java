@@ -7,9 +7,14 @@ import net.minecraft.server.util.ResourceLocation;
  * Keys must match the client GUI side so both agree during synchronization.
  */
 public final class ScreenHandlerRegistryBootstrap {
+    private static boolean initialized = false;
+
     private ScreenHandlerRegistryBootstrap() {}
 
     public static synchronized void initialize() {
+        if (initialized) return;
+        initialized = true;
+
         // Core containers
         reg("chest", safe("net.minecraft.server.ContainerChest"));
         reg("furnace", safe("net.minecraft.server.ContainerFurnace"));
@@ -20,12 +25,11 @@ public final class ScreenHandlerRegistryBootstrap {
 
     private static void reg(String path, Class<?> container) {
         if (container == null) return;
-        Registries.SCREEN_HANDLER.registerIfAbsent(new ResourceLocation("minecraft", path), container);
+        ScreenHandlerRegistryApi.register(new ResourceLocation("minecraft", path), container);
     }
 
     private static Class<?> safe(String name) {
         try { return Class.forName(name); } catch (Throwable ignored) { return null; }
     }
 }
-
 

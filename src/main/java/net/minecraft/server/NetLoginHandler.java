@@ -60,6 +60,10 @@ public class NetLoginHandler extends NetHandler {
     public Socket getSocket() {
         return this.networkManager.socket;
     }
+
+    public MinecraftServer getMinecraftServer() {
+        return this.server;
+    }
     // CraftBukkit end
 
     public void a() {
@@ -244,8 +248,8 @@ public class NetLoginHandler extends NetHandler {
             netserverhandler.setReceivedKeepAlive(receivedKeepAlive);
             //Poseidon End
             // uberbukkit
-            byte dim = (byte) worldserver.worldProvider.dimension;
-            if (this.networkManager.pvn < 12) {
+            byte dim = this.getClientDimension(worldserver);
+            if (this.networkManager.pvn < 12 && dim != 1) {
                 dim = 0;
             }
 
@@ -422,5 +426,24 @@ public class NetLoginHandler extends NetHandler {
 
     public static Packet1Login a(NetLoginHandler netloginhandler, Packet1Login packet1login) {
         return netloginhandler.h = packet1login;
+    }
+
+    private byte getClientDimension(WorldServer worldserver) {
+        if (worldserver == null || worldserver.worldProvider == null) {
+            return 0;
+        }
+
+        if (worldserver.worldProvider instanceof WorldProviderHell) {
+            return -1;
+        }
+
+        try {
+            if (worldserver.worldData != null && worldserver.worldData.getTerrainType() == 3) {
+                // SKY terrain worlds should render with the Sky provider on clients.
+                return 1;
+            }
+        } catch (Throwable ignore) {}
+
+        return (byte) worldserver.worldProvider.dimension;
     }
 }

@@ -26,7 +26,7 @@ public final class BlockEntityTypeRegistryBootstrap {
                         Class<?> teClazz = (Class<?>)map.get(k);
                         if (teClazz == null) continue;
                         String path = oldName.toLowerCase().replace(' ', '_');
-                        Registries.BLOCK_ENTITY_TYPE.registerIfAbsent(new ResourceLocation("minecraft", path), teClazz);
+                        BlockEntityTypeRegistryApi.register(new ResourceLocation("minecraft", path), teClazz);
                     }
                 }
             }
@@ -40,5 +40,4 @@ public final class BlockEntityTypeRegistryBootstrap {
         return null;
     }
 }
-
 

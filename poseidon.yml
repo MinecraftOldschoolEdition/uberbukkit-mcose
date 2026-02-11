@@ -95,6 +95,30 @@ settings:
         item-update-frequency: 10
         item-update-frequency-info: 'How often (in ticks) dropped item positions are
             sent to clients. Default: 10'
+    startup-readiness:
+        enabled: true
+        info: If enabled, startup blocks on chunk warmup so Done means players can join smoothly.
+        hold-login-enabled: true
+        hold-login-enabled-info: If enabled, players joining before readiness are held and auto-joined when warmup completes.
+        overworld-radius-chunks: 14
+        overworld-radius-chunks-info: Warmup radius around overworld spawn in chunks.
+        nether-radius-chunks: 8
+        nether-radius-chunks-info: Warmup radius around nether spawn in chunks.
+        joiner-extra-radius-chunks: 4
+        joiner-extra-radius-chunks-info: Additional overworld warmup ring to absorb first-join travel.
+        max-hold-seconds: 60
+        max-hold-seconds-info: Maximum seconds to hold login during warmup before disconnecting.
+        progress-log-interval-seconds: 2
+        progress-log-interval-seconds-info: Interval for startup warmup progress logs.
+        target-warmup-seconds: 35
+        target-warmup-seconds-info: Operator target warmup budget in seconds.
+    tick-catchup:
+        enabled: true
+        enabled-info: Caps accumulated backlog to prevent temporary 2x simulation bursts.
+        max-backlog-ms: 200
+        max-backlog-ms-info: Maximum milliseconds of backlog to process during catch-up.
+        warn-interval-seconds: 30
+        warn-interval-seconds-info: Minimum interval between backlog clamp warning logs.
     delete-duplicate-uuids: false
     save-playerdata-by-uuid: true
     remove-join-leave-debug: true

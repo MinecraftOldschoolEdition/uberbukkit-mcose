@@ -34,6 +34,9 @@ public class LoginProcessHandler {
 
     private final String msgKickAlreadyOnline;
     private boolean usingModernAuth = false; // Modern auth flag
+    private ConnectionPause startupWarmupPause = null;
+    private long startupWarmupHoldStartMs = 0L;
+    private volatile boolean startupWarmupCheckScheduled = false;
 
     public LoginProcessHandler(NetLoginHandler netloginhandler, Packet1Login packet1login, CraftServer server, boolean onlineMode) {
         this.loginProcessHandler = this;
@@ -197,6 +200,7 @@ public class LoginProcessHandler {
                 return;
             }
             //Bukkit Login Event End
+            this.ensureStartupWarmupPause();
             if (isPlayerConnectionPaused()) {
                 startTime = System.currentTimeMillis() / 1000L;
             } else {
@@ -338,5 +342,84 @@ public class LoginProcessHandler {
 
     public boolean isUsingModernAuth() {
         return this.usingModernAuth;
+    }
+
+    private void ensureStartupWarmupPause() {
+        if (!PoseidonConfig.getInstance().getConfigBoolean("settings.startup-readiness.enabled", true)) {
+            return;
+        }
+        if (!PoseidonConfig.getInstance().getConfigBoolean("settings.startup-readiness.hold-login-enabled", true)) {
+            return;
+        }
+
+        if (this.netLoginHandler == null || this.netLoginHandler.getMinecraftServer() == null) {
+            return;
+        }
+
+        if (this.netLoginHandler.getMinecraftServer().isStartupReady()) {
+            return;
+        }
+
+        if (this.startupWarmupPause == null || !this.startupWarmupPause.isActive()) {
+            this.startupWarmupPause = new ConnectionPause("Server", "ServerWarmup", this);
+            this.connectionPauses.add(this.startupWarmupPause);
+            this.startupWarmupHoldStartMs = System.currentTimeMillis();
+            this.scheduleStartupWarmupCheck();
+        }
+    }
+
+    private void scheduleStartupWarmupCheck() {
+        if (this.startupWarmupCheckScheduled || this.loginSuccessful || this.loginCancelled) {
+            return;
+        }
+
+        this.startupWarmupCheckScheduled = true;
+        Bukkit.getScheduler().scheduleAsyncDelayedTask(new PoseidonPlugin(), () -> {
+            boolean shouldReschedule = false;
+            try {
+                if (this.loginSuccessful || this.loginCancelled) {
+                    return;
+                }
+
+                if (this.startupWarmupPause == null || !this.startupWarmupPause.isActive()) {
+                    return;
+                }
+
+                if (this.netLoginHandler == null || this.netLoginHandler.getMinecraftServer() == null) {
+                    return;
+                }
+
+                if (this.netLoginHandler.getMinecraftServer().isStartupReady()) {
+                    this.removeConnectionInterrupt(this.startupWarmupPause);
+                    return;
+                }
+
+                long heldForSeconds = (System.currentTimeMillis() - this.startupWarmupHoldStartMs) / 1000L;
+                int maxHoldSeconds = getConfigInt("settings.startup-readiness.max-hold-seconds", 60);
+                if (heldForSeconds >= (long) maxHoldSeconds) {
+                    this.cancelLoginProcess("Server warmup still in progress, please rejoin in a moment.");
+                    return;
+                }
+
+                shouldReschedule = true;
+            } finally {
+                this.startupWarmupCheckScheduled = false;
+                if (shouldReschedule) {
+                    this.scheduleStartupWarmupCheck();
+                }
+            }
+        }, 20L);
+    }
+
+    private int getConfigInt(String key, int defaultValue) {
+        try {
+            Object value = PoseidonConfig.getInstance().getConfigOption(key, Integer.valueOf(defaultValue));
+            if (value instanceof Number) {
+                return ((Number) value).intValue();
+            }
+            return Integer.parseInt(String.valueOf(value));
+        } catch (Throwable ignored) {
+            return defaultValue;
+        }
     }
 }

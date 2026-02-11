@@ -5,6 +5,7 @@ import net.minecraft.server.CraftingRecipe;
 import net.minecraft.server.Item;
 import net.minecraft.server.WorldGenerator;
 import net.minecraft.server.Achievement;
+import net.minecraft.server.Statistic;
 import net.minecraft.server.util.ResourceLocation;
 
 public final class Registries {
@@ -32,7 +33,7 @@ public final class Registries {
     public static final SimpleRegistry<CraftingRecipe> RECIPE = new SimpleRegistry<CraftingRecipe>();
     
     // === Gameplay ===
-    public static final SimpleRegistry<Object> STAT = new SimpleRegistry<Object>();
+    public static final SimpleRegistry<Statistic> STAT = new SimpleRegistry<Statistic>();
     public static final SimpleRegistry<Achievement> ACHIEVEMENT = new SimpleRegistry<Achievement>();
     public static final SimpleRegistry<net.minecraft.server.EnumArt> PAINTING_MOTIVE = new SimpleRegistry<net.minecraft.server.EnumArt>();
     public static final SimpleRegistry<JukeboxSong> JUKEBOX_SONG = new SimpleRegistry<JukeboxSong>();
@@ -105,5 +106,4 @@ public final class Registries {
 
     private Registries() {}
 }
-
 

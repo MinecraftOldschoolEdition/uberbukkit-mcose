@@ -12,6 +12,7 @@ public class OpenInvMoveCommand extends Command {
         super(name);
         this.description = "Move an item inside a target player's inventory (A->B)";
         this.usageMessage = "/" + name + " <player> <fromIdx> <toIdx>";
+        this.setPermission("uberbukkit.openinv");
     }
 
     @Override

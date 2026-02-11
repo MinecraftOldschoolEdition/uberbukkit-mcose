@@ -12,6 +12,7 @@ public class OpenInvSwapCommand extends Command {
         super(name);
         this.description = "Swap selected admin hotbar item with a target player's inventory slot";
         this.usageMessage = "/" + name + " <player> <slotIndex>";
+        this.setPermission("uberbukkit.openinv");
     }
 
     @Override

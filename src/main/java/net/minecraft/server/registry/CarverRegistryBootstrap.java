@@ -17,9 +17,8 @@ public final class CarverRegistryBootstrap {
     }
 
     private static void reg(String path, CarverType t) {
-        try { Registries.CARVER.registerIfAbsent(new ResourceLocation("minecraft", path), t); } catch (Throwable ignored) {}
+        try { CarverRegistryApi.register(new ResourceLocation("minecraft", path), t); } catch (Throwable ignored) {}
     }
 }
-
 
 

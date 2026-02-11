@@ -7,6 +7,7 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.map.MapView;
 
 import java.net.InetSocketAddress;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -235,6 +236,29 @@ public interface Player extends HumanEntity, CommandSender, OfflinePlayer {
      * @param achievement Achievement to award
      */
     public void awardAchievement(Achievement achievement);
+
+    /**
+     * Awards this player a namespaced achievement.
+     *
+     * @param namespacedKey namespaced achievement key, e.g. minecraft:mine_wood
+     * @return true if the achievement was newly unlocked
+     */
+    public boolean awardAchievement(String namespacedKey);
+
+    /**
+     * Checks whether this player has unlocked a namespaced achievement.
+     *
+     * @param namespacedKey namespaced achievement key, e.g. minecraft:mine_wood
+     * @return true if unlocked
+     */
+    public boolean hasAchievement(String namespacedKey);
+
+    /**
+     * Gets the canonical namespaced keys of all unlocked achievements.
+     *
+     * @return unlocked achievement keys
+     */
+    public Set<String> getUnlockedAchievements();
 
     /**
      * Increments the given statistic for this player

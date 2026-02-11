@@ -2,7 +2,6 @@ package org.bukkit.command.defaults;
 
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
-import org.bukkit.Material;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
@@ -27,10 +26,14 @@ public class GiveCommand extends VanillaCommand {
         Player player = Bukkit.getPlayerExact(args[0]);
 
         if (player != null) {
-            // Resolve via namespaced registry first
-            Resolution res = resolveItemIdSmart(args[1]);
+            if (net.minecraft.server.registry.RegistryKeyPolicy.looksNumeric(args[1])) {
+                sender.sendMessage(ChatColor.RED + "Numeric IDs are disabled. Use an item key like iron_ingot.");
+                return true;
+            }
+
+            Resolution res = resolveItemByKey(args[1]);
             if (res != null) {
-                Command.broadcastCommandMessage(sender, "Giving " + player.getName() + " some " + res.itemId + "(" + args[1] + ")");
+                Command.broadcastCommandMessage(sender, "Giving " + player.getName() + " some " + res.variantKey);
 
                 int amount = 1;
                 if (args.length >= 3) {
@@ -41,12 +44,12 @@ public class GiveCommand extends VanillaCommand {
 
                 short dmg = 0;
                 if (res.variantKey != null) {
-                    int vd = net.minecraft.server.registry.VariantDefaults.get(res.variantKey);
+                    int vd = net.minecraft.server.registry.ItemRegistry.getDefaultDamage(res.variantKey);
                     if (vd >= 0) dmg = (short)vd;
                 }
                 player.getInventory().addItem(new ItemStack(res.itemId, amount, dmg));
             } else {
-                sender.sendMessage("There's no item called " + args[1]);
+                sender.sendMessage(ChatColor.RED + "Unknown item key: " + args[1]);
             }
         } else {
             sender.sendMessage("Can't find user " + args[0]);
@@ -57,35 +60,12 @@ public class GiveCommand extends VanillaCommand {
 
     private static final class Resolution { final int itemId; final String variantKey; Resolution(int id, String k){this.itemId=id;this.variantKey=k;} }
 
-    private Resolution resolveItemIdSmart(String token) {
-        // Try namespaced registry
-        try {
-            String keyStr = token.toLowerCase();
-            if (keyStr.indexOf(':') < 0) keyStr = "minecraft:" + keyStr;
-            net.minecraft.server.util.ResourceLocation rl = new net.minecraft.server.util.ResourceLocation(keyStr);
-            net.minecraft.server.Item it = net.minecraft.server.registry.Registries.ITEM.get(rl);
-            if (it != null) {
-                return new Resolution(it.id, rl.toString());
-            }
-        } catch (Throwable ignored) {}
-
-        // Fallback to Bukkit Material
-        Material m = Material.matchMaterial(token);
-        if (m == null) {
-            String lower = token.toLowerCase();
-            if (lower.startsWith("minecraft:")) {
-                String simple = lower.substring("minecraft:".length());
-                m = Material.matchMaterial(simple);
-            }
-        }
-        if (m != null) return new Resolution(m.getId(), null);
-
-        // Numeric id
-        try {
-            int id = Integer.parseInt(token);
-            return new Resolution(id, null);
-        } catch (NumberFormatException ignore) {}
-        return null;
+    private Resolution resolveItemByKey(String token) {
+        String normalized = net.minecraft.server.registry.ItemRegistry.normalizeInputIdentifier(token);
+        if (normalized == null) return null;
+        net.minecraft.server.Item item = net.minecraft.server.registry.ItemRegistry.get(new net.minecraft.server.util.ResourceLocation(normalized));
+        if (item == null) return null;
+        return new Resolution(item.id, normalized);
     }
 
     @Override
@@ -105,11 +85,13 @@ public class GiveCommand extends VanillaCommand {
                 }
             }
         } else if (args.length == 2) {
-            // Complete item names
+            // Complete item keys from the namespaced registry.
             String prefix = args[1].toLowerCase();
-            for (Material mat : Material.values()) {
-                if (mat.name().toLowerCase().startsWith(prefix)) {
-                    completions.add(mat.name().toLowerCase());
+            boolean hasNamespace = prefix.indexOf(':') >= 0;
+            for (net.minecraft.server.util.ResourceLocation key : net.minecraft.server.registry.ItemRegistry.displayKeys()) {
+                String candidate = hasNamespace ? key.toString() : key.getPath();
+                if (candidate.startsWith(prefix)) {
+                    completions.add(candidate);
                 }
             }
         }

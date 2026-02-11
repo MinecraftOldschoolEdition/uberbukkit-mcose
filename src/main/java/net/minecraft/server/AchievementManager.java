@@ -1,359 +1,396 @@
 package net.minecraft.server;
 
-import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.logging.Logger;
+import net.minecraft.server.registry.AchievementRegistryApi;
+import net.minecraft.server.util.ResourceLocation;
 
 /**
  * Centralized Achievement Manager for the server.
- * Handles all achievement tracking, unlocking, persistence, and broadcasting.
- * 
- * This is the ONLY class that should be used to unlock achievements server-side
- * to ensure consistent behavior across all code paths.
+ * Handles achievement tracking, unlocking, persistence, and broadcasting.
  */
 public final class AchievementManager {
-    
+
     private static final Logger log = Logger.getLogger("Minecraft");
-    
-    // Fallback achievement display names (in case translation file fails)
-    private static final Map<Integer, String> ACHIEVEMENT_NAMES = new HashMap<Integer, String>();
-    static {
-        ACHIEVEMENT_NAMES.put(5242880, "Taking Inventory");
-        ACHIEVEMENT_NAMES.put(5242881, "Getting Wood");
-        ACHIEVEMENT_NAMES.put(5242882, "Benchmarking");
-        ACHIEVEMENT_NAMES.put(5242883, "Time to Mine!");
-        ACHIEVEMENT_NAMES.put(5242884, "Hot Topic");
-        ACHIEVEMENT_NAMES.put(5242885, "Acquire Hardware");
-        ACHIEVEMENT_NAMES.put(5242886, "Time to Farm!");
-        ACHIEVEMENT_NAMES.put(5242887, "Bake Bread");
-        ACHIEVEMENT_NAMES.put(5242888, "The Lie");
-        ACHIEVEMENT_NAMES.put(5242889, "Getting an Upgrade");
-        ACHIEVEMENT_NAMES.put(5242890, "Delicious Fish");
-        ACHIEVEMENT_NAMES.put(5242891, "On A Rail");
-        ACHIEVEMENT_NAMES.put(5242892, "Time to Strike!");
-        ACHIEVEMENT_NAMES.put(5242893, "Monster Hunter");
-        ACHIEVEMENT_NAMES.put(5242894, "Cow Tipper");
-        ACHIEVEMENT_NAMES.put(5242895, "When Pigs Fly");
-        ACHIEVEMENT_NAMES.put(5242896, "DIAMONDS!");
-        ACHIEVEMENT_NAMES.put(5242897, "We Need to Go Deeper");
-        ACHIEVEMENT_NAMES.put(5242898, "Librarian");
-        ACHIEVEMENT_NAMES.put(5242899, "KABOOM!");
-        ACHIEVEMENT_NAMES.put(5242900, "Hot Stuff");
-        ACHIEVEMENT_NAMES.put(5242901, "Pork Chop");
-        ACHIEVEMENT_NAMES.put(5242902, "Sweet Dreams");
-        ACHIEVEMENT_NAMES.put(5242903, "Pathfinder");
-        ACHIEVEMENT_NAMES.put(5242904, "DJ");
-        ACHIEVEMENT_NAMES.put(5242905, "Sniper Duel");
-        ACHIEVEMENT_NAMES.put(5242906, "Pushin' Around");
-        ACHIEVEMENT_NAMES.put(5242907, "Tick Tock");
-        ACHIEVEMENT_NAMES.put(5242908, "Overkill");
-        ACHIEVEMENT_NAMES.put(5242909, "Have a Shearful Day");
-        ACHIEVEMENT_NAMES.put(5242910, "Egg Hunt");
-        ACHIEVEMENT_NAMES.put(5242911, "Rainbow Collection");
-    }
-    
+
+    private static final int ACHIEVEMENT_STAT_BASE = 5242880;
+    private static final int NBT_VERSION_LEGACY = 1;
+    private static final int NBT_VERSION_KEYED = 2;
+    private static final String NBT_VERSION = "Version";
+    private static final String NBT_ACHIEVEMENTS = "Achievements";
+    private static final String NBT_ID = "id";
+    private static final String NBT_KEY = "key";
+
     private final EntityPlayer player;
     private final Set<Integer> unlockedAchievementIds;
-    
-    /**
-     * Create an achievement manager for a player.
-     * @param player The player this manager belongs to
-     */
+
     public AchievementManager(EntityPlayer player) {
         this.player = player;
         this.unlockedAchievementIds = new HashSet<Integer>();
     }
-    
-    /**
-     * Check if the player has an achievement unlocked.
-     * @param achievement The achievement to check
-     * @return true if unlocked
-     */
+
     public boolean hasAchievement(Achievement achievement) {
-        if (achievement == null) return false;
-        return unlockedAchievementIds.contains(achievement.e);
+        if (achievement == null) {
+            return false;
+        }
+
+        return unlockedAchievementIds.contains(Integer.valueOf(achievement.e));
     }
-    
-    /**
-     * Check if the player has an achievement unlocked by stat ID.
-     * @param statId The stat ID
-     * @return true if unlocked
-     */
+
     public boolean hasAchievementById(int statId) {
-        return unlockedAchievementIds.contains(statId);
+        return unlockedAchievementIds.contains(Integer.valueOf(statId));
     }
-    
-    /**
-     * Check if the prerequisite for an achievement is met.
-     * @param achievement The achievement to check
-     * @return true if the prerequisite is met or there is no prerequisite
-     */
+
+    public boolean hasAchievement(String namespacedKey) {
+        Achievement achievement = findAchievementByKey(namespacedKey);
+        return achievement != null && hasAchievement(achievement);
+    }
+
     public boolean canUnlock(Achievement achievement) {
-        if (achievement == null) return false;
-        if (achievement.c == null) return true; // c is parent achievement
-        return hasAchievement(achievement.c);
+        if (achievement == null) {
+            return false;
+        }
+
+        return achievement.c == null || hasAchievement(achievement.c);
     }
-    
-    /**
-     * Attempt to unlock an achievement. This is the main entry point.
-     * Handles prerequisite checking, persistence, client sync, and broadcasting.
-     * 
-     * @param achievement The achievement to unlock
-     * @return true if the achievement was newly unlocked
-     */
+
     public boolean unlock(Achievement achievement) {
-        if (achievement == null) return false;
-        
-        // Already unlocked?
+        if (achievement == null) {
+            return false;
+        }
+
         if (hasAchievement(achievement)) {
             return false;
         }
-        
-        // Check prerequisite
+
         if (!canUnlock(achievement)) {
             return false;
         }
-        
-        // Unlock it
-        unlockedAchievementIds.add(achievement.e);
-        
-        // Report to server-wide statistics
+
+        unlockedAchievementIds.add(Integer.valueOf(achievement.e));
         ServerStatistics.getInstance().recordAchievement(player.name, achievement);
-        
-        // Sync to client via packet
         sendAchievementPacket(achievement);
-        
-        // Broadcast to server if enabled
         broadcastAchievement(achievement);
-        
+
         log.info("[Achievement] " + player.name + " earned: " + getAchievementName(achievement));
-        
         return true;
     }
-    
-    /**
-     * Force unlock an achievement without prerequisite checking.
-     * Use this for admin commands or special cases.
-     * 
-     * @param achievement The achievement to unlock
-     * @return true if the achievement was newly unlocked
-     */
+
+    public boolean unlock(String namespacedKey) {
+        return unlock(findAchievementByKey(namespacedKey));
+    }
+
     public boolean forceUnlock(Achievement achievement) {
-        if (achievement == null) return false;
-        
-        // Already unlocked?
+        if (achievement == null) {
+            return false;
+        }
+
         if (hasAchievement(achievement)) {
             return false;
         }
-        
-        // Unlock it
-        unlockedAchievementIds.add(achievement.e);
-        
-        // Report to server-wide statistics
+
+        unlockedAchievementIds.add(Integer.valueOf(achievement.e));
         ServerStatistics.getInstance().recordAchievement(player.name, achievement);
-        
-        // Sync to client via packet
         sendAchievementPacket(achievement);
-        
-        // Broadcast to server if enabled
         broadcastAchievement(achievement);
-        
+
         log.info("[Achievement] " + player.name + " earned (forced): " + getAchievementName(achievement));
-        
         return true;
     }
-    
-    /**
-     * Send the achievement unlock packet to the client.
-     */
+
+    public boolean forceUnlock(String namespacedKey) {
+        return forceUnlock(findAchievementByKey(namespacedKey));
+    }
+
+    public Achievement getAchievement(String namespacedKey) {
+        return findAchievementByKey(namespacedKey);
+    }
+
     private void sendAchievementPacket(Achievement achievement) {
-        if (player.netServerHandler == null) return;
-        if (!player.protocol.canReceivePacket(200)) return;
-        
-        // Send Packet200Statistic with the achievement ID and amount of 1
+        if (player.netServerHandler == null) {
+            return;
+        }
+
+        if (!player.protocol.canReceivePacket(200)) {
+            return;
+        }
+
         player.netServerHandler.sendPacket(new Packet200Statistic(achievement.e, 1));
     }
-    
-    /**
-     * Broadcast the achievement to all players on the server.
-     */
+
     private void broadcastAchievement(Achievement achievement) {
-        // Get the server
         MinecraftServer server = player.b;
         if (server == null && player.world instanceof WorldServer) {
             server = ((WorldServer) player.world).server;
         }
-        
+
         if (server == null || server.serverConfigurationManager == null) {
-            // Fallback: just send to the player
-            sendChatToPlayer("§eYou have just earned the achievement §a[" + getAchievementName(achievement) + "]");
+            sendChatToPlayer("\u00A7eYou have just earned the achievement \u00A7a[" + getAchievementName(achievement) + "]");
             return;
         }
-        
-        // Check gamerule - default to true if we can't check
+
         boolean shouldBroadcast = true;
         try {
             WorldServer overworld = server.getWorldServer(0);
             if (overworld != null && overworld.worldData != null) {
                 shouldBroadcast = overworld.worldData.getAdvertiseAchievements();
             }
-        } catch (Exception e) {
-            // Default to broadcasting if we can't check
+        } catch (Exception ignored) {
             shouldBroadcast = true;
         }
-        
+
         String achievementName = getAchievementName(achievement);
-        String message = "§e" + player.name + " has just earned the achievement §a[" + achievementName + "]";
-        
+        String message = "\u00A7e" + player.name + " has just earned the achievement \u00A7a[" + achievementName + "]";
+
         if (shouldBroadcast) {
             server.serverConfigurationManager.sendAll(new Packet3Chat(message));
         } else {
-            // Only send to the player who earned it
             sendChatToPlayer(message);
         }
     }
-    
-    /**
-     * Send a chat message to the player.
-     */
+
     private void sendChatToPlayer(String message) {
         if (player.netServerHandler != null) {
             player.netServerHandler.sendPacket(new Packet3Chat(message));
         }
     }
-    
-    /**
-     * Get the display name for an achievement.
-     */
+
     public static String getAchievementName(Achievement achievement) {
-        if (achievement == null) return "Unknown Achievement";
-        
-        // Try the translated name from the Statistic.f field
+        if (achievement == null) {
+            return "Unknown Achievement";
+        }
+
         if (achievement.f != null && !achievement.f.startsWith("achievement.")) {
             return achievement.f;
         }
-        
-        // Fallback to our hardcoded map
-        String fallback = ACHIEVEMENT_NAMES.get(achievement.e);
-        if (fallback != null) {
-            return fallback;
+
+        ResourceLocation key = AchievementRegistryApi.getKey(achievement);
+        if (key != null) {
+            return formatAchievementName(key.getPath());
         }
-        
-        // Ultimate fallback
+
         return "Unknown Achievement";
     }
-    
-    /**
-     * Save achievements to NBT.
-     */
+
+    private static String formatAchievementName(String keyPath) {
+        if (keyPath == null || keyPath.length() == 0) {
+            return "Unknown Achievement";
+        }
+
+        StringBuilder out = new StringBuilder();
+        boolean nextUpper = true;
+        for (int i = 0; i < keyPath.length(); i++) {
+            char c = keyPath.charAt(i);
+            if (c == '_') {
+                out.append(' ');
+                nextUpper = true;
+                continue;
+            }
+
+            if (nextUpper && c >= 'a' && c <= 'z') {
+                out.append((char) (c - 32));
+            } else {
+                out.append(c);
+            }
+            nextUpper = false;
+        }
+
+        return out.toString();
+    }
+
     public void saveToNBT(NBTTagCompound nbt) {
+        nbt.a(NBT_VERSION, NBT_VERSION_KEYED);
+
         NBTTagList achievementList = new NBTTagList();
         for (Integer id : unlockedAchievementIds) {
+            int statId = id.intValue();
             NBTTagCompound achievementTag = new NBTTagCompound();
-            achievementTag.a("id", id);
+
+            Achievement achievement = findAchievementByStatId(statId);
+            if (achievement != null) {
+                ResourceLocation key = AchievementRegistryApi.getKey(achievement);
+                if (key != null) {
+                    achievementTag.setString(NBT_KEY, key.toString());
+                }
+                statId = achievement.e;
+            }
+
+            achievementTag.a(NBT_ID, statId);
             achievementList.a(achievementTag);
         }
-        nbt.a("Achievements", achievementList);
+
+        nbt.a(NBT_ACHIEVEMENTS, achievementList);
     }
-    
-    /**
-     * Load achievements from NBT.
-     */
+
     public void loadFromNBT(NBTTagCompound nbt) {
         unlockedAchievementIds.clear();
-        
-        if (nbt.hasKey("Achievements")) {
-            NBTTagList achievementList = nbt.l("Achievements");
-            for (int i = 0; i < achievementList.c(); i++) {
-                NBTTagCompound achievementTag = (NBTTagCompound) achievementList.a(i);
-                unlockedAchievementIds.add(achievementTag.e("id"));
+
+        if (nbt == null || !nbt.hasKey(NBT_ACHIEVEMENTS)) {
+            log.fine("[AchievementManager] Loaded 0 achievements for " + player.name);
+            return;
+        }
+
+        int version = nbt.hasKey(NBT_VERSION) ? nbt.e(NBT_VERSION) : NBT_VERSION_LEGACY;
+
+        NBTTagList achievementList = nbt.l(NBT_ACHIEVEMENTS);
+        int resolved = 0;
+
+        for (int i = 0; i < achievementList.c(); i++) {
+            NBTBase entry = achievementList.a(i);
+            if (!(entry instanceof NBTTagCompound)) {
+                continue;
+            }
+
+            NBTTagCompound achievementTag = (NBTTagCompound) entry;
+            Achievement achievement = resolveAchievement(achievementTag, version);
+            if (achievement != null) {
+                unlockedAchievementIds.add(Integer.valueOf(achievement.e));
+                resolved++;
+                continue;
+            }
+
+            if (achievementTag.hasKey(NBT_ID)) {
+                int statId = achievementTag.e(NBT_ID);
+                if (statId >= ACHIEVEMENT_STAT_BASE) {
+                    unlockedAchievementIds.add(Integer.valueOf(statId));
+                }
             }
         }
-        
-        log.fine("[AchievementManager] Loaded " + unlockedAchievementIds.size() + " achievements for " + player.name);
+
+        log.fine("[AchievementManager] Loaded " + unlockedAchievementIds.size() + " achievements for " + player.name + " (" + resolved + " registry-resolved)");
     }
-    
-    /**
-     * Sync all unlocked achievements to the client.
-     * Call this when a player joins to ensure their client is up-to-date.
-     */
-    public void syncAllToClient() {
-        if (player.netServerHandler == null) return;
-        if (!player.protocol.canReceivePacket(200)) return;
-        
-        for (Integer statId : unlockedAchievementIds) {
-            player.netServerHandler.sendPacket(new Packet200Statistic(statId, 1));
+
+    private Achievement resolveAchievement(NBTTagCompound achievementTag, int version) {
+        if (achievementTag == null) {
+            return null;
         }
-        
+
+        if (achievementTag.hasKey(NBT_KEY)) {
+            String keyString = achievementTag.getString(NBT_KEY);
+            Achievement byKey = findAchievementByKey(keyString);
+            if (byKey != null) {
+                return byKey;
+            }
+        }
+
+        if (achievementTag.hasKey(NBT_ID)) {
+            Achievement byId = findAchievementByStatId(achievementTag.e(NBT_ID));
+            if (byId != null) {
+                return byId;
+            }
+        }
+
+        if (version <= NBT_VERSION_LEGACY && achievementTag.hasKey(NBT_KEY)) {
+            Achievement byLegacyKey = findAchievementByKey(achievementTag.getString(NBT_KEY));
+            if (byLegacyKey != null) {
+                return byLegacyKey;
+            }
+        }
+
+        return null;
+    }
+
+    public void syncAllToClient() {
+        if (player.netServerHandler == null) {
+            return;
+        }
+
+        if (!player.protocol.canReceivePacket(200)) {
+            return;
+        }
+
+        for (Integer statId : new TreeSet<Integer>(unlockedAchievementIds)) {
+            player.netServerHandler.sendPacket(new Packet200Statistic(statId.intValue(), 1));
+        }
+
         log.fine("[AchievementManager] Synced " + unlockedAchievementIds.size() + " achievements to " + player.name);
     }
-    
-    /**
-     * Get all unlocked achievement IDs.
-     * @return A copy of the unlocked achievement IDs set
-     */
+
     public Set<Integer> getUnlockedAchievementIds() {
         return new HashSet<Integer>(unlockedAchievementIds);
     }
-    
-    /**
-     * Get the count of unlocked achievements.
-     * @return Number of unlocked achievements
-     */
+
+    public Set<String> getUnlockedAchievementKeys() {
+        Set<String> keys = new TreeSet<String>();
+        for (Integer statId : unlockedAchievementIds) {
+            Achievement achievement = findAchievementByStatId(statId.intValue());
+            if (achievement == null) {
+                continue;
+            }
+
+            ResourceLocation key = AchievementRegistryApi.getKey(achievement);
+            if (key != null) {
+                keys.add(key.toString());
+            }
+        }
+
+        return keys;
+    }
+
     public int getUnlockedCount() {
         return unlockedAchievementIds.size();
     }
-    
-    /**
-     * Find an achievement by its stat ID.
-     * @param statId The stat ID to search for
-     * @return The achievement, or null if not found
-     */
+
     public static Achievement findAchievementByStatId(int statId) {
-        // Check if this is in the achievement ID range (5242880+)
-        if (statId < 5242880) {
+        if (statId < ACHIEVEMENT_STAT_BASE) {
             return null;
         }
-        
-        // Search the achievement list
-        for (Object obj : AchievementList.e) {
-            Achievement achievement = (Achievement) obj;
-            if (achievement.e == statId) {
-                return achievement;
-            }
-        }
-        
-        return null;
+
+        return AchievementRegistryApi.getByStatId(statId);
     }
-    
-    /**
-     * Convenience method to trigger an achievement for a player.
-     * Use this as a one-liner from game code.
-     * 
-     * @param player The player who earned the achievement
-     * @param achievement The achievement to unlock
-     * @return true if the achievement was newly unlocked
-     */
+
+    public static Achievement findAchievementByKey(ResourceLocation key) {
+        return AchievementRegistryApi.get(key);
+    }
+
+    public static Achievement findAchievementByKey(String keyString) {
+        ResourceLocation key = parseKey(keyString);
+        return key == null ? null : findAchievementByKey(key);
+    }
+
+    private static ResourceLocation parseKey(String keyString) {
+        if (keyString == null || keyString.length() == 0) {
+            return null;
+        }
+
+        try {
+            return new ResourceLocation(keyString);
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
     public static boolean trigger(EntityPlayer player, Achievement achievement) {
         if (player != null && player.achievementManager != null && achievement != null) {
             return player.achievementManager.unlock(achievement);
         }
+
         return false;
     }
-    
-    /**
-     * Convenience method to check if a player has an achievement.
-     * 
-     * @param player The player to check
-     * @param achievement The achievement to check
-     * @return true if the player has the achievement
-     */
+
+    public static boolean trigger(EntityPlayer player, String namespacedKey) {
+        if (player != null && player.achievementManager != null) {
+            return player.achievementManager.unlock(namespacedKey);
+        }
+
+        return false;
+    }
+
     public static boolean hasUnlocked(EntityPlayer player, Achievement achievement) {
         if (player != null && player.achievementManager != null && achievement != null) {
             return player.achievementManager.hasAchievement(achievement);
         }
+
+        return false;
+    }
+
+    public static boolean hasUnlocked(EntityPlayer player, String namespacedKey) {
+        if (player != null && player.achievementManager != null) {
+            return player.achievementManager.hasAchievement(namespacedKey);
+        }
+
         return false;
     }
 }

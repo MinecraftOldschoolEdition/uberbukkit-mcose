@@ -3,6 +3,8 @@ package net.minecraft.server;
 import org.bukkit.craftbukkit.inventory.CraftItemStack;
 import org.bukkit.entity.Player;
 import org.bukkit.event.player.PlayerItemDamageEvent;
+import net.minecraft.server.registry.ItemRegistry;
+import net.minecraft.server.util.ResourceLocation;
 
 public final class ItemStack {
 
@@ -42,6 +44,7 @@ public final class ItemStack {
         this.id = i;
         this.count = j;
         this.damage = k;
+        normalizeLegacyInventoryItemStates();
     }
 
     public ItemStack(NBTTagCompound nbttagcompound) {
@@ -83,6 +86,13 @@ public final class ItemStack {
         nbttagcompound.a("id", (short) this.id);
         nbttagcompound.a("Count", (byte) this.count);
         nbttagcompound.a("Damage", (short) this.damage);
+        Item item = this.getItem();
+        if (item != null) {
+            ResourceLocation key = ItemRegistry.getKey(item);
+            if (key != null) {
+                nbttagcompound.setString("name", key.toString());
+            }
+        }
         if (this.tag != null) {
             nbttagcompound.a("tag", this.tag);
         }
@@ -90,11 +100,37 @@ public final class ItemStack {
     }
 
     public void b(NBTTagCompound nbttagcompound) {
-        this.id = nbttagcompound.d("id");
         this.count = nbttagcompound.c("Count");
         this.damage = nbttagcompound.d("Damage");
+
+        if (nbttagcompound.hasKey("name")) {
+            String name = nbttagcompound.getString("name");
+            try {
+                ResourceLocation key = new ResourceLocation(name);
+                Item item = ItemRegistry.get(key);
+                if (item != null) {
+                    this.id = ItemRegistry.getLegacyId(item);
+                    normalizeLegacyInventoryItemStates();
+                    if (nbttagcompound.hasKey("tag")) {
+                        this.tag = nbttagcompound.k("tag");
+                    }
+                    return;
+                }
+            } catch (Throwable ignored) {}
+        }
+
+        this.id = nbttagcompound.d("id");
+        normalizeLegacyInventoryItemStates();
+
         if (nbttagcompound.hasKey("tag")) {
             this.tag = nbttagcompound.k("tag");
+        }
+    }
+
+    private void normalizeLegacyInventoryItemStates() {
+        // Unlit redstone torch (id 75) is a block state, not a legal inventory item.
+        if (Block.REDSTONE_TORCH_OFF != null && Block.REDSTONE_TORCH_ON != null && this.id == Block.REDSTONE_TORCH_OFF.id) {
+            this.id = Block.REDSTONE_TORCH_ON.id;
         }
     }
     

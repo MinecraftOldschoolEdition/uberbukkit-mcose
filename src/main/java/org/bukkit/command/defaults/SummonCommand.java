@@ -101,16 +101,21 @@ public class SummonCommand extends VanillaCommand {
             } catch (Throwable ignore) {}
             if (args.length == 5) {
                 String blockArg = args[4];
-                try {
-                    // namespaced block id first
-                    net.minecraft.server.util.ResourceLocation bkey = new net.minecraft.server.util.ResourceLocation(blockArg);
-                    net.minecraft.server.Block b = net.minecraft.server.registry.Registries.BLOCK.get(bkey);
-                    if (b != null) blockId = b.id;
-                } catch (Throwable ignored) {}
-                if (blockId == 0) {
-                    try { blockId = Integer.parseInt(blockArg); } catch (Throwable ignored) {}
+                if (net.minecraft.server.registry.RegistryKeyPolicy.looksNumeric(blockArg)) {
+                    sender.sendMessage(ChatColor.RED + "Numeric block IDs are disabled. Use a block key like netherrack.");
+                    return true;
                 }
-                if (blockId == 0) blockId = net.minecraft.server.Block.SAND.id;
+                String normalizedBlock = net.minecraft.server.registry.BlockRegistry.normalizeInputIdentifier(blockArg);
+                if (normalizedBlock == null) {
+                    sender.sendMessage(ChatColor.RED + "Unknown block key: " + blockArg);
+                    return true;
+                }
+                net.minecraft.server.Block resolved = net.minecraft.server.registry.BlockRegistry.get(new net.minecraft.server.util.ResourceLocation(normalizedBlock));
+                if (resolved == null) {
+                    sender.sendMessage(ChatColor.RED + "Unknown block key: " + blockArg);
+                    return true;
+                }
+                blockId = resolved.id;
             }
             ((net.minecraft.server.EntityFallingSand)ent).a = blockId;
         }

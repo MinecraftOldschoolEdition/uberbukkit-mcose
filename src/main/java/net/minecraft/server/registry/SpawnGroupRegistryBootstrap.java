@@ -11,29 +11,28 @@ public final class SpawnGroupRegistryBootstrap {
     
     private SpawnGroupRegistryBootstrap() {}
     
-    public static void initialize() {
+    public static synchronized void initialize() {
         if (initialized) return;
         initialized = true;
         
         // Register built-in spawn groups
-        Registries.SPAWN_GROUP.register(
+        SpawnGroupRegistryApi.register(
             new ResourceLocation("minecraft", "monster"),
             SpawnGroup.MONSTER
         );
-        Registries.SPAWN_GROUP.register(
+        SpawnGroupRegistryApi.register(
             new ResourceLocation("minecraft", "creature"),
             SpawnGroup.CREATURE
         );
-        Registries.SPAWN_GROUP.register(
+        SpawnGroupRegistryApi.register(
             new ResourceLocation("minecraft", "water_creature"),
             SpawnGroup.WATER_CREATURE
         );
-        Registries.SPAWN_GROUP.register(
+        SpawnGroupRegistryApi.register(
             new ResourceLocation("minecraft", "ambient"),
             SpawnGroup.AMBIENT
         );
         
-        System.out.println("[SpawnGroupRegistryBootstrap] Registered " + Registries.SPAWN_GROUP.keys().size() + " spawn groups");
+        System.out.println("[SpawnGroupRegistryBootstrap] Registered " + SpawnGroupRegistryApi.size() + " spawn groups");
     }
 }
-

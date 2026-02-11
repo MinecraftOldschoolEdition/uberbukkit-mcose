@@ -27,7 +27,7 @@ public class WorldProviderNormal extends WorldProvider {
             } else if (terrainType == 2) { // 2 for FLAT
                 this.b = new WorldChunkManagerFlat();
             } else if (terrainType == 3) { // 3 for SKY
-                this.b = new WorldChunkManagerSky();
+                this.b = new WorldChunkManagerSky(this.a.getSeed());
             } else { // Default
                 super.a(); 
             }

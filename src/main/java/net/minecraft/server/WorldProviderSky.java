@@ -6,7 +6,7 @@ public class WorldProviderSky extends WorldProvider {
 
     @Override
     public void a() {
-        this.b = new WorldChunkManagerSky();
+        this.b = new WorldChunkManagerSky(this.a != null ? this.a.getSeed() : 0L);
         this.dimension = 1;
     }
 

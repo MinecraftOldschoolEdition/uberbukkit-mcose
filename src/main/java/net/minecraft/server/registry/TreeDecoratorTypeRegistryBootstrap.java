@@ -19,9 +19,8 @@ public final class TreeDecoratorTypeRegistryBootstrap {
     }
 
     private static void reg(String path, TreeDecoratorType t) {
-        try { Registries.TREE_DECORATOR_TYPE.registerIfAbsent(new ResourceLocation("minecraft", path), t); } catch (Throwable ignored) {}
+        try { TreeDecoratorTypeRegistryApi.register(new ResourceLocation("minecraft", path), t); } catch (Throwable ignored) {}
     }
 }
-
 
 

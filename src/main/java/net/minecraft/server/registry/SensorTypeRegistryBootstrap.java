@@ -24,9 +24,8 @@ public final class SensorTypeRegistryBootstrap {
 
     private static void reg(String path, SensorType type) {
         try {
-            Registries.SENSOR_TYPE.registerIfAbsent(new ResourceLocation("minecraft", path), type);
+            SensorTypeRegistryApi.register(new ResourceLocation("minecraft", path), type);
         } catch (Throwable ignored) {}
     }
 }
-
 

@@ -16,6 +16,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.command.CommandException;
+import org.bukkit.command.CommandAutocompleteRegistry;
 import org.bukkit.craftbukkit.ChunkCompressionThread;
 import org.bukkit.craftbukkit.CraftServer;
 import org.bukkit.craftbukkit.TextWrapper;
@@ -37,6 +38,14 @@ import uk.betacraft.uberbukkit.UberbukkitConfig;
 import uk.betacraft.uberbukkit.packet.Packet62Sound;
 import uk.betacraft.uberbukkit.packet.Packet63Digging;
 import uk.betacraft.uberbukkit.protocol.Protocol;
+import net.minecraft.server.network.ModProtocol;
+import net.minecraft.server.registry.RegistrySyncSnapshot;
+import net.minecraft.server.registry.PlayerCapabilityRegistryApi;
+
+import net.minecraft.server.event.EventBus;
+import net.minecraft.server.event.events.AttackEntityEvent;
+import net.minecraft.server.event.events.InteractEntityEvent;
+import net.minecraft.server.event.events.InventoryShortcutEvent;
 
 public class NetServerHandler extends NetHandler implements ICommandListener {
 
@@ -71,8 +80,14 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     private String clientVersion = null;
     private long connectionStartTime = System.currentTimeMillis();
     private static final long VERSION_CHECK_GRACE_PERIOD_MS = 10000; // 10 seconds to send version
+    private boolean modProtocolNegotiated = false;
+    private RegistrySyncSnapshot syncedRegistrySnapshot = null;
     
     private final String msgPlayerLeave;
+    private static final long INVENTORY_SHORTCUT_PRIME_MS = 350L;
+    private int primedInventorySlot = -1;
+    private int primedInventoryWindowId = -1;
+    private long primedInventoryClickAt = 0L;
 
     public boolean isReceivedKeepAlive() {
         return receivedKeepAlive;
@@ -396,7 +411,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
                     // Project Poseidon - End
 
                 }
-
+                PlayerCapabilityRegistryApi.handleGroundStateUpdate(this.player, packet10flying.g);
                 this.player.onGround = packet10flying.g;
                 this.player.a(true);
                 this.player.move(d5, 0.0D, d4);
@@ -561,7 +576,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             } else {
                 this.h = 0;
             }
-
+            PlayerCapabilityRegistryApi.handleGroundStateUpdate(this.player, packet10flying.g);
             this.player.onGround = packet10flying.g;
             this.minecraftServer.serverConfigurationManager.d(this.player);
             this.player.b(this.player.locY - d0, packet10flying.g);
@@ -1176,6 +1191,13 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         else if (packet instanceof Packet6SpawnPosition) {
             Packet6SpawnPosition packet6 = (Packet6SpawnPosition) packet;
             this.player.compassTarget = new Location(this.getPlayer().getWorld(), packet6.x, packet6.y, packet6.z);
+        } else if (packet instanceof Packet51MapChunk) {
+            if (!ChunkCompressionThread.sendPacket(this.player, packet)) {
+                // If compression queue is currently saturated, fall back to direct network queue
+                // to avoid dropping chunk packets.
+                this.networkManager.queue(packet);
+            }
+            packet = null;
         } else if (packet instanceof Packet3Chat) {
             String message = ((Packet3Chat) packet).message;
             
@@ -1197,10 +1219,6 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
                 }
                 packet = null;
             }
-        } else if (packet.k == true) {
-            // Reroute all low-priority packets through to compression thread.
-            ChunkCompressionThread.sendPacket(this.player, packet);
-            packet = null;
         }
         if (packet != null) this.networkManager.queue(packet);
         // CraftBukkit end
@@ -1537,6 +1555,10 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         return this.networkManager.e();
     }
 
+    public int getQueuedPacketCount() {
+        return this.networkManager.getQueuedPacketCount();
+    }
+
     public void sendMessage(String s) {
         this.sendPacket(new Packet3Chat("\u00A77" + s));
     }
@@ -1557,6 +1579,10 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         Entity entity = worldserver.getEntity(packet7useentity.target);
         ItemStack itemInHand = this.player.inventory.getItemInHand();
 
+        if (!PlayerCapabilityRegistryApi.canAffectEntities(this.player)) {
+            return;
+        }
+
         if (entity != null) {
 
             // uberbukkit start
@@ -1571,6 +1597,12 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             // uberbukkit end
 
             if (packet7useentity.c == 0) {
+                InteractEntityEvent interactEntityEvent = new InteractEntityEvent(this.player, entity, this.player.world);
+                EventBus.global().publish(interactEntityEvent);
+                if (interactEntityEvent.isCancelled()) {
+                    return;
+                }
+
                 Player player = (Player) this.getPlayer();
                 org.bukkit.entity.Entity bukkitEntity = entity.getBukkitEntity();
                 // CraftBukkit start
@@ -1593,6 +1625,12 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
                 }
                 // CraftBukkit end
             } else if (packet7useentity.c == 1) {
+                AttackEntityEvent attackEntityEvent = new AttackEntityEvent(this.player, entity, this.player.world);
+                EventBus.global().publish(attackEntityEvent);
+                if (attackEntityEvent.isCancelled()) {
+                    return;
+                }
+
                 this.player.d(entity);
                 // CraftBukkit start - update the client if the item is an infinite one
                 if (itemInHand != null && itemInHand.count <= -1) {
@@ -1612,7 +1650,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         System.out.println("[Respawn] Player " + this.player.name + " requesting respawn. Health=" + this.player.health + 
             ", Hardcore=" + this.player.isHardcoreMode() + ", GameMode=" + this.player.gameMode);
 
-        if (this.player.health <= 0) {
+        if (this.player.dead || this.player.health <= 0) {
             // Hardcore mode: check if player is still banned
             if (this.player.isHardcoreMode()) {
                 // Check if player is currently banned - if NOT banned, they were unbanned by admin
@@ -1633,9 +1671,24 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
                 System.out.println("[Hardcore] Player " + this.player.name + " was unbanned - allowing respawn (staying in hardcore mode)");
             }
 
-            this.player = this.minecraftServer.serverConfigurationManager.moveToWorld(this.player, 0);
+            try {
+                this.player = this.minecraftServer.serverConfigurationManager.moveToWorld(this.player, 0);
+                if (this.player != null) {
+                    this.player.dead = false;
+                    this.player.deathTicks = 0;
+                    if (this.player.health <= 0) {
+                        this.player.health = 20;
+                    }
+                }
 
-            this.getPlayer().setHandle(this.player); // CraftBukkit
+                CraftPlayer craftPlayer = this.getPlayer();
+                if (craftPlayer != null) {
+                    craftPlayer.setHandle(this.player); // CraftBukkit
+                }
+            } catch (Throwable t) {
+                a.log(java.util.logging.Level.SEVERE, "[Respawn] Failed to respawn player " + this.player.name + ". Disconnecting stale session.", t);
+                this.disconnect("Respawn failed. Please reconnect.");
+            }
         }
     }
 
@@ -1658,6 +1711,18 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
                 return;
             }
 
+            InventoryShortcutEvent shortcutEvent = this.detectInventoryShortcut(packet102windowclick);
+            if (shortcutEvent != null) {
+                EventBus.global().publish(shortcutEvent);
+                if (shortcutEvent.isCancelled()) {
+                    this.clearInventoryShortcutPrime();
+                    this.player.activeContainer.a();
+                    this.player.z();
+                    return;
+                }
+            }
+            this.updateInventoryShortcutPrime(packet102windowclick, shortcutEvent != null);
+
             ItemStack itemstack = this.player.activeContainer.a(packet102windowclick.b, packet102windowclick.c, packet102windowclick.f, this.player);
 
             if (ItemStack.equals(packet102windowclick.e, itemstack)) {
@@ -1679,6 +1744,90 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
                 this.player.a(this.player.activeContainer, arraylist);
             }
         }
+    }
+
+    private InventoryShortcutEvent detectInventoryShortcut(Packet102WindowClick packet102windowclick) {
+        if (this.player == null || this.player.activeContainer == null) {
+            this.clearInventoryShortcutPrime();
+            return null;
+        }
+        if (this.primedInventorySlot < 0 || this.primedInventoryWindowId != packet102windowclick.a) {
+            return null;
+        }
+        if (System.currentTimeMillis() - this.primedInventoryClickAt > INVENTORY_SHORTCUT_PRIME_MS) {
+            this.clearInventoryShortcutPrime();
+            return null;
+        }
+
+        InventoryShortcutEvent.Action action = null;
+        int hotbarIndex = -1;
+
+        if (packet102windowclick.b == -999 && (packet102windowclick.c == 0 || packet102windowclick.c == 1)) {
+            action = packet102windowclick.c == 0
+                ? InventoryShortcutEvent.Action.DROP_STACK
+                : InventoryShortcutEvent.Action.DROP_SINGLE;
+        } else if (!packet102windowclick.f && packet102windowclick.c == 0) {
+            hotbarIndex = this.resolveHotbarIndex(packet102windowclick.b);
+            if (hotbarIndex >= 0) {
+                action = InventoryShortcutEvent.Action.HOTBAR_SWAP;
+            }
+        }
+
+        if (action == null) {
+            return null;
+        }
+
+        Slot hoveredSlot = null;
+        if (this.primedInventorySlot >= 0 && this.primedInventorySlot < this.player.activeContainer.e.size()) {
+            hoveredSlot = (Slot) this.player.activeContainer.e.get(this.primedInventorySlot);
+        }
+
+        return new InventoryShortcutEvent(
+            this.player,
+            this.player.activeContainer,
+            hoveredSlot,
+            action,
+            -1,
+            hotbarIndex,
+            false,
+            false
+        );
+    }
+
+    private int resolveHotbarIndex(int slotNumber) {
+        if (this.player == null || this.player.activeContainer == null) {
+            return -1;
+        }
+        int slotCount = this.player.activeContainer.e.size();
+        int hotbarStart = slotCount - 9;
+        if (hotbarStart < 0) {
+            return -1;
+        }
+        return slotNumber >= hotbarStart && slotNumber < slotCount ? (slotNumber - hotbarStart) : -1;
+    }
+
+    private void updateInventoryShortcutPrime(Packet102WindowClick packet102windowclick, boolean shortcutResolved) {
+        if (shortcutResolved) {
+            this.clearInventoryShortcutPrime();
+            return;
+        }
+
+        if (packet102windowclick.b >= 0 && packet102windowclick.c == 0 && !packet102windowclick.f) {
+            this.primedInventorySlot = packet102windowclick.b;
+            this.primedInventoryWindowId = packet102windowclick.a;
+            this.primedInventoryClickAt = System.currentTimeMillis();
+            return;
+        }
+
+        if (packet102windowclick.b == -999 || packet102windowclick.c != 0 || packet102windowclick.f) {
+            this.clearInventoryShortcutPrime();
+        }
+    }
+
+    private void clearInventoryShortcutPrime() {
+        this.primedInventorySlot = -1;
+        this.primedInventoryWindowId = -1;
+        this.primedInventoryClickAt = 0L;
     }
 
     public void a(Packet106Transaction packet106transaction) {
@@ -1819,6 +1968,33 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             handleVersionPacket(packet250custompayload);
             return;
         }
+
+        if (ModProtocol.CHANNEL_HELLO.equals(packet250custompayload.channel)) {
+            int remoteVersion = ModProtocol.readHelloVersion(packet250custompayload.data);
+            this.modProtocolNegotiated = (remoteVersion == ModProtocol.PROTOCOL_VERSION);
+            if (this.modProtocolNegotiated) {
+                this.sendPacket(new Packet250CustomPayload(ModProtocol.CHANNEL_HELLO_ACK, ModProtocol.createHelloAckPayload()));
+            }
+            return;
+        }
+
+        if (ModProtocol.CHANNEL_REGISTRY_REQUEST.equals(packet250custompayload.channel)) {
+            if (!this.modProtocolNegotiated) {
+                return;
+            }
+            int requestVersion = ModProtocol.readRegistryRequestVersion(packet250custompayload.data);
+            if (requestVersion != ModProtocol.PROTOCOL_VERSION) {
+                return;
+            }
+            this.syncedRegistrySnapshot = RegistrySyncSnapshot.captureLocal();
+            this.sendPacket(new Packet250CustomPayload(ModProtocol.CHANNEL_REGISTRY_SYNC, ModProtocol.createRegistrySyncPayload(this.syncedRegistrySnapshot)));
+            return;
+        }
+
+        if (CommandAutocompleteRegistry.CHANNEL_REQUEST.equals(packet250custompayload.channel)) {
+            handleCommandAutocompleteRequest(packet250custompayload);
+            return;
+        }
         
         // Try friends verification handler first (for MCOSE|F* channels)
         if (packet250custompayload.channel.startsWith("MCOSE|F")) {
@@ -1877,10 +2053,86 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
                 this.disconnect(ModVersion.getOutdatedMessage(this.clientVersion));
                 return;
             }
+
+            sendCommandAutocompleteTree();
             
         } catch (Exception e) {
             a.warning("[MCOSE] Error reading version packet: " + e.getMessage());
             this.disconnect("Outdated client! Please update to " + ModVersion.VERSION);
+        }
+    }
+
+    private void sendCommandAutocompleteTree() {
+        try {
+            if (!(this.server.getCommandMap() instanceof org.bukkit.command.SimpleCommandMap)) {
+                return;
+            }
+
+            org.bukkit.command.SimpleCommandMap commandMap = (org.bukkit.command.SimpleCommandMap) this.server.getCommandMap();
+            byte[] payload = CommandAutocompleteRegistry.getInstance().buildTreePayload(commandMap, this.getPlayer());
+            if (payload == null || payload.length == 0) {
+                return;
+            }
+
+            this.sendPacket(new Packet250CustomPayload(CommandAutocompleteRegistry.CHANNEL_TREE, payload));
+        } catch (Throwable t) {
+            a.warning("[CommandAutocomplete] Failed to send command tree: " + t.getMessage());
+        }
+    }
+
+    public void refreshCommandAutocompleteTree() {
+        sendCommandAutocompleteTree();
+    }
+
+
+    private void handleCommandAutocompleteRequest(Packet250CustomPayload packet) {
+        if (packet == null || packet.data == null || packet.data.length == 0) {
+            return;
+        }
+
+        java.io.DataInputStream in = null;
+        try {
+            in = new java.io.DataInputStream(new java.io.ByteArrayInputStream(packet.data));
+            int protocol = in.readInt();
+            if (protocol != CommandAutocompleteRegistry.PROTOCOL_VERSION) {
+                return;
+            }
+
+            int requestId = in.readInt();
+            int cursorPos = in.readInt();
+            String text = in.readUTF();
+            if (text == null) {
+                text = "";
+            }
+
+            if (!(this.server.getCommandMap() instanceof org.bukkit.command.SimpleCommandMap)) {
+                return;
+            }
+
+            org.bukkit.command.SimpleCommandMap commandMap = (org.bukkit.command.SimpleCommandMap) this.server.getCommandMap();
+            java.util.List<String> suggestions = CommandAutocompleteRegistry.getInstance().suggest(commandMap, this.getPlayer(), text, cursorPos);
+
+            java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+            java.io.DataOutputStream out = new java.io.DataOutputStream(baos);
+            out.writeInt(CommandAutocompleteRegistry.PROTOCOL_VERSION);
+            out.writeInt(requestId);
+            out.writeInt(cursorPos);
+            out.writeUTF(text);
+            out.writeInt(suggestions.size());
+            for (int i = 0; i < suggestions.size(); i++) {
+                String value = suggestions.get(i);
+                out.writeUTF(value == null ? "" : value);
+            }
+
+            this.sendPacket(new Packet250CustomPayload(CommandAutocompleteRegistry.CHANNEL_RESPONSE, baos.toByteArray()));
+        } catch (Throwable t) {
+            a.warning("[CommandAutocomplete] Failed to handle request: " + t.getMessage());
+        } finally {
+            if (in != null) {
+                try {
+                    in.close();
+                } catch (java.io.IOException ignored) {}
+            }
         }
     }
     
@@ -2114,76 +2366,15 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         if (packet203tabcomplete.text == null || packet203tabcomplete.text.isEmpty()) {
             return;
         }
-        
-        String text = packet203tabcomplete.text;
-        java.util.List<String> completions = new java.util.ArrayList<String>();
-        
-        // If it's a command (starts with /)
-        if (text.startsWith("/")) {
-            String commandText = text.substring(1); // Remove leading /
-            String[] parts = commandText.split(" ", -1); // -1 to preserve trailing empty strings
-            
-            if (parts.length == 0) {
-                parts = new String[]{""};
-            }
-            
-            String commandName = parts[0].toLowerCase();
-            
-            // Get all registered commands
-            org.bukkit.command.SimpleCommandMap commandMap = (org.bukkit.command.SimpleCommandMap) this.server.getCommandMap();
-            
-            if (parts.length == 1) {
-                // Completing command name
-                String prefix = commandName;
-                for (org.bukkit.command.Command cmd : commandMap.getCommands()) {
-                    if (cmd.getName().toLowerCase().startsWith(prefix)) {
-                        if (cmd.getPermission() == null || this.getPlayer().hasPermission(cmd.getPermission())) {
-                            completions.add(cmd.getName());
-                        }
-                    }
-                    // Also check aliases
-                    for (String alias : cmd.getAliases()) {
-                        if (alias.toLowerCase().startsWith(prefix)) {
-                            if (cmd.getPermission() == null || this.getPlayer().hasPermission(cmd.getPermission())) {
-                                completions.add(alias);
-                            }
-                        }
-                    }
-                }
-            } else {
-                // Completing command arguments
-                org.bukkit.command.Command cmd = commandMap.getCommand(commandName);
-                if (cmd != null) {
-                    // Check permission
-                    if (cmd.getPermission() == null || this.getPlayer().hasPermission(cmd.getPermission())) {
-                        String[] args = new String[parts.length - 1];
-                        System.arraycopy(parts, 1, args, 0, args.length);
-                        
-                        java.util.List<String> cmdCompletions = cmd.tabComplete(this.getPlayer(), commandName, args);
-                        if (cmdCompletions != null) {
-                            completions.addAll(cmdCompletions);
-                        }
-                    }
-                }
-            }
-        } else {
-            // Regular chat - complete player names
-            String[] words = text.split(" ", -1);
-            String lastWord = words.length > 0 ? words[words.length - 1].toLowerCase() : "";
-            
-            for (org.bukkit.entity.Player p : this.server.getOnlinePlayers()) {
-                if (p.getName().toLowerCase().startsWith(lastWord)) {
-                    completions.add(p.getName());
-                }
-            }
+
+        if (!(this.server.getCommandMap() instanceof org.bukkit.command.SimpleCommandMap)) {
+            return;
         }
-        
-        // Sort and remove duplicates
-        java.util.Set<String> uniqueCompletions = new java.util.TreeSet<String>(String.CASE_INSENSITIVE_ORDER);
-        uniqueCompletions.addAll(completions);
-        
-        // Send response
-        String[] responseArray = uniqueCompletions.toArray(new String[0]);
+
+        org.bukkit.command.SimpleCommandMap commandMap = (org.bukkit.command.SimpleCommandMap) this.server.getCommandMap();
+        java.util.List<String> completions = CommandAutocompleteRegistry.getInstance()
+            .suggest(commandMap, this.getPlayer(), packet203tabcomplete.text, packet203tabcomplete.text.length());
+        String[] responseArray = completions.toArray(new String[0]);
         this.sendPacket(new Packet203TabComplete(responseArray));
     }
 }

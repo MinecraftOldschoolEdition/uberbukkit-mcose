@@ -20,6 +20,14 @@ import com.legacyminecraft.poseidon.PoseidonConfig;
 import me.devcody.uberbukkit.math.Vec3i;
 import uk.betacraft.uberbukkit.Uberbukkit;
 
+import net.minecraft.server.event.EventBus;
+import net.minecraft.server.event.events.PlayerDamageEvent;
+import net.minecraft.server.event.events.PlayerDamageType;
+import net.minecraft.server.event.events.PlayerDealDamageEvent;
+import net.minecraft.server.event.events.PlayerJumpEvent;
+import net.minecraft.server.event.events.PlayerMoveEvent;
+import net.minecraft.server.registry.PlayerCapabilityRegistryApi;
+
 public abstract class EntityHuman extends EntityLiving {
 
     public InventoryPlayer inventory = new InventoryPlayer(this);
@@ -363,6 +371,9 @@ public abstract class EntityHuman extends EntityLiving {
         this.dimension = nbttagcompound.e("Dimension");
         this.sleeping = nbttagcompound.m("Sleeping");
         this.sleepTicks = nbttagcompound.d("SleepTimer");
+        if (nbttagcompound.hasKey("PortalCooldown")) {
+            this.D = nbttagcompound.e("PortalCooldown");
+        }
         if (this.sleeping) {
             this.A = new ChunkCoordinates(MathHelper.floor(this.locX), MathHelper.floor(this.locY), MathHelper.floor(this.locZ));
             this.a(true, true, false);
@@ -391,6 +402,7 @@ public abstract class EntityHuman extends EntityLiving {
         nbttagcompound.a("Dimension", this.dimension);
         nbttagcompound.a("Sleeping", this.sleeping);
         nbttagcompound.a("SleepTimer", (short) this.sleepTicks);
+        nbttagcompound.a("PortalCooldown", this.D);
         nbttagcompound.a("GameType", this.gameMode); // Project Poseidon - Save gamemode
         if (this.b != null) {
             nbttagcompound.a("SpawnX", this.b.x);
@@ -429,6 +441,11 @@ public abstract class EntityHuman extends EntityLiving {
             if (this.gameMode == 1) {
                 return false;
             }
+
+            if (this instanceof EntityPlayer && PlayerCapabilityRegistryApi.isInvulnerable((EntityPlayer) this)) {
+                return false;
+            }
+
             if (this.isSleeping() && !this.world.isStatic) {
                 this.a(true, true, false);
             }
@@ -456,9 +473,49 @@ public abstract class EntityHuman extends EntityLiving {
                     object = ((EntityArrow) entity).shooter;
                 }
 
+                if (!(object instanceof EntityLiving) && this instanceof EntityPlayer) {
+                    Entity resolved = object instanceof Entity ? (Entity) object : null;
+                    PlayerDamageEvent damageEvent = new PlayerDamageEvent(
+                            (EntityPlayer) this,
+                            this.world,
+                            entity,
+                            resolved,
+                            this.resolveDamageType(entity, resolved),
+                            i
+                    );
+                    EventBus.global().publish(damageEvent);
+                    if (damageEvent.isCancelled()) {
+                        return false;
+                    }
+                    i = damageEvent.getAmount();
+                    if (i <= 0) {
+                        return false;
+                    }
+                }
+
                 if (object instanceof EntityLiving) {
                     // CraftBukkit start - this is here instead of EntityMonster because EntityLiving(s) that aren't monsters
                     // also damage the player in this way. For example, EntitySlime.
+
+                    if (this instanceof EntityPlayer) {
+                        Entity resolved = object instanceof Entity ? (Entity) object : null;
+                        PlayerDamageEvent damageEvent = new PlayerDamageEvent(
+                                (EntityPlayer) this,
+                                this.world,
+                                entity,
+                                resolved,
+                                this.resolveDamageType(entity, resolved),
+                                i
+                        );
+                        EventBus.global().publish(damageEvent);
+                        if (damageEvent.isCancelled()) {
+                            return false;
+                        }
+                        i = damageEvent.getAmount();
+                        if (i <= 0) {
+                            return false;
+                        }
+                    }
 
                     // We handle projectiles in their individual classes!
                     if (!(entity.getBukkitEntity() instanceof Projectile)) {
@@ -584,6 +641,10 @@ public abstract class EntityHuman extends EntityLiving {
     }
 
     public void d(Entity entity) {
+        if (this instanceof EntityPlayer && !PlayerCapabilityRegistryApi.canAffectEntities((EntityPlayer) this)) {
+            return;
+        }
+
         int i = this.inventory.a(entity);
 
         if (i > 0) {
@@ -607,6 +668,26 @@ public abstract class EntityHuman extends EntityLiving {
                 i = event.getDamage();
             }
             // CraftBukkit end
+
+            if (this instanceof EntityPlayer) {
+                ItemStack held = this.G();
+                PlayerDealDamageEvent damageEvent = new PlayerDealDamageEvent(
+                        (EntityPlayer) this,
+                        this.world,
+                        entity,
+                        held,
+                        PlayerDamageType.MELEE,
+                        i
+                );
+                EventBus.global().publish(damageEvent);
+                if (damageEvent.isCancelled()) {
+                    return;
+                }
+                i = damageEvent.getAmount();
+                if (i <= 0) {
+                    return;
+                }
+            }
 
             // CraftBukkit start - Return when the damage fails so that the item will not lose durability
             double d0 = entity.motX;
@@ -890,11 +971,43 @@ public abstract class EntityHuman extends EntityLiving {
     }
 
     protected void O() {
+        if (this instanceof EntityPlayer) {
+            PlayerJumpEvent jumpEvent = new PlayerJumpEvent((EntityPlayer) this, this.world, 0.42D);
+            EventBus.global().publish(jumpEvent);
+            if (jumpEvent.isCancelled()) {
+                return;
+            }
+
+            super.O();
+            this.motY = jumpEvent.getJumpVelocity();
+            this.a(StatisticList.u, 1);
+            return;
+        }
+
         super.O();
         this.a(StatisticList.u, 1);
     }
 
     public void a(float f, float f1) {
+        if (this instanceof EntityPlayer) {
+            PlayerMoveEvent moveEvent = new PlayerMoveEvent(
+                    (EntityPlayer) this,
+                    this.world,
+                    this.locX,
+                    this.locY,
+                    this.locZ,
+                    f,
+                    f1,
+                    PlayerCapabilityRegistryApi.isFlying((EntityPlayer) this)
+            );
+            EventBus.global().publish(moveEvent);
+            if (moveEvent.isCancelled()) {
+                return;
+            }
+            f = moveEvent.getStrafe();
+            f1 = moveEvent.getForward();
+        }
+
         double d0 = this.locX;
         double d1 = this.locY;
         double d2 = this.locZ;
@@ -976,6 +1089,38 @@ public abstract class EntityHuman extends EntityLiving {
         } else {
             this.E = true;
         }
+    }
+
+    private PlayerDamageType resolveDamageType(Entity directSource, Entity resolvedSource) {
+        if (resolvedSource instanceof EntityArrow || directSource instanceof EntityArrow) {
+            return PlayerDamageType.PROJECTILE;
+        }
+
+        if (resolvedSource instanceof EntityLiving) {
+            return PlayerDamageType.MELEE;
+        }
+
+        if (this.fallDistance > 0.0F && directSource == null) {
+            return PlayerDamageType.FALL;
+        }
+
+        if (this.locY < -64.0D) {
+            return PlayerDamageType.VOID;
+        }
+
+        if (this.ae()) {
+            return PlayerDamageType.LAVA;
+        }
+
+        if (this.fireTicks > 0) {
+            return PlayerDamageType.FIRE;
+        }
+
+        if (this.airTicks <= 0) {
+            return PlayerDamageType.DROWNING;
+        }
+
+        return PlayerDamageType.GENERIC;
     }
 
     /**

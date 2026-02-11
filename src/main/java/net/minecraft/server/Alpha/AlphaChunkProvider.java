@@ -86,6 +86,7 @@ public class AlphaChunkProvider implements IChunkProvider {
         byte ySize = 17;
         int zSize = noiseHRes + 1;
         this.noiseArray = this.initializeNoiseField(this.noiseArray, chunkX * noiseHRes, 0, chunkZ * noiseHRes, xSize, ySize, zSize);
+        boolean snowWorld = this.worldObj.worldData.isSnowWorld();
         for (int cellX = 0; cellX < noiseHRes; ++cellX) {
             for (int cellZ = 0; cellZ < noiseHRes; ++cellZ) {
                 for (int cellY = 0; cellY < 16; ++cellY) {
@@ -113,7 +114,7 @@ public class AlphaChunkProvider implements IChunkProvider {
                             for (int subZ = 0; subZ < 4; ++subZ) {
                                 int blockID = 0;
                                 if (cellY * 8 + subY < seaLevel) {
-                                    if (this.worldObj.worldData.isSnowWorld() && cellY * 8 + subY >= seaLevel - 1) {
+                                    if (snowWorld && cellY * 8 + subY >= seaLevel - 1) {
                                         blockID = Block.ICE.id;
                                     } else {
                                         blockID = Block.STATIONARY_WATER.id;
@@ -438,14 +439,15 @@ public class AlphaChunkProvider implements IChunkProvider {
         }
 
         // Snow generation (Matches client general logic, no specific rand calls changed here that affect other features)
-        if (this.worldObj.worldData.isSnowWorld()) {
+        boolean snowWorld = this.worldObj.worldData.isSnowWorld();
+        if (snowWorld) {
             for(int snowX = x; snowX < x + 16; ++snowX) { 
                 for(int snowZ = z; snowZ < z + 16; ++snowZ) { 
                     int topY = this.worldObj.getHighestBlockYAt(snowX, snowZ);
                     if (topY > 0 && topY < 127 && (this.worldObj.getTypeId(snowX, topY, snowZ) == 0) ) { 
                         int blockBelowId = this.worldObj.getTypeId(snowX, topY - 1, snowZ);
                         if (blockBelowId != 0 && Block.byId[blockBelowId] != null && blockBelowId != Block.ICE.id && blockBelowId != Block.SNOW.id && Block.byId[blockBelowId].material.isSolid()) {
-                            this.worldObj.setTypeId(snowX, topY, snowZ, Block.SNOW.id);
+                            this.worldObj.setRawTypeId(snowX, topY, snowZ, Block.SNOW.id);
                         }
                     }
                 }

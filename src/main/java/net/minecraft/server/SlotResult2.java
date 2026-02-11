@@ -1,5 +1,8 @@
 package net.minecraft.server;
 
+import net.minecraft.server.event.EventBus;
+import net.minecraft.server.event.events.CraftingCompleteEvent;
+
 public class SlotResult2 extends Slot {
 
     private EntityHuman d;
@@ -15,6 +18,7 @@ public class SlotResult2 extends Slot {
 
     public void a(ItemStack itemstack) {
         itemstack.b(this.d.world, this.d);
+        EventBus.global().publish(new CraftingCompleteEvent(this.d, this.d.world, itemstack, itemstack == null ? 0 : itemstack.count, "minecraft:smelting"));
         
         // Core progression - Acquire Hardware
         if (itemstack.id == Item.IRON_INGOT.id) {

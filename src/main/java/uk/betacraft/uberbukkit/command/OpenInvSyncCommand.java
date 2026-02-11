@@ -11,6 +11,7 @@ public class OpenInvSyncCommand extends Command {
         super(name);
         this.description = "Request full inventory sync for admin panel";
         this.usageMessage = "/" + name + " <playername>";
+        this.setPermission("uberbukkit.openinv");
     }
 
     @Override

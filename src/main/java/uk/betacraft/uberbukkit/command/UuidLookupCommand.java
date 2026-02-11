@@ -12,10 +12,12 @@ public class UuidLookupCommand extends Command {
     public UuidLookupCommand() {
         super("uuidlookup");
         this.usageMessage = "/uuidlookup <username>";
+        this.setPermission("uberbukkit.command.uuidlookup");
     }
 
     @Override
     public boolean execute(CommandSender sender, String commandLabel, String[] args) {
+        if (!testPermission(sender)) return true;
         if (args.length != 1) {
             sender.sendMessage(ChatColor.GRAY + "Usage: " + ChatColor.WHITE + "/uuidlookup " + ChatColor.AQUA + "<username>");
             return true;

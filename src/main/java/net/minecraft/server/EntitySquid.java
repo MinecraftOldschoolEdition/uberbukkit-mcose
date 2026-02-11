@@ -112,7 +112,18 @@ public class EntitySquid extends EntityWaterAnimal {
     }
 
     public boolean ad() {
-        return this.world.a(this.boundingBox.b(0.0D, -0.6000000238418579D, 0.0D), Material.WATER, this);
+        // Use the squid's actual body volume instead of a large downward-extended box.
+        // The old check could treat near-surface/edge cases as "in water" and cause airborne drift.
+        AxisAlignedBB waterCheckBox = this.boundingBox.shrink(0.001D, 0.10000000149011612D, 0.001D);
+        if (!this.world.a(waterCheckBox, Material.WATER, this)) {
+            return false;
+        }
+
+        int centerX = MathHelper.floor(this.locX);
+        int feetY = MathHelper.floor(this.boundingBox.b + 0.01D);
+        int centerZ = MathHelper.floor(this.locZ);
+        return this.world.getMaterial(centerX, feetY, centerZ) == Material.WATER ||
+                this.world.getMaterial(centerX, feetY - 1, centerZ) == Material.WATER;
     }
 
     public void v() {
@@ -162,6 +173,10 @@ public class EntitySquid extends EntityWaterAnimal {
             this.i = MathHelper.abs(MathHelper.sin(this.g)) * 3.1415927F * 0.25F;
             if (!this.Y) {
                 this.motX = 0.0D;
+                // Kill leftover upward carry when no longer in water to prevent "flying squid" hops.
+                if (this.motY > 0.0D) {
+                    this.motY *= 0.6D;
+                }
                 this.motY -= 0.08D;
                 this.motY *= 0.9800000190734863D;
                 this.motZ = 0.0D;

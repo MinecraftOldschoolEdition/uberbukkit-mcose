@@ -3,6 +3,7 @@ package org.bukkit.craftbukkit.entity;
 import com.legacyminecraft.poseidon.util.CrackedAllowlist;
 import com.projectposeidon.ConnectionType;
 import net.minecraft.server.*;
+import net.minecraft.server.registry.StatisticRegistryApi;
 
 import org.bukkit.Achievement;
 import org.bukkit.Material;
@@ -314,7 +315,39 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     }
 
     public void awardAchievement(Achievement achievement) {
+        if (achievement == null) {
+            return;
+        }
+
+        EntityPlayer handle = getHandle();
+        if (handle.achievementManager != null) {
+            net.minecraft.server.Achievement nmsAchievement = net.minecraft.server.AchievementManager.findAchievementByStatId(achievement.getId());
+            if (nmsAchievement != null) {
+                handle.achievementManager.unlock(nmsAchievement);
+                return;
+            }
+        }
+
         sendStatistic(achievement.getId(), 1);
+    }
+
+    public boolean awardAchievement(String namespacedKey) {
+        EntityPlayer handle = getHandle();
+        return handle.achievementManager != null && handle.achievementManager.unlock(namespacedKey);
+    }
+
+    public boolean hasAchievement(String namespacedKey) {
+        EntityPlayer handle = getHandle();
+        return handle.achievementManager != null && handle.achievementManager.hasAchievement(namespacedKey);
+    }
+
+    public Set<String> getUnlockedAchievements() {
+        EntityPlayer handle = getHandle();
+        if (handle.achievementManager == null) {
+            return new HashSet<String>();
+        }
+
+        return handle.achievementManager.getUnlockedAchievementKeys();
     }
 
     public void incrementStatistic(Statistic statistic) {
@@ -322,7 +355,15 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     }
 
     public void incrementStatistic(Statistic statistic, int amount) {
-        sendStatistic(statistic.getId(), amount);
+        if (statistic == null) {
+            throw new IllegalArgumentException("Given statistic is null");
+        }
+        if (statistic.isSubstatistic()) {
+            throw new IllegalArgumentException("Given statistic is a substatistic; use the material overload");
+        }
+
+        net.minecraft.server.Statistic nmsStatistic = resolveStatistic(statistic, null);
+        getHandle().a(nmsStatistic, amount);
     }
 
     public void incrementStatistic(Statistic statistic, Material material) {
@@ -333,17 +374,37 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
         if (!statistic.isSubstatistic()) {
             throw new IllegalArgumentException("Given statistic is not a substatistic");
         }
+        if (material == null) {
+            throw new IllegalArgumentException("Given material is null");
+        }
         if (statistic.isBlock() != material.isBlock()) {
             throw new IllegalArgumentException("Given material is not valid for this substatistic");
         }
 
-        int mat = material.getId();
+        net.minecraft.server.Statistic nmsStatistic = resolveStatistic(statistic, material);
+        getHandle().a(nmsStatistic, amount);
+    }
 
-        if (!material.isBlock()) {
-            mat -= 255;
+    private net.minecraft.server.Statistic resolveStatistic(Statistic statistic, Material material) {
+        if (statistic == null) {
+            throw new IllegalArgumentException("Given statistic is null");
         }
 
-        sendStatistic(statistic.getId() + mat, amount);
+        int statId = statistic.getId();
+        if (material != null) {
+            int mat = material.getId();
+            if (!material.isBlock()) {
+                mat -= 255;
+            }
+            statId += mat;
+        }
+
+        net.minecraft.server.Statistic resolved = StatisticRegistryApi.getByStatId(statId);
+        if (resolved == null) {
+            throw new IllegalArgumentException("Unknown statistic id: " + statId);
+        }
+
+        return resolved;
     }
 
     private void sendStatistic(int id, int amount) {
