@@ -20,6 +20,7 @@ public final class RegistryBootstrap {
         ItemRegistryBootstrap.initialize();
         ItemCapabilityRegistryBootstrap.initialize();
         BlockCapabilityRegistryBootstrap.initialize();
+        BlockMiningRegistryBootstrap.initialize();
         BlockRegistry.runSanityChecks();
         ItemRegistry.runSanityChecks();
         LegacyIdBridge.refresh();

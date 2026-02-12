@@ -20,6 +20,7 @@ import uk.betacraft.uberbukkit.packet.Packet63Digging;
 import net.minecraft.server.event.EventBus;
 import net.minecraft.server.event.events.BlockPlaceEvent;
 import net.minecraft.server.event.events.UseItemEvent;
+import net.minecraft.server.registry.BlockMiningRegistryApi;
 import net.minecraft.server.registry.PlayerCapabilityRegistryApi;
 
 public class ItemInWorldManager {
@@ -73,7 +74,7 @@ public class ItemInWorldManager {
         }
         // CraftBukkit end
 
-        if (i1 > 0 && Block.byId[i1].getDamage(this.player) >= 1.0F) {
+        if (i1 > 0 && BlockMiningRegistryApi.getBreakProgressPerTick(this.player, this.world, i, j, k) >= 1.0F) {
             this.c(i, j, k);
         }
     }
@@ -96,7 +97,7 @@ public class ItemInWorldManager {
 
                 Block block = Block.byId[i1];
 
-                this.damageDealt += block.getDamage(this.player);
+                this.damageDealt += BlockMiningRegistryApi.getBreakProgressPerTick(this.player, this.world, i, j, k);
 
                 // uberbukkit - play breaking sound and send progress each tick
                 if (block != null) {
@@ -137,7 +138,7 @@ public class ItemInWorldManager {
 
             if (j != 0) {
                 Block block = Block.byId[j];
-                float f = block.getDamage(this.player) * (float) (i + 1);
+                float f = BlockMiningRegistryApi.getBreakProgressPerTick(this.player, this.world, this.j, this.k, this.l) * (float) (i + 1);
                 // Track absolute progress for accurate remote animation
                 this.damageDealt = (f > 1.0F) ? 1.0F : (f < 0.0F ? 0.0F : f);
 
@@ -190,7 +191,7 @@ public class ItemInWorldManager {
         }
 
         // Handle hitting a block
-        toolDamage = Block.byId[i1].getDamage(this.player);
+        toolDamage = BlockMiningRegistryApi.getBreakProgressPerTick(this.player, this.world, i, j, k);
         if (event.useItemInHand() == Event.Result.DENY) {
             // If we 'insta destroyed' then the client needs to be informed.
             if (toolDamage > 1.0f) {
@@ -237,7 +238,7 @@ public class ItemInWorldManager {
 
             if (i1 != 0) {
                 Block block = Block.byId[i1];
-                float f = block.getDamage(this.player) * (float) (l + 1);
+                float f = BlockMiningRegistryApi.getBreakProgressPerTick(this.player, this.world, i, j, k) * (float) (l + 1);
 
                 if (f >= 0.7F) {
                     this.c(i, j, k);
@@ -314,10 +315,11 @@ public class ItemInWorldManager {
         // CraftBukkit end
 
         this.world.a(this.player, 2001, i, j, k, l + this.world.getData(i, j, k) * 256);
+        boolean canHarvestForDrops = BlockMiningRegistryApi.canHarvestForDrops(this.player, this.world, i, j, k);
         boolean flag = this.b(i, j, k);
         ItemStack itemstack = this.player.G();
 
-        if (flag && this.player.b(Block.byId[l]) && !this.isCreative()) {
+        if (flag && canHarvestForDrops && !this.isCreative()) {
             Block.byId[l].a(this.world, this.player, i, j, k, i1);
             ((EntityPlayer) this.player).netServerHandler.sendPacket(new Packet53BlockChange(i, j, k, this.world));
         }

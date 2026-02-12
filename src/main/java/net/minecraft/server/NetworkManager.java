@@ -18,6 +18,7 @@ import com.legacyminecraft.poseidon.PoseidonConfig;
 import com.legacyminecraft.poseidon.event.PlayerReceivePacketEvent;
 
 import uk.betacraft.uberbukkit.Uberbukkit;
+import uk.betacraft.uberbukkit.packet.Packet62Sound;
 import uk.betacraft.uberbukkit.protocol.Protocol;
 
 public class NetworkManager {
@@ -149,7 +150,14 @@ public class NetworkManager {
             Object object = this.g;
 
             // uberbukkit
-            if (this.protocol != null && !this.protocol.canReceivePacket(packet.b())) return;
+            if (this.protocol != null && !this.protocol.canReceivePacket(packet.b())) {
+                boolean allowMcoseSound = packet instanceof Packet62Sound
+                        && this.p instanceof NetServerHandler
+                        && ((NetServerHandler) this.p).isMcoseClient();
+                if (!allowMcoseSound) {
+                    return;
+                }
+            }
 
             // uberbukkit
             if (this.pvn != 0) packet.pvn = this.pvn;

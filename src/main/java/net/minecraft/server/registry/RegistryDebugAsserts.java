@@ -23,6 +23,7 @@ public final class RegistryDebugAsserts {
         checkRegistryPresent("minecraft:particle_type", Registries.PARTICLE_TYPE.keys());
         checkRegistryPresent("minecraft:item_capability", ItemCapabilityRegistryApi.keys());
         checkRegistryPresent("minecraft:block_capability", BlockCapabilityRegistryApi.keys());
+        checkRegistryPresent("minecraft:block_mining", BlockMiningRegistryApi.keys());
 
         if (!BlockRegistry.runSanityChecks()) {
             throw new IllegalStateException("[RegistryDebugAsserts] Block sanity checks failed");
@@ -34,6 +35,7 @@ public final class RegistryDebugAsserts {
         checkVanillaBlockCoverage();
         checkVanillaItemCoverage();
         checkBlockCapabilityCoverage();
+        checkBlockMiningCoverage();
         checkRenderRegistryCoverage();
 
         LegacyIdBridge.refresh();
@@ -90,6 +92,24 @@ public final class RegistryDebugAsserts {
 
         if (BlockCapabilityRegistryApi.size() < required) {
             throw new IllegalStateException("[RegistryDebugAsserts] Block capability coverage mismatch: expected >= " + required + ", found " + BlockCapabilityRegistryApi.size());
+        }
+    }
+
+    private static void checkBlockMiningCoverage() {
+        int required = 0;
+        for (int i = 0; i < Block.byId.length; i++) {
+            Block block = Block.byId[i];
+            if (block == null) {
+                continue;
+            }
+            required++;
+            if (!BlockMiningRegistryApi.hasExplicitRule(block)) {
+                throw new IllegalStateException("[RegistryDebugAsserts] Missing block mining rule for legacy id " + i);
+            }
+        }
+
+        if (BlockMiningRegistryApi.size() < required) {
+            throw new IllegalStateException("[RegistryDebugAsserts] Block mining coverage mismatch: expected >= " + required + ", found " + BlockMiningRegistryApi.size());
         }
     }
 

@@ -21,11 +21,14 @@ import net.minecraft.server.event.events.PlayerJumpEvent;
 import net.minecraft.server.event.events.PlayerMoveEvent;
 import net.minecraft.server.event.events.UseItemEvent;
 import net.minecraft.server.registry.BlockCapabilityRegistryApi;
+import net.minecraft.server.registry.BlockMiningRegistryApi;
+import net.minecraft.server.registry.BlockMiningRule;
 import net.minecraft.server.registry.BlockRegistryApi;
 import net.minecraft.server.registry.EntityTypeRegistryApi;
 import net.minecraft.server.registry.ItemCapabilityRegistryApi;
 import net.minecraft.server.registry.ItemRegistry;
 import net.minecraft.server.registry.LightLevelApi;
+import net.minecraft.server.registry.MiningToolType;
 import net.minecraft.server.registry.ParticleType;
 import net.minecraft.server.registry.ParticleTypeRegistryApi;
 import net.minecraft.server.registry.PlayerCapabilityRegistryApi;
@@ -117,6 +120,27 @@ public final class ModContext {
             return;
         }
         BlockCapabilityRegistryApi.registerLightEmission(blockKey, lightEmission);
+    }
+
+    public void registerBlockMiningRule(String blockKey, MiningToolType tool, boolean enforceTool, float speedMultiplier) {
+        if (blockKey == null) {
+            return;
+        }
+        BlockMiningRegistryApi.register(blockKey, new BlockMiningRule(tool, enforceTool, speedMultiplier));
+    }
+
+    public void registerBlockMiningRule(String blockKey, int metadata, MiningToolType tool, boolean enforceTool, float speedMultiplier) {
+        if (blockKey == null) {
+            return;
+        }
+        BlockMiningRegistryApi.registerMetadataRule(blockKey, metadata, new BlockMiningRule(tool, enforceTool, speedMultiplier));
+    }
+
+    public BlockMiningRule getBlockMiningRule(String blockIdentifier) {
+        if (blockIdentifier == null) {
+            return BlockMiningRule.VANILLA;
+        }
+        return BlockMiningRegistryApi.get(blockIdentifier);
     }
 
     public void registerSoundEvent(String key, String legacySoundKey) {

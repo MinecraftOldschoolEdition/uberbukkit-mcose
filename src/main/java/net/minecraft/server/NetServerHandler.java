@@ -39,6 +39,7 @@ import uk.betacraft.uberbukkit.packet.Packet62Sound;
 import uk.betacraft.uberbukkit.packet.Packet63Digging;
 import uk.betacraft.uberbukkit.protocol.Protocol;
 import net.minecraft.server.network.ModProtocol;
+import net.minecraft.server.registry.BlockMiningRegistryApi;
 import net.minecraft.server.registry.RegistrySyncSnapshot;
 import net.minecraft.server.registry.PlayerCapabilityRegistryApi;
 
@@ -215,16 +216,16 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             this.minecraftServer.serverConfigurationManager.sendPacketNearbyToScale(this.player, (double) lastDigX + 0.5D, (double) lastDigY + 0.5D, (double) lastDigZ + 0.5D, vol1, ((WorldServer) this.player.world).dimension, new Packet62Sound(block.stepSound.getName(), (double) lastDigX + 0.5D, (double) lastDigY + 0.5D, (double) lastDigZ + 0.5D, vol1, block.stepSound.getVolume2() * 0.5F));
 
             if (lastDigFace != null) {
-                // Compute progress based on exact elapsed time since dig start and toolDamage (blocks per tick)
+                // Compute progress from elapsed dig ticks and state-aware mining speed.
                 long start = this.player.itemInWorldManager.getLastDigStart();
                 long now = System.currentTimeMillis();
                 double elapsedTicks = Math.max(0D, (now - start) / 50.0D);
-                float perTick = block.getDamage(this.player);
+                float perTick = BlockMiningRegistryApi.getBreakProgressPerTick(this.player, this.player.world, lastDigX, lastDigY, lastDigZ);
                 float progress = (float) (elapsedTicks * perTick);
                 if (progress > 1.0F) progress = 1.0F;
                 if (progress < 0.0F) progress = 0.0F;
 
-                this.minecraftServer.serverConfigurationManager.sendPacketNearby(player, lastDigX, lastDigY, lastDigZ, 64D, player.dimension, new Packet63Digging(lastDigX, lastDigY, lastDigZ, lastDigFace, progress));
+                this.minecraftServer.serverConfigurationManager.sendPacketNearby(player, lastDigX, lastDigY, lastDigZ, 64D, player.dimension, new Packet63Digging(lastDigX, lastDigY, lastDigZ, lastDigFace, (float) elapsedTicks));
 
                 if (progress >= 1.0F) {
                     // Clear overlay immediately at completion
@@ -821,7 +822,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
                 int blockId = block.getTypeId();
                 float damage = 0;
                 if (Block.byId[blockId] != null) {
-                    damage = Block.byId[blockId].getDamage(player.getHandle()); //Get amount of damage going to block
+                    damage = BlockMiningRegistryApi.getBreakProgressPerTick(player.getHandle(), worldserver, i, j, k); //Get amount of damage going to block
                 }
                 // CraftBukkit end
 
@@ -1146,9 +1147,19 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         packet = packetSentEvent.getPacket();
 
         Protocol protocol = this.player.protocol;
-        if (!protocol.canReceivePacket(packet.b())) {
-            this.g = this.f;
-            return;
+        boolean supportsPacket = protocol.canReceivePacket(packet.b());
+        if (!supportsPacket && packet instanceof Packet62Sound && this.isMcoseClient()) {
+            // MCOSE clients can decode Packet62Sound even when logged in as protocol 14.
+            supportsPacket = true;
+        }
+
+        if (!supportsPacket) {
+            Packet fallbackPacket = this.createLegacySoundFallback(packet);
+            if (fallbackPacket == null || !protocol.canReceivePacket(fallbackPacket.b())) {
+                this.g = this.f;
+                return;
+            }
+            packet = fallbackPacket;
         }
 
         // uberbukkit - try to disallow for incompatible blocks and packets
@@ -1224,6 +1235,29 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         // CraftBukkit end
 
         this.g = this.f;
+    }
+
+    private Packet createLegacySoundFallback(Packet packet) {
+        if (!(packet instanceof Packet62Sound)) {
+            return null;
+        }
+
+        Packet62Sound soundPacket = (Packet62Sound) packet;
+        String sound = soundPacket.sound;
+        if (sound == null) {
+            return null;
+        }
+
+        // Protocol 14 clients do not accept Packet62Sound. Map lever/button clicks to legacy aux effects.
+        if ("random.click".equals(sound) || "ui.button.click".equals(sound)) {
+            int effectId = soundPacket.pitch >= 0.55F ? 1001 : 1000;
+            int x = MathHelper.floor(soundPacket.locX);
+            int y = MathHelper.floor(soundPacket.locY);
+            int z = MathHelper.floor(soundPacket.locZ);
+            return new Packet61(effectId, x, y, z, 0);
+        }
+
+        return null;
     }
 
     public void a(Packet16BlockItemSwitch packet16blockitemswitch) {
