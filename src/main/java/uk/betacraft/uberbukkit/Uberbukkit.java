@@ -8,9 +8,21 @@ import java.util.LinkedList;
 import java.util.List;
 
 public class Uberbukkit {
-    private static final String version = BuildParameters.VERSION;
+    private static final String version = resolveVersion();
     private static Integer pvn = null;
     private static List<Integer> pvns = null;
+
+    private static String resolveVersion() {
+        Package uberbukkitPackage = Uberbukkit.class.getPackage();
+        if (uberbukkitPackage != null) {
+            String implementationVersion = uberbukkitPackage.getImplementationVersion();
+            if (implementationVersion != null && !implementationVersion.isEmpty()) {
+                return implementationVersion;
+            }
+        }
+
+        return "DEV";
+    }
 
     public static int getTargetPVN() {
         if (pvn != null) return pvn;

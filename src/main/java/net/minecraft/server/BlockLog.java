@@ -2,6 +2,8 @@ package net.minecraft.server;
 
 import java.util.Random;
 
+import net.minecraft.server.registry.BlockCapabilityRegistryApi;
+
 public class BlockLog extends Block {
 
     protected BlockLog(int i) {
@@ -31,11 +33,16 @@ public class BlockLog extends Block {
                     for (int k1 = -b0; k1 <= b0; ++k1) {
                         int l1 = world.getTypeId(i + i1, j + j1, k + k1);
 
-                        if (l1 == Block.LEAVES.id) {
+                        Block leafBlock = l1 > 0 && l1 < Block.byId.length ? Block.byId[l1] : null;
+                        if (BlockCapabilityRegistryApi.isDecayEnabled(leafBlock)) {
+                            int leafX = i + i1;
+                            int leafY = j + j1;
+                            int leafZ = k + k1;
                             int i2 = world.getData(i + i1, j + j1, k + k1);
 
                             if ((i2 & 8) == 0) {
-                                world.setRawData(i + i1, j + j1, k + k1, i2 | 8);
+                                Chunk leafChunk = world.getChunkAtWorldCoords(leafX, leafZ);
+                                leafChunk.b(leafX & 15, leafY, leafZ & 15, i2 | 8);
                             }
                         }
                     }

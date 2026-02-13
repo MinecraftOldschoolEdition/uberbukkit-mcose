@@ -13,7 +13,7 @@ import java.util.Set;
 
 /**
  * API-facing registry for block interaction capabilities.
- * Exposes redstone semantics and block light-emission properties.
+ * Exposes redstone semantics, light emission, and decay behavior properties.
  */
 public final class BlockCapabilityRegistryApi {
     private static final Map<ResourceLocation, BlockCapability> byKey = new LinkedHashMap<ResourceLocation, BlockCapability>();
@@ -93,7 +93,8 @@ public final class BlockCapabilityRegistryApi {
         BlockCapability.LightEmissionResolver lightResolver = existing == null ? null : existing.getLightEmissionResolver();
         BlockCapability.DirectRedstonePowerResolver directResolver = existing == null ? null : existing.getDirectResolver();
         BlockCapability.IndirectRedstonePowerResolver indirectResolver = existing == null ? null : existing.getIndirectResolver();
-        return register(block, new BlockCapability(powerSource, maxPower, directResolver, indirectResolver, light, lightResolver));
+        boolean decayEnabled = existing != null && existing.isDecayEnabled();
+        return register(block, new BlockCapability(powerSource, maxPower, directResolver, indirectResolver, light, lightResolver, decayEnabled));
     }
 
     public static boolean registerLightEmission(ResourceLocation blockKey, int lightEmission) {
@@ -124,7 +125,41 @@ public final class BlockCapabilityRegistryApi {
         BlockCapability.DirectRedstonePowerResolver directResolver = existing == null ? null : existing.getDirectResolver();
         BlockCapability.IndirectRedstonePowerResolver indirectResolver = existing == null ? null : existing.getIndirectResolver();
         BlockCapability.LightEmissionResolver lightResolver = existing == null ? null : existing.getLightEmissionResolver();
-        return register(block, new BlockCapability(powerSource, maxPower, directResolver, indirectResolver, lightEmission, lightResolver));
+        boolean decayEnabled = existing != null && existing.isDecayEnabled();
+        return register(block, new BlockCapability(powerSource, maxPower, directResolver, indirectResolver, lightEmission, lightResolver, decayEnabled));
+    }
+
+    public static boolean registerDecayBehavior(ResourceLocation blockKey, boolean decayEnabled) {
+        if (blockKey == null) {
+            return false;
+        }
+        return registerDecayBehavior(BlockRegistry.get(blockKey), decayEnabled);
+    }
+
+    public static boolean registerDecayBehavior(String blockIdentifier, boolean decayEnabled) {
+        if (blockIdentifier == null) {
+            return false;
+        }
+        String normalized = BlockRegistry.normalizeInputIdentifier(blockIdentifier);
+        if (normalized == null) {
+            return false;
+        }
+        return registerDecayBehavior(new ResourceLocation(normalized), decayEnabled);
+    }
+
+    public static boolean registerDecayBehavior(Block block, boolean decayEnabled) {
+        if (block == null) {
+            return false;
+        }
+
+        BlockCapability existing = get(block);
+        boolean powerSource = existing != null ? existing.isRedstonePowerSource() : block.isPowerSource();
+        int maxPower = existing != null ? existing.getMaxRedstonePower() : (block == Block.REDSTONE_WIRE ? 15 : (powerSource ? 15 : 0));
+        int light = existing != null && existing.hasExplicitLightEmission() ? existing.getLightEmission() : BlockCapability.UNSET_LIGHT_EMISSION;
+        BlockCapability.DirectRedstonePowerResolver directResolver = existing == null ? null : existing.getDirectResolver();
+        BlockCapability.IndirectRedstonePowerResolver indirectResolver = existing == null ? null : existing.getIndirectResolver();
+        BlockCapability.LightEmissionResolver lightResolver = existing == null ? null : existing.getLightEmissionResolver();
+        return register(block, new BlockCapability(powerSource, maxPower, directResolver, indirectResolver, light, lightResolver, decayEnabled));
     }
 
     public static synchronized BlockCapability get(ResourceLocation blockKey) {
@@ -342,6 +377,19 @@ public final class BlockCapabilityRegistryApi {
         return BlockCapability.clampLight(Block.s[block.id]);
     }
 
+    public static boolean isDecayEnabled(Block block) {
+        if (block == null) {
+            return false;
+        }
+
+        BlockCapability capability = get(block);
+        if (capability != null) {
+            return capability.isDecayEnabled();
+        }
+
+        return block == Block.LEAVES;
+    }
+
     static synchronized int bootstrapDefaults() {
         int registered = 0;
         for (int i = 0; i < Block.byId.length; i++) {
@@ -357,7 +405,8 @@ public final class BlockCapabilityRegistryApi {
             }
             int maxPower = block == Block.REDSTONE_WIRE ? 15 : (source ? 15 : 0);
             int light = BlockCapability.clampLight(Block.s[i]);
-            if (register(block, new BlockCapability(source, maxPower, null, null, light, null))) {
+            boolean decayEnabled = block == Block.LEAVES;
+            if (register(block, new BlockCapability(source, maxPower, null, null, light, null, decayEnabled))) {
                 registered++;
             }
         }

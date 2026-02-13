@@ -2997,46 +2997,154 @@ public class World implements IBlockAccess {
         return (new Pathfinder(chunkcache)).a(entity, i, j, k, f);
     }
 
-    public boolean isBlockFacePowered(int i, int j, int k, int l) {
+    private int getBlockFacePowerLevelTo(int i, int j, int k, int l) {
         int blockId = this.getTypeId(i, j, k);
         Block block = blockId > 0 && blockId < Block.byId.length ? Block.byId[blockId] : null;
 
-        // Preserve vanilla wire semantics while wire is recalculating.
-        if (block == Block.REDSTONE_WIRE) {
-            return block.d(this, i, j, k, l);
+        if (block == null) {
+            return 0;
         }
 
-        return BlockCapabilityRegistryApi.getDirectRedstonePower(this, i, j, k, l) > 0;
+        // Preserve vanilla wire semantics while wire is recalculating.
+        if (block == Block.REDSTONE_WIRE) {
+            return block.d(this, i, j, k, l) ? this.getData(i, j, k) : 0;
+        }
+
+        return BlockCapabilityRegistryApi.getDirectRedstonePower(this, i, j, k, l);
     }
 
-    public boolean isBlockPowered(int i, int j, int k) {
-        return this.isBlockFacePowered(i, j - 1, k, 0) ? true : (this.isBlockFacePowered(i, j + 1, k, 1) ? true : (this.isBlockFacePowered(i, j, k - 1, 2) ? true : (this.isBlockFacePowered(i, j, k + 1, 3) ? true : (this.isBlockFacePowered(i - 1, j, k, 4) ? true : this.isBlockFacePowered(i + 1, j, k, 5)))));
+    private int getMaxDirectPowerAt(int i, int j, int k) {
+        int power = this.getBlockFacePowerLevelTo(i, j - 1, k, 0);
+        if (power >= 15) {
+            return 15;
+        }
+
+        int check = this.getBlockFacePowerLevelTo(i, j + 1, k, 1);
+        if (check > power) {
+            power = check;
+        }
+        if (power >= 15) {
+            return 15;
+        }
+
+        check = this.getBlockFacePowerLevelTo(i, j, k - 1, 2);
+        if (check > power) {
+            power = check;
+        }
+        if (power >= 15) {
+            return 15;
+        }
+
+        check = this.getBlockFacePowerLevelTo(i, j, k + 1, 3);
+        if (check > power) {
+            power = check;
+        }
+        if (power >= 15) {
+            return 15;
+        }
+
+        check = this.getBlockFacePowerLevelTo(i - 1, j, k, 4);
+        if (check > power) {
+            power = check;
+        }
+        if (power >= 15) {
+            return 15;
+        }
+
+        check = this.getBlockFacePowerLevelTo(i + 1, j, k, 5);
+        if (check > power) {
+            power = check;
+        }
+
+        return power;
     }
 
-    public boolean isBlockFaceIndirectlyPowered(int i, int j, int k, int l) {
+    private int getBlockFaceIndirectPowerLevel(int i, int j, int k, int l) {
         int blockId = this.getTypeId(i, j, k);
         Block block = blockId > 0 && blockId < Block.byId.length ? Block.byId[blockId] : null;
 
+        if (block == null) {
+            return 0;
+        }
+
         // Preserve vanilla wire semantics while wire is recalculating.
         if (block == Block.REDSTONE_WIRE) {
-            return block.a(this, i, j, k, l);
+            return block.a(this, i, j, k, l) ? this.getData(i, j, k) : 0;
         }
 
         // Capability-driven full-cube sources (e.g. redstone block) must emit even when opaque.
         // Keep non-opaque sources (levers/buttons/torches) on the indirect-power path.
         if (BlockCapabilityRegistryApi.isRedstonePowerSource(block) && this.e(i, j, k)) {
-            return BlockCapabilityRegistryApi.getDirectRedstonePower(this, i, j, k, l) > 0;
+            return BlockCapabilityRegistryApi.getDirectRedstonePower(this, i, j, k, l);
         }
 
         if (this.e(i, j, k)) {
-            return this.isBlockPowered(i, j, k);
+            return this.getMaxDirectPowerAt(i, j, k);
         }
 
-        return BlockCapabilityRegistryApi.getIndirectRedstonePower(this, i, j, k, l) > 0;
+        return BlockCapabilityRegistryApi.getIndirectRedstonePower(this, i, j, k, l);
+    }
+
+    public int getMaxIndirectPowerAt(int i, int j, int k) {
+        int power = this.getBlockFaceIndirectPowerLevel(i, j - 1, k, 0);
+        if (power >= 15) {
+            return 15;
+        }
+
+        int check = this.getBlockFaceIndirectPowerLevel(i, j + 1, k, 1);
+        if (check > power) {
+            power = check;
+        }
+        if (power >= 15) {
+            return 15;
+        }
+
+        check = this.getBlockFaceIndirectPowerLevel(i, j, k - 1, 2);
+        if (check > power) {
+            power = check;
+        }
+        if (power >= 15) {
+            return 15;
+        }
+
+        check = this.getBlockFaceIndirectPowerLevel(i, j, k + 1, 3);
+        if (check > power) {
+            power = check;
+        }
+        if (power >= 15) {
+            return 15;
+        }
+
+        check = this.getBlockFaceIndirectPowerLevel(i - 1, j, k, 4);
+        if (check > power) {
+            power = check;
+        }
+        if (power >= 15) {
+            return 15;
+        }
+
+        check = this.getBlockFaceIndirectPowerLevel(i + 1, j, k, 5);
+        if (check > power) {
+            power = check;
+        }
+
+        return power;
+    }
+
+    public boolean isBlockFacePowered(int i, int j, int k, int l) {
+        return this.getBlockFacePowerLevelTo(i, j, k, l) > 0;
+    }
+
+    public boolean isBlockPowered(int i, int j, int k) {
+        return this.getMaxDirectPowerAt(i, j, k) > 0;
+    }
+
+    public boolean isBlockFaceIndirectlyPowered(int i, int j, int k, int l) {
+        return this.getBlockFaceIndirectPowerLevel(i, j, k, l) > 0;
     }
 
     public boolean isBlockIndirectlyPowered(int i, int j, int k) {
-        return this.isBlockFaceIndirectlyPowered(i, j - 1, k, 0) ? true : (this.isBlockFaceIndirectlyPowered(i, j + 1, k, 1) ? true : (this.isBlockFaceIndirectlyPowered(i, j, k - 1, 2) ? true : (this.isBlockFaceIndirectlyPowered(i, j, k + 1, 3) ? true : (this.isBlockFaceIndirectlyPowered(i - 1, j, k, 4) ? true : this.isBlockFaceIndirectlyPowered(i + 1, j, k, 5)))));
+        return this.getMaxIndirectPowerAt(i, j, k) > 0;
     }
 
     public EntityHuman findNearbyPlayer(Entity entity, double d0) {
@@ -3130,6 +3238,37 @@ public class World implements IBlockAccess {
 
     public void setTime(long i) {
         this.worldData.a(i);
+        this.notifyWallClockTimeChange();
+    }
+
+    private void notifyWallClockTimeChange() {
+        if (this.isStatic || Block.WALL_CLOCK == null || !(this.chunkProvider instanceof ChunkProviderServer)) {
+            return;
+        }
+
+        ChunkProviderServer chunkproviderserver = (ChunkProviderServer) this.chunkProvider;
+        for (int chunkIndex = 0; chunkIndex < chunkproviderserver.chunkList.size(); ++chunkIndex) {
+            Chunk chunk = (Chunk) chunkproviderserver.chunkList.get(chunkIndex);
+            if (chunk == null || chunk == chunkproviderserver.emptyChunk) {
+                continue;
+            }
+
+            int chunkBaseX = chunk.x << 4;
+            int chunkBaseZ = chunk.z << 4;
+            for (int localX = 0; localX < 16; ++localX) {
+                for (int localZ = 0; localZ < 16; ++localZ) {
+                    for (int y = 0; y < 128; ++y) {
+                        if (chunk.getTypeId(localX, y, localZ) != Block.WALL_CLOCK.id) {
+                            continue;
+                        }
+
+                        int worldX = chunkBaseX + localX;
+                        int worldZ = chunkBaseZ + localZ;
+                        this.applyPhysics(worldX, y, worldZ, Block.WALL_CLOCK.id);
+                    }
+                }
+            }
+        }
     }
 
     public void setTimeAndFixTicklists(long i) {

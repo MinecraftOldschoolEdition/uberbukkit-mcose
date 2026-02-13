@@ -52,6 +52,7 @@ public class Block {
     public static final Block LAPIS_BLOCK = (new Block(22, 144, Material.STONE)).c(3.0F).b(5.0F).a(h).a("blockLapis");
     public static final Block REDSTONE_BLOCK = (new BlockRedstoneBlock(152, 206)).c(5.0F).b(10.0F).a(i).a("redstoneBlock").g();
     public static final Block COAL_BLOCK = (new BlockOreBlock(173, 207)).c(5.0F).b(10.0F).a(i).a("coalBlock").g();
+    public static final Block WALL_CLOCK = (new BlockWallClock(101, 250)).c(0.2F).a(e).a("clockSensor");
     public static final Block DISPENSER = (new BlockDispenser(23)).c(3.5F).a(h).a("dispenser").g();
     public static final Block SANDSTONE = (new BlockSandStone(24)).a(h).c(0.8F).a("sandStone");
     public static final Block NOTE_BLOCK = (new BlockNote(25)).c(0.8F).a("musicBlock").g();

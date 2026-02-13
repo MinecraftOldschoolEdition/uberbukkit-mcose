@@ -44,7 +44,6 @@ import org.bukkit.util.permissions.DefaultPermissions;
 import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.constructor.SafeConstructor;
 import org.yaml.snakeyaml.error.MarkedYAMLException;
-import uk.betacraft.uberbukkit.BuildParameters;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -55,10 +54,10 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public final class CraftServer implements Server {
-    private final String serverName = BuildParameters.SERVER_SOFTWARE_NAME;
+    private final String serverName = resolveServerName();
     //Poseidon Versions
     private final String serverEnvironment = "POSEIDON";
-    private final String serverVersion = BuildParameters.VERSION;
+    private final String serverVersion = resolveServerVersion();
     private final String releaseType = "DEVELOPMENT";
     private final String protocolVersion = "1.7.3";
     private final String GameVersion = "b1.7.3";
@@ -92,6 +91,30 @@ public final class CraftServer implements Server {
         enablePlugins(PluginLoadOrder.STARTUP);
 
         ChunkCompressionThread.startThread();
+    }
+
+    private static String resolveServerName() {
+        Package craftServerPackage = CraftServer.class.getPackage();
+        if (craftServerPackage != null) {
+            String implementationTitle = craftServerPackage.getImplementationTitle();
+            if (implementationTitle != null && !implementationTitle.isEmpty()) {
+                return implementationTitle;
+            }
+        }
+
+        return "Project Poseidon UberBukkit";
+    }
+
+    private static String resolveServerVersion() {
+        Package craftServerPackage = CraftServer.class.getPackage();
+        if (craftServerPackage != null) {
+            String implementationVersion = craftServerPackage.getImplementationVersion();
+            if (implementationVersion != null && !implementationVersion.isEmpty()) {
+                return implementationVersion;
+            }
+        }
+
+        return "DEV";
     }
 
     private void loadConfig() {

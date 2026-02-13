@@ -28,13 +28,14 @@ public final class BlockCapability {
     private final IndirectRedstonePowerResolver indirectResolver;
     private final int lightEmission;
     private final LightEmissionResolver lightEmissionResolver;
+    private final boolean decayEnabled;
 
     public BlockCapability(boolean redstonePowerSource, int maxRedstonePower) {
-        this(redstonePowerSource, maxRedstonePower, null, null, UNSET_LIGHT_EMISSION, null);
+        this(redstonePowerSource, maxRedstonePower, null, null, UNSET_LIGHT_EMISSION, null, false);
     }
 
     public BlockCapability(boolean redstonePowerSource, int maxRedstonePower, int lightEmission) {
-        this(redstonePowerSource, maxRedstonePower, null, null, lightEmission, null);
+        this(redstonePowerSource, maxRedstonePower, null, null, lightEmission, null, false);
     }
 
     public BlockCapability(
@@ -43,7 +44,7 @@ public final class BlockCapability {
             DirectRedstonePowerResolver directResolver,
             IndirectRedstonePowerResolver indirectResolver
     ) {
-        this(redstonePowerSource, maxRedstonePower, directResolver, indirectResolver, UNSET_LIGHT_EMISSION, null);
+        this(redstonePowerSource, maxRedstonePower, directResolver, indirectResolver, UNSET_LIGHT_EMISSION, null, false);
     }
 
     public BlockCapability(
@@ -54,12 +55,25 @@ public final class BlockCapability {
             int lightEmission,
             LightEmissionResolver lightEmissionResolver
     ) {
+        this(redstonePowerSource, maxRedstonePower, directResolver, indirectResolver, lightEmission, lightEmissionResolver, false);
+    }
+
+    public BlockCapability(
+            boolean redstonePowerSource,
+            int maxRedstonePower,
+            DirectRedstonePowerResolver directResolver,
+            IndirectRedstonePowerResolver indirectResolver,
+            int lightEmission,
+            LightEmissionResolver lightEmissionResolver,
+            boolean decayEnabled
+    ) {
         this.redstonePowerSource = redstonePowerSource;
         this.maxRedstonePower = clampPower(maxRedstonePower);
         this.directResolver = directResolver;
         this.indirectResolver = indirectResolver;
         this.lightEmission = lightEmission == UNSET_LIGHT_EMISSION ? UNSET_LIGHT_EMISSION : clampLight(lightEmission);
         this.lightEmissionResolver = lightEmissionResolver;
+        this.decayEnabled = decayEnabled;
     }
 
     public boolean isRedstonePowerSource() {
@@ -88,6 +102,10 @@ public final class BlockCapability {
 
     public LightEmissionResolver getLightEmissionResolver() {
         return lightEmissionResolver;
+    }
+
+    public boolean isDecayEnabled() {
+        return decayEnabled;
     }
 
     static int clampPower(int power) {

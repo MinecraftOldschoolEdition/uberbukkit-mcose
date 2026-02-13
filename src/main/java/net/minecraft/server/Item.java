@@ -97,7 +97,7 @@ public class Item {
     public static Item EGG = (new ItemEgg(88)).a(12, 0).a("egg");
     public static Item COMPASS = (new Item(89)).a(6, 3).a("compass");
     public static Item FISHING_ROD = (new ItemFishingRod(90)).a(5, 4).a("fishingRod");
-    public static Item WATCH = (new Item(91)).a(6, 4).a("clock");
+    public static Item WATCH = (new ItemWallClock(91, (BlockWallClock) Block.WALL_CLOCK)).a(6, 4).a("clock");
     public static Item GLOWSTONE_DUST = (new Item(92)).a(9, 4).a("yellowDust");
     public static Item RAW_FISH = (new ItemFood(93, 2, false)).a(9, 5).a("fishRaw");
     public static Item COOKED_FISH = (new ItemFood(94, 5, false)).a(10, 5).a("fishCooked");
