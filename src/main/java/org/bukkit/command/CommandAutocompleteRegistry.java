@@ -10,6 +10,7 @@ import net.minecraft.server.registry.StructureTypes;
 import net.minecraft.server.util.ResourceLocation;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
+import org.bukkit.plugin.Plugin;
 import org.bukkit.command.defaults.VanillaCommand;
 
 import java.io.ByteArrayOutputStream;
@@ -35,23 +36,26 @@ public final class CommandAutocompleteRegistry {
     public static final String CHANNEL_REQUEST = "MCOSE|CmdReq";
     public static final String CHANNEL_RESPONSE = "MCOSE|CmdRes";
 
-    private static final String ARG_PLAYER = "player";
-    private static final String ARG_GAMEMODE = "gamemode";
-    private static final String ARG_ITEM_KEY = "item_key";
-    private static final String ARG_BLOCK_KEY = "block_key";
-    private static final String ARG_ENTITY_KEY = "entity_key";
-    private static final String ARG_STRUCTURE_KEY = "structure_key";
-    private static final String ARG_WEATHER_TYPE = "weather_type";
-    private static final String ARG_TIME_ACTION = "time_action";
-    private static final String ARG_TIME_VALUE = "time_value";
-    private static final String ARG_GAMERULE_NAME = "gamerule_name";
-    private static final String ARG_GAMERULE_VALUE = "gamerule_value";
-    private static final String ARG_PROFILE_ACTION = "profile_action";
-    private static final String ARG_DEBUG_ACTION = "debug_action";
-    private static final String ARG_TICK_RATE = "tick_rate";
-    private static final String ARG_INTEGER = "integer";
-    private static final String ARG_COORD = "coordinate";
-    private static final String ARG_TEXT = "text";
+    /** Built-in argument IDs available for command syntax definitions. */
+    public static final String ARG_PLAYER = "player";
+    public static final String ARG_GAMEMODE = "gamemode";
+    public static final String ARG_ITEM_KEY = "item_key";
+    public static final String ARG_BLOCK_KEY = "block_key";
+    public static final String ARG_ENTITY_KEY = "entity_key";
+    public static final String ARG_STRUCTURE_KEY = "structure_key";
+    public static final String ARG_WEATHER_TYPE = "weather_type";
+    public static final String ARG_TIME_ACTION = "time_action";
+    public static final String ARG_TIME_VALUE = "time_value";
+    public static final String ARG_GAMERULE_NAME = "gamerule_name";
+    public static final String ARG_GAMERULE_VALUE = "gamerule_value";
+    public static final String ARG_PROFILE_ACTION = "profile_action";
+    public static final String ARG_DEBUG_ACTION = "debug_action";
+    public static final String ARG_TICK_RATE = "tick_rate";
+    public static final String ARG_INTEGER = "integer";
+    public static final String ARG_COORD = "coordinate";
+    public static final String ARG_TEXT = "text";
+
+    private static final String BUILTIN_OWNER = "__builtin__";
 
     private static final String[] BOOLEAN_GAMERULES = new String[] {
         "doDayNightCycle",
@@ -143,7 +147,10 @@ public final class CommandAutocompleteRegistry {
         }
     }
 
-    private interface ArgumentProvider {
+    /**
+     * Supplies syntax-aware command suggestions and token validation.
+     */
+    public interface ArgumentProvider {
         List<String> suggest(CommandSender sender, String[] args, int argIndex, String prefixLower);
 
         boolean matches(CommandSender sender, String[] args, int argIndex, String token);
@@ -153,14 +160,139 @@ public final class CommandAutocompleteRegistry {
 
     private final Map<String, ArgumentProvider> argumentProviders = new HashMap<String, ArgumentProvider>();
     private final Map<String, CommandSpec> commandSpecsByAlias = new HashMap<String, CommandSpec>();
+    private final Map<String, String> argumentProviderOwners = new HashMap<String, String>();
+    private final Map<String, String> commandSpecOwnersByCanonical = new HashMap<String, String>();
+    private final Map<String, LinkedHashSet<String>> commandSpecAliasesByCanonical = new HashMap<String, LinkedHashSet<String>>();
+    private final Map<String, LinkedHashSet<String>> pluginArgumentIds = new HashMap<String, LinkedHashSet<String>>();
+    private final Map<String, LinkedHashSet<String>> pluginCanonicalSpecs = new HashMap<String, LinkedHashSet<String>>();
 
     public static CommandAutocompleteRegistry getInstance() {
         return INSTANCE;
     }
 
     private CommandAutocompleteRegistry() {
-        registerArguments();
-        registerCommandSpecs();
+        registerBuiltinArguments();
+        registerBuiltinCommandSpecs();
+    }
+
+    /**
+     * Registers or replaces a plugin-owned argument provider.
+     *
+     * <p>Built-in argument ids are reserved and cannot be overridden.
+     * Returns {@code false} if the id is already owned by another plugin.
+     */
+    public synchronized boolean registerArgumentProvider(Plugin owner, String argumentId, ArgumentProvider provider) {
+        return registerArgumentInternal(ownerKey(owner), argumentId, provider, false);
+    }
+
+    /**
+     * Removes a plugin-owned argument provider by id.
+     */
+    public synchronized boolean unregisterArgumentProvider(Plugin owner, String argumentId) {
+        String key = ownerKey(owner);
+        String normalizedId = normalizeArgumentId(argumentId);
+        if (key == null || normalizedId.length() == 0) {
+            return false;
+        }
+
+        String existingOwner = argumentProviderOwners.get(normalizedId);
+        if (!key.equals(existingOwner)) {
+            return false;
+        }
+
+        argumentProviders.remove(normalizedId);
+        argumentProviderOwners.remove(normalizedId);
+        removePluginArgumentTracking(key, normalizedId);
+        return true;
+    }
+
+    /**
+     * Registers or replaces a plugin-owned command syntax specification.
+     *
+     * <p>Built-in command specs are reserved and cannot be overridden.
+     * Returns {@code false} when aliases collide with another owner.
+     */
+    public synchronized boolean registerCommandSpec(Plugin owner, String canonicalName, String[] aliases, String[][] syntaxes) {
+        return registerSpecInternal(ownerKey(owner), canonicalName, aliases, syntaxes, false);
+    }
+
+    /**
+     * Removes a plugin-owned command spec by canonical name or alias.
+     */
+    public synchronized boolean unregisterCommandSpec(Plugin owner, String canonicalOrAlias) {
+        String key = ownerKey(owner);
+        String normalized = normalizeCommandName(canonicalOrAlias);
+        if (key == null || normalized.length() == 0) {
+            return false;
+        }
+
+        CommandSpec spec = commandSpecsByAlias.get(normalized);
+        if (spec == null) {
+            return false;
+        }
+
+        String canonical = spec.canonicalNameLower;
+        String existingOwner = commandSpecOwnersByCanonical.get(canonical);
+        if (!key.equals(existingOwner)) {
+            return false;
+        }
+
+        removeCommandSpecByCanonical(canonical);
+        return true;
+    }
+
+    /**
+     * Removes all plugin-owned autocomplete registrations.
+     *
+     * <p>Call this on plugin disable to keep autocomplete state clean.
+     * Use {@code Bukkit.refreshCommandAutocomplete()} after cleanup if clients need an immediate tree refresh.
+     */
+    public synchronized void unregisterAll(Plugin owner) {
+        String key = ownerKey(owner);
+        if (key == null) {
+            return;
+        }
+
+        LinkedHashSet<String> argumentIds = pluginArgumentIds.get(key);
+        if (argumentIds != null) {
+            ArrayList<String> snapshot = new ArrayList<String>(argumentIds);
+            for (int i = 0; i < snapshot.size(); i++) {
+                String argumentId = snapshot.get(i);
+                if (!key.equals(argumentProviderOwners.get(argumentId))) {
+                    continue;
+                }
+                argumentProviders.remove(argumentId);
+                argumentProviderOwners.remove(argumentId);
+                removePluginArgumentTracking(key, argumentId);
+            }
+        }
+
+        LinkedHashSet<String> canonicals = pluginCanonicalSpecs.get(key);
+        if (canonicals != null) {
+            ArrayList<String> snapshot = new ArrayList<String>(canonicals);
+            for (int i = 0; i < snapshot.size(); i++) {
+                String canonical = snapshot.get(i);
+                if (!key.equals(commandSpecOwnersByCanonical.get(canonical))) {
+                    continue;
+                }
+                removeCommandSpecByCanonical(canonical);
+            }
+        }
+    }
+
+    private static String ownerKey(Plugin owner) {
+        if (owner == null || owner.getDescription() == null || owner.getDescription().getName() == null) {
+            return null;
+        }
+        String name = owner.getDescription().getName().trim().toLowerCase(Locale.ROOT);
+        return name.length() == 0 ? null : name;
+    }
+
+    private static String normalizeArgumentId(String argumentId) {
+        if (argumentId == null) {
+            return "";
+        }
+        return argumentId.trim().toLowerCase(Locale.ROOT);
     }
 
     public byte[] buildTreePayload(SimpleCommandMap commandMap, CommandSender sender) {
@@ -511,6 +643,14 @@ public final class CommandAutocompleteRegistry {
         if (sender == null || command == null) {
             return false;
         }
+
+        if (command instanceof PluginCommand) {
+            PluginCommand pluginCommand = (PluginCommand) command;
+            if (pluginCommand.getPlugin() == null || !pluginCommand.getPlugin().isEnabled()) {
+                return false;
+            }
+        }
+
         String permission = command.getPermission();
         return permission == null || permission.length() == 0 || sender.hasPermission(permission) || sender.isOp();
     }
@@ -531,14 +671,14 @@ public final class CommandAutocompleteRegistry {
         return null;
     }
 
-    private void registerArguments() {
-        registerLiteralArgument(ARG_GAMEMODE, GAMEMODE_VALUES);
-        registerLiteralArgument(ARG_WEATHER_TYPE, WEATHER_VALUES);
-        registerLiteralArgument(ARG_TIME_ACTION, TIME_ACTION_VALUES);
-        registerLiteralArgument(ARG_PROFILE_ACTION, PROFILE_ACTION_VALUES);
-        registerLiteralArgument(ARG_DEBUG_ACTION, new String[] { "tickRate" });
+    private void registerBuiltinArguments() {
+        registerBuiltinLiteralArgument(ARG_GAMEMODE, GAMEMODE_VALUES);
+        registerBuiltinLiteralArgument(ARG_WEATHER_TYPE, WEATHER_VALUES);
+        registerBuiltinLiteralArgument(ARG_TIME_ACTION, TIME_ACTION_VALUES);
+        registerBuiltinLiteralArgument(ARG_PROFILE_ACTION, PROFILE_ACTION_VALUES);
+        registerBuiltinLiteralArgument(ARG_DEBUG_ACTION, new String[] { "tickRate" });
 
-        registerArgument(ARG_TICK_RATE, new ArgumentProvider() {
+        registerBuiltinArgument(ARG_TICK_RATE, new ArgumentProvider() {
             public List<String> suggest(CommandSender sender, String[] args, int argIndex, String prefixLower) {
                 return filterStrings(Arrays.asList("reset", "1", "20", "40", "80", "200"), prefixLower);
             }
@@ -559,7 +699,7 @@ public final class CommandAutocompleteRegistry {
             }
         });
 
-        registerArgument(ARG_PLAYER, new ArgumentProvider() {
+        registerBuiltinArgument(ARG_PLAYER, new ArgumentProvider() {
             public List<String> suggest(CommandSender sender, String[] args, int argIndex, String prefixLower) {
                 ArrayList<String> names = new ArrayList<String>();
                 for (Player player : Bukkit.getOnlinePlayers()) {
@@ -587,7 +727,7 @@ public final class CommandAutocompleteRegistry {
             }
         });
 
-        registerArgument(ARG_ITEM_KEY, new ArgumentProvider() {
+        registerBuiltinArgument(ARG_ITEM_KEY, new ArgumentProvider() {
             public List<String> suggest(CommandSender sender, String[] args, int argIndex, String prefixLower) {
                 return filterResourceKeys(ItemRegistry.displayKeys(), prefixLower);
             }
@@ -597,7 +737,7 @@ public final class CommandAutocompleteRegistry {
             }
         });
 
-        registerArgument(ARG_BLOCK_KEY, new ArgumentProvider() {
+        registerBuiltinArgument(ARG_BLOCK_KEY, new ArgumentProvider() {
             public List<String> suggest(CommandSender sender, String[] args, int argIndex, String prefixLower) {
                 return filterResourceKeys(BlockRegistry.displayKeys(), prefixLower);
             }
@@ -607,7 +747,7 @@ public final class CommandAutocompleteRegistry {
             }
         });
 
-        registerArgument(ARG_ENTITY_KEY, new ArgumentProvider() {
+        registerBuiltinArgument(ARG_ENTITY_KEY, new ArgumentProvider() {
             public List<String> suggest(CommandSender sender, String[] args, int argIndex, String prefixLower) {
                 ArrayList<ResourceLocation> summonable = new ArrayList<ResourceLocation>();
                 for (ResourceLocation key : EntityTypeRegistry.primaryKeys()) {
@@ -627,7 +767,7 @@ public final class CommandAutocompleteRegistry {
             }
         });
 
-        registerArgument(ARG_STRUCTURE_KEY, new ArgumentProvider() {
+        registerBuiltinArgument(ARG_STRUCTURE_KEY, new ArgumentProvider() {
             public List<String> suggest(CommandSender sender, String[] args, int argIndex, String prefixLower) {
                 try {
                     StructureTypes.initialize();
@@ -643,7 +783,7 @@ public final class CommandAutocompleteRegistry {
             }
         });
 
-        registerArgument(ARG_TIME_VALUE, new ArgumentProvider() {
+        registerBuiltinArgument(ARG_TIME_VALUE, new ArgumentProvider() {
             public List<String> suggest(CommandSender sender, String[] args, int argIndex, String prefixLower) {
                 String action = safeLower(argAt(args, 0));
                 if ("set".equals(action)) {
@@ -663,7 +803,7 @@ public final class CommandAutocompleteRegistry {
             }
         });
 
-        registerArgument(ARG_GAMERULE_NAME, new ArgumentProvider() {
+        registerBuiltinArgument(ARG_GAMERULE_NAME, new ArgumentProvider() {
             public List<String> suggest(CommandSender sender, String[] args, int argIndex, String prefixLower) {
                 ArrayList<String> values = new ArrayList<String>();
                 values.addAll(Arrays.asList(BOOLEAN_GAMERULES));
@@ -676,7 +816,7 @@ public final class CommandAutocompleteRegistry {
             }
         });
 
-        registerArgument(ARG_GAMERULE_VALUE, new ArgumentProvider() {
+        registerBuiltinArgument(ARG_GAMERULE_VALUE, new ArgumentProvider() {
             public List<String> suggest(CommandSender sender, String[] args, int argIndex, String prefixLower) {
                 String rule = safeLower(argAt(args, 0));
                 if (isBooleanGamerule(rule)) {
@@ -697,7 +837,7 @@ public final class CommandAutocompleteRegistry {
             }
         });
 
-        registerArgument(ARG_INTEGER, new ArgumentProvider() {
+        registerBuiltinArgument(ARG_INTEGER, new ArgumentProvider() {
             public List<String> suggest(CommandSender sender, String[] args, int argIndex, String prefixLower) {
                 return filterStrings(Arrays.asList("1", "8", "16", "32", "64"), prefixLower);
             }
@@ -707,7 +847,7 @@ public final class CommandAutocompleteRegistry {
             }
         });
 
-        registerArgument(ARG_COORD, new ArgumentProvider() {
+        registerBuiltinArgument(ARG_COORD, new ArgumentProvider() {
             public List<String> suggest(CommandSender sender, String[] args, int argIndex, String prefixLower) {
                 if (prefixLower.startsWith("~")) {
                     return filterStrings(Arrays.asList("~", "~1", "~-1"), prefixLower);
@@ -720,7 +860,7 @@ public final class CommandAutocompleteRegistry {
             }
         });
 
-        registerArgument(ARG_TEXT, new ArgumentProvider() {
+        registerBuiltinArgument(ARG_TEXT, new ArgumentProvider() {
             public List<String> suggest(CommandSender sender, String[] args, int argIndex, String prefixLower) {
                 return Collections.emptyList();
             }
@@ -731,86 +871,126 @@ public final class CommandAutocompleteRegistry {
         });
     }
 
-    private void registerCommandSpecs() {
-        registerSpec("admin", new String[] { "openinventory", "openinv" }, new String[][] {
+    private void registerBuiltinCommandSpecs() {
+        registerSpecInternal(BUILTIN_OWNER, "admin", new String[] { "openinventory", "openinv" }, new String[][] {
             { ARG_PLAYER }
-        });
+        }, true);
 
-        registerSpec("give", new String[0], new String[][] {
+        registerSpecInternal(BUILTIN_OWNER, "give", new String[0], new String[][] {
             { ARG_PLAYER, ARG_ITEM_KEY },
             { ARG_PLAYER, ARG_ITEM_KEY, ARG_INTEGER }
-        });
+        }, true);
 
-        registerSpec("gamerule", new String[0], new String[][] {
+        registerSpecInternal(BUILTIN_OWNER, "gamerule", new String[0], new String[][] {
             { ARG_GAMERULE_NAME },
             { ARG_GAMERULE_NAME, ARG_GAMERULE_VALUE }
-        });
+        }, true);
 
-        registerSpec("weather", new String[] { "toggledownfall" }, new String[][] {
+        registerSpecInternal(BUILTIN_OWNER, "weather", new String[] { "toggledownfall" }, new String[][] {
             { ARG_WEATHER_TYPE },
             { ARG_WEATHER_TYPE, ARG_INTEGER }
-        });
+        }, true);
 
-        registerSpec("time", new String[0], new String[][] {
+        registerSpecInternal(BUILTIN_OWNER, "time", new String[0], new String[][] {
             { ARG_TIME_ACTION, ARG_TIME_VALUE }
-        });
+        }, true);
 
-        registerSpec("gamemode", new String[0], new String[][] {
+        registerSpecInternal(BUILTIN_OWNER, "gamemode", new String[0], new String[][] {
             { ARG_PLAYER, ARG_GAMEMODE },
             { ARG_GAMEMODE },
             { ARG_GAMEMODE, ARG_PLAYER }
-        });
+        }, true);
 
-        registerSpec("summon", new String[0], new String[][] {
+        registerSpecInternal(BUILTIN_OWNER, "summon", new String[0], new String[][] {
             { ARG_ENTITY_KEY },
             { ARG_ENTITY_KEY, ARG_COORD, ARG_COORD, ARG_COORD },
             { ARG_ENTITY_KEY, ARG_COORD, ARG_COORD, ARG_COORD, ARG_BLOCK_KEY }
-        });
+        }, true);
 
-        registerSpec("tp", new String[] { "teleport" }, new String[][] {
+        registerSpecInternal(BUILTIN_OWNER, "tp", new String[] { "teleport" }, new String[][] {
             { ARG_PLAYER },
             { ARG_PLAYER, ARG_PLAYER },
             { ARG_COORD, ARG_COORD, ARG_COORD },
             { ARG_PLAYER, ARG_COORD, ARG_COORD, ARG_COORD }
-        });
+        }, true);
 
-        registerSpec("tell", new String[0], new String[][] {
+        registerSpecInternal(BUILTIN_OWNER, "tell", new String[0], new String[][] {
             { ARG_PLAYER, ARG_TEXT }
-        });
+        }, true);
 
-        registerSpec("locate", new String[0], new String[][] {
+        registerSpecInternal(BUILTIN_OWNER, "locate", new String[0], new String[][] {
             { ARG_STRUCTURE_KEY }
-        });
+        }, true);
 
-        registerSpec("profile", new String[] { "profiler" }, new String[][] {
+        registerSpecInternal(BUILTIN_OWNER, "profile", new String[] { "profiler" }, new String[][] {
             { ARG_PROFILE_ACTION }
-        });
+        }, true);
 
-        registerSpec("debug", new String[0], new String[][] {
+        registerSpecInternal(BUILTIN_OWNER, "debug", new String[0], new String[][] {
             { ARG_DEBUG_ACTION },
             { ARG_DEBUG_ACTION, ARG_TICK_RATE }
-        });
+        }, true);
 
-        registerSpec("setworldspawn", new String[0], new String[][] {
+        registerSpecInternal(BUILTIN_OWNER, "setworldspawn", new String[0], new String[][] {
             {},
             { ARG_COORD, ARG_COORD, ARG_COORD }
-        });
+        }, true);
     }
 
-    private void registerSpec(String canonical, String[] aliases, String[][] syntaxes) {
-        CommandSpec spec = new CommandSpec(canonical);
-        if (spec.canonicalNameLower.length() == 0) {
-            return;
+    private boolean registerSpecInternal(String ownerKey, String canonical, String[] aliases, String[][] syntaxes, boolean builtIn) {
+        if (ownerKey == null || canonical == null) {
+            return false;
+        }
+        if (builtIn && !BUILTIN_OWNER.equals(ownerKey)) {
+            return false;
+        }
+        if (!builtIn && BUILTIN_OWNER.equals(ownerKey)) {
+            return false;
         }
 
+        String canonicalLower = normalizeCommandName(canonical);
+        if (canonicalLower.length() == 0) {
+            return false;
+        }
+
+        LinkedHashSet<String> aliasSet = new LinkedHashSet<String>();
+        aliasSet.add(canonicalLower);
         if (aliases != null) {
             for (int i = 0; i < aliases.length; i++) {
-                String alias = normalizeCommandName(aliases[i]);
-                if (alias.length() > 0) {
-                    spec.aliasesLower.add(alias);
+                String aliasLower = normalizeCommandName(aliases[i]);
+                if (aliasLower.length() > 0) {
+                    aliasSet.add(aliasLower);
                 }
             }
         }
+
+        for (String aliasLower : aliasSet) {
+            CommandSpec existingSpec = commandSpecsByAlias.get(aliasLower);
+            if (existingSpec == null) {
+                continue;
+            }
+
+            String existingCanonical = existingSpec.canonicalNameLower;
+            String existingOwner = commandSpecOwnersByCanonical.get(existingCanonical);
+            if (!ownerKey.equals(existingOwner)) {
+                return false;
+            }
+            if (!existingCanonical.equals(canonicalLower)) {
+                return false;
+            }
+        }
+
+        String existingCanonicalOwner = commandSpecOwnersByCanonical.get(canonicalLower);
+        if (existingCanonicalOwner != null) {
+            if (!ownerKey.equals(existingCanonicalOwner)) {
+                return false;
+            }
+            removeCommandSpecByCanonical(canonicalLower);
+        }
+
+        CommandSpec spec = new CommandSpec(canonicalLower);
+        spec.aliasesLower.clear();
+        spec.aliasesLower.addAll(aliasSet);
 
         if (syntaxes != null) {
             for (int i = 0; i < syntaxes.length; i++) {
@@ -821,17 +1001,119 @@ public final class CommandAutocompleteRegistry {
         for (String alias : spec.aliasesLower) {
             commandSpecsByAlias.put(alias, spec);
         }
+        commandSpecOwnersByCanonical.put(canonicalLower, ownerKey);
+        commandSpecAliasesByCanonical.put(canonicalLower, new LinkedHashSet<String>(spec.aliasesLower));
+        trackPluginCommandSpec(ownerKey, canonicalLower);
+        return true;
     }
 
-    private void registerArgument(String argumentId, ArgumentProvider provider) {
-        if (argumentId == null || provider == null) {
+    private void removeCommandSpecByCanonical(String canonical) {
+        if (canonical == null || canonical.length() == 0) {
             return;
         }
-        argumentProviders.put(argumentId, provider);
+
+        LinkedHashSet<String> aliases = commandSpecAliasesByCanonical.remove(canonical);
+        if (aliases == null) {
+            CommandSpec spec = commandSpecsByAlias.get(canonical);
+            if (spec != null) {
+                aliases = new LinkedHashSet<String>(spec.aliasesLower);
+            }
+        }
+        if (aliases != null) {
+            for (String alias : aliases) {
+                commandSpecsByAlias.remove(alias);
+            }
+        }
+
+        String owner = commandSpecOwnersByCanonical.remove(canonical);
+        removePluginCommandSpecTracking(owner, canonical);
     }
 
-    private void registerLiteralArgument(final String argumentId, final String[] values) {
-        registerArgument(argumentId, new ArgumentProvider() {
+    private void trackPluginCommandSpec(String ownerKey, String canonical) {
+        if (ownerKey == null || BUILTIN_OWNER.equals(ownerKey)) {
+            return;
+        }
+        LinkedHashSet<String> canonicals = pluginCanonicalSpecs.get(ownerKey);
+        if (canonicals == null) {
+            canonicals = new LinkedHashSet<String>();
+            pluginCanonicalSpecs.put(ownerKey, canonicals);
+        }
+        canonicals.add(canonical);
+    }
+
+    private void removePluginCommandSpecTracking(String ownerKey, String canonical) {
+        if (ownerKey == null || BUILTIN_OWNER.equals(ownerKey)) {
+            return;
+        }
+        LinkedHashSet<String> canonicals = pluginCanonicalSpecs.get(ownerKey);
+        if (canonicals == null) {
+            return;
+        }
+        canonicals.remove(canonical);
+        if (canonicals.isEmpty()) {
+            pluginCanonicalSpecs.remove(ownerKey);
+        }
+    }
+
+    private boolean registerArgumentInternal(String ownerKey, String argumentId, ArgumentProvider provider, boolean builtIn) {
+        if (ownerKey == null || provider == null) {
+            return false;
+        }
+        if (builtIn && !BUILTIN_OWNER.equals(ownerKey)) {
+            return false;
+        }
+        if (!builtIn && BUILTIN_OWNER.equals(ownerKey)) {
+            return false;
+        }
+
+        String normalizedId = normalizeArgumentId(argumentId);
+        if (normalizedId.length() == 0) {
+            return false;
+        }
+
+        String existingOwner = argumentProviderOwners.get(normalizedId);
+        if (existingOwner != null && !ownerKey.equals(existingOwner)) {
+            return false;
+        }
+
+        argumentProviders.put(normalizedId, provider);
+        argumentProviderOwners.put(normalizedId, ownerKey);
+        trackPluginArgument(ownerKey, normalizedId);
+        return true;
+    }
+
+    private void trackPluginArgument(String ownerKey, String argumentId) {
+        if (ownerKey == null || BUILTIN_OWNER.equals(ownerKey)) {
+            return;
+        }
+        LinkedHashSet<String> argumentIds = pluginArgumentIds.get(ownerKey);
+        if (argumentIds == null) {
+            argumentIds = new LinkedHashSet<String>();
+            pluginArgumentIds.put(ownerKey, argumentIds);
+        }
+        argumentIds.add(argumentId);
+    }
+
+    private void removePluginArgumentTracking(String ownerKey, String argumentId) {
+        if (ownerKey == null || BUILTIN_OWNER.equals(ownerKey)) {
+            return;
+        }
+        LinkedHashSet<String> argumentIds = pluginArgumentIds.get(ownerKey);
+        if (argumentIds == null) {
+            return;
+        }
+        argumentIds.remove(argumentId);
+        if (argumentIds.isEmpty()) {
+            pluginArgumentIds.remove(ownerKey);
+        }
+    }
+
+    private void registerBuiltinArgument(String argumentId, ArgumentProvider provider) {
+        registerArgumentInternal(BUILTIN_OWNER, argumentId, provider, true);
+    }
+
+    private void registerBuiltinLiteralArgument(final String argumentId, final String[] values) {
+        registerBuiltinArgument(argumentId, new ArgumentProvider() {
             public List<String> suggest(CommandSender sender, String[] args, int argIndex, String prefixLower) {
                 return filterStrings(Arrays.asList(values), prefixLower);
             }

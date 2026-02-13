@@ -13,10 +13,12 @@ import org.bukkit.OfflinePlayer;
 import org.bukkit.Server;
 import org.bukkit.World;
 import org.bukkit.World.Environment;
+import org.bukkit.command.CommandAutocompleteRegistry;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.command.SimpleCommandMap;
+import org.bukkit.craftbukkit.entity.CraftPlayer;
 import org.bukkit.craftbukkit.inventory.CraftFurnaceRecipe;
 import org.bukkit.craftbukkit.inventory.CraftRecipe;
 import org.bukkit.craftbukkit.inventory.CraftShapedRecipe;
@@ -671,6 +673,42 @@ public final class CraftServer implements Server {
         } else {
             return null;
         }
+    }
+
+    @Override
+    public CommandAutocompleteRegistry getCommandAutocompleteRegistry() {
+        return CommandAutocompleteRegistry.getInstance();
+    }
+
+    @Override
+    public void refreshCommandAutocomplete() {
+        for (int i = 0; i < this.server.players.size(); ++i) {
+            Object raw = this.server.players.get(i);
+            if (!(raw instanceof EntityPlayer)) {
+                continue;
+            }
+
+            EntityPlayer entityPlayer = (EntityPlayer) raw;
+            if (entityPlayer.netServerHandler == null) {
+                continue;
+            }
+
+            entityPlayer.netServerHandler.refreshCommandAutocompleteTree();
+        }
+    }
+
+    @Override
+    public void refreshCommandAutocomplete(Player player) {
+        if (!(player instanceof CraftPlayer)) {
+            return;
+        }
+
+        EntityPlayer entityPlayer = ((CraftPlayer) player).getHandle();
+        if (entityPlayer == null || entityPlayer.netServerHandler == null) {
+            return;
+        }
+
+        entityPlayer.netServerHandler.refreshCommandAutocompleteTree();
     }
 
     public void savePlayers() {

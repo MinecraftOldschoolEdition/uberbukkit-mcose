@@ -2,6 +2,7 @@ package org.bukkit;
 
 import com.avaje.ebean.config.ServerConfig;
 import org.bukkit.World.Environment;
+import org.bukkit.command.CommandAutocompleteRegistry;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.entity.Player;
@@ -190,6 +191,18 @@ public final class Bukkit {
 
     public static PluginCommand getPluginCommand(String name) {
         return server.getPluginCommand(name);
+    }
+
+    public static CommandAutocompleteRegistry getCommandAutocompleteRegistry() {
+        return server.getCommandAutocompleteRegistry();
+    }
+
+    public static void refreshCommandAutocomplete() {
+        server.refreshCommandAutocomplete();
+    }
+
+    public static void refreshCommandAutocomplete(Player player) {
+        server.refreshCommandAutocomplete(player);
     }
 
     public static void savePlayers() {

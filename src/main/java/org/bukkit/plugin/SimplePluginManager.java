@@ -5,6 +5,7 @@ import com.google.common.collect.MapMaker;
 import com.legacyminecraft.poseidon.Poseidon;
 import com.legacyminecraft.poseidon.event.PoseidonCustomListener;
 import org.bukkit.Server;
+import org.bukkit.command.CommandAutocompleteRegistry;
 import org.bukkit.command.Command;
 import org.bukkit.command.PluginCommandYamlParser;
 import org.bukkit.command.SimpleCommandMap;
@@ -306,6 +307,14 @@ public final class SimplePluginManager implements PluginManager {
             } catch (Throwable ex) {
                 server.getLogger().log(Level.SEVERE, "Error occurred (in the plugin loader) while enabling " + plugin.getDescription().getFullName() + " (Is it up to date?): " + ex.getMessage(), ex);
             }
+
+            if (plugin.isEnabled()) {
+                try {
+                    server.refreshCommandAutocomplete();
+                } catch (Throwable ex) {
+                    server.getLogger().log(Level.SEVERE, "Error occurred while refreshing command autocomplete after enabling " + plugin.getDescription().getFullName() + ": " + ex.getMessage(), ex);
+                }
+            }
         }
     }
 
@@ -333,6 +342,18 @@ public final class SimplePluginManager implements PluginManager {
                 server.getServicesManager().unregisterAll(plugin);
             } catch (Throwable ex) {
                 server.getLogger().log(Level.SEVERE, "Error occurred (in the plugin loader) while unregistering services for " + plugin.getDescription().getFullName() + " (Is it up to date?): " + ex.getMessage(), ex);
+            }
+
+            try {
+                CommandAutocompleteRegistry.getInstance().unregisterAll(plugin);
+            } catch (Throwable ex) {
+                server.getLogger().log(Level.SEVERE, "Error occurred while unregistering autocomplete state for " + plugin.getDescription().getFullName() + ": " + ex.getMessage(), ex);
+            }
+
+            try {
+                server.refreshCommandAutocomplete();
+            } catch (Throwable ex) {
+                server.getLogger().log(Level.SEVERE, "Error occurred while refreshing command autocomplete after disabling " + plugin.getDescription().getFullName() + ": " + ex.getMessage(), ex);
             }
         }
     }

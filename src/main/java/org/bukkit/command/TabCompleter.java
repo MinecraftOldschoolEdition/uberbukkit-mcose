@@ -87,10 +87,18 @@ import java.util.List;
  *   <li>Return an empty list (not null) when no completions are available</li>
  *   <li>Keep completion lists reasonable in size (under 100 items)</li>
  * </ul>
+ *
+ * <h2>Advanced Integration</h2>
+ * <p>
+ * For syntax-aware argument providers shared across commands, use
+ * {@link CommandAutocompleteRegistry} through
+ * {@code Bukkit.getCommandAutocompleteRegistry()}.
+ * </p>
  * 
  * @see TabExecutor
  * @see TabCompletions
  * @see PluginCommand#setTabCompleter(TabCompleter)
+ * @see CommandAutocompleteRegistry
  */
 public interface TabCompleter {
     
@@ -111,4 +119,3 @@ public interface TabCompleter {
      */
     List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args);
 }
-

@@ -37,6 +37,81 @@ Discord (Project Poseidon): https://discord.gg/FwKg676
 - **Spawn Location Options:** Provides options to disable spawn location randomization and teleportation to the highest safe block on join.
 - **Configurable Mob Spawner Area Limit:** Allows server owners to set a mob-cap for mob spawners to prevent mob farms from causing extreme lag.
 
+## Plugin Chat Autocomplete API
+
+UberBukkit exposes chat autocomplete through the Bukkit API so plugin developers can use either the standard or advanced path.
+
+### Basic Path (TabExecutor / TabCompleter)
+
+Use normal Bukkit command tab completion. This remains the default and is fully supported.
+
+```java
+public final class WarpCommand implements TabExecutor {
+    @Override
+    public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        return true;
+    }
+
+    @Override
+    public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
+        if (args.length == 1) {
+            return TabCompletions.filter(args[0], "set", "go", "delete");
+        }
+        return TabCompletions.empty();
+    }
+}
+```
+
+### Advanced Path (CommandAutocompleteRegistry)
+
+Use `Bukkit.getCommandAutocompleteRegistry()` for plugin-scoped syntax providers shared across commands.
+
+```java
+public final class MyPlugin extends JavaPlugin {
+    @Override
+    public void onEnable() {
+        CommandAutocompleteRegistry registry = Bukkit.getCommandAutocompleteRegistry();
+
+        registry.registerArgumentProvider(this, "myplugin:warp_name", new CommandAutocompleteRegistry.ArgumentProvider() {
+            @Override
+            public List<String> suggest(CommandSender sender, String[] args, int argIndex, String prefixLower) {
+                return TabCompletions.filter(prefixLower, "spawn", "market", "pvp");
+            }
+
+            @Override
+            public boolean matches(CommandSender sender, String[] args, int argIndex, String token) {
+                return token != null && token.length() > 0;
+            }
+        });
+
+        registry.registerCommandSpec(
+            this,
+            "warpadmin",
+            new String[] {"wa"},
+            new String[][] {
+                {"myplugin:warp_name"},
+                {"myplugin:warp_name", CommandAutocompleteRegistry.ARG_PLAYER}
+            }
+        );
+
+        Bukkit.refreshCommandAutocomplete();
+    }
+
+    @Override
+    public void onDisable() {
+        Bukkit.getCommandAutocompleteRegistry().unregisterAll(this);
+        Bukkit.refreshCommandAutocomplete();
+    }
+}
+```
+
+### Lifecycle Notes
+
+- Registrations are plugin-scoped and can only replace your own registrations.
+- Built-in argument ids and built-in command specs are reserved.
+- `unregisterAll(plugin)` is provided for explicit cleanup, and server plugin disable also performs cleanup.
+- Call `Bukkit.refreshCommandAutocomplete()` after major registration changes if you need immediate updates for connected players.
+
 ## Voice Chat
 
 This server includes built-in proximity voice chat support for the Minecraft Oldschool Edition client.

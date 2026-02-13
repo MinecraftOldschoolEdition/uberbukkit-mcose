@@ -1,6 +1,7 @@
 package org.bukkit;
 
 import com.avaje.ebean.config.ServerConfig;
+import org.bukkit.command.CommandAutocompleteRegistry;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.entity.Player;
@@ -354,6 +355,25 @@ public interface Server {
      * @return PluginCommand if found, otherwise null
      */
     public PluginCommand getPluginCommand(String name);
+
+    /**
+     * Gets the shared command autocomplete registry.
+     *
+     * @return Command autocomplete registry instance
+     */
+    public CommandAutocompleteRegistry getCommandAutocompleteRegistry();
+
+    /**
+     * Refreshes command autocomplete command trees for all online players.
+     */
+    public void refreshCommandAutocomplete();
+
+    /**
+     * Refreshes command autocomplete command tree for one player.
+     *
+     * @param player Player to refresh
+     */
+    public void refreshCommandAutocomplete(Player player);
 
     /**
      * Writes loaded players to disk
