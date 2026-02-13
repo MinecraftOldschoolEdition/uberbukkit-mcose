@@ -100,6 +100,8 @@ public class MinecraftServer implements Runnable, ICommandListener {
     private long maxTickCatchupBacklogMs = 200L;
     private long tickCatchupWarnIntervalMs = 30000L;
     private long lastTickCatchupDropWarningMs = 0L;
+    private volatile float debugTickRateTps = 20.0F;
+    private volatile long tickIntervalMs = 50L;
     
     // GUI mode flag - when true, don't call System.exit() on stop
     public static boolean guiMode = false;
@@ -708,11 +710,16 @@ public class MinecraftServer implements Runnable, ICommandListener {
                         this.h();
                         j = 0L;
                     } else {
-                        while (j > 50L) {
-                            MinecraftServer.currentTick = (int) (System.currentTimeMillis() / 50); // CraftBukkit
+                        long tickStepMs = this.tickIntervalMs;
+                        if (tickStepMs < 1L) {
+                            tickStepMs = 1L;
+                        }
+                        while (j > tickStepMs) {
+                            MinecraftServer.currentTick = (int) (System.currentTimeMillis() / tickStepMs); // CraftBukkit
                             getWatchdog().tickUpdate(); // Project Poseidon
-                            j -= 50L;
+                            j -= tickStepMs;
                             this.h();
+                            tickStepMs = Math.max(1L, this.tickIntervalMs);
                         }
                     }
                 }
@@ -1105,6 +1112,30 @@ public class MinecraftServer implements Runnable, ICommandListener {
 
     public WatchDogThread getWatchdog() {
         return Poseidon.getServer().getWatchDogThread();
+    }
+
+    public float getDebugTickRateTps() {
+        return this.debugTickRateTps;
+    }
+
+    public long getTickIntervalMs() {
+        return this.tickIntervalMs;
+    }
+
+    public synchronized float setDebugTickRateTps(float tickRateTps) {
+        float clampedTickRate = Math.max(1.0F, Math.min(1000.0F, tickRateTps));
+        long interval = Math.round(1000.0D / clampedTickRate);
+        if (interval < 1L) {
+            interval = 1L;
+        }
+        this.tickIntervalMs = interval;
+        this.debugTickRateTps = 1000.0F / (float) interval;
+        return this.debugTickRateTps;
+    }
+
+    public synchronized void resetDebugTickRate() {
+        this.tickIntervalMs = 50L;
+        this.debugTickRateTps = 20.0F;
     }
 
     public boolean isVoiceChatEnabled() {

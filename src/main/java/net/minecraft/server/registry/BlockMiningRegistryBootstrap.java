@@ -77,6 +77,7 @@ public final class BlockMiningRegistryBootstrap {
                 Block.TRAP_DOOR,
                 Block.LADDER,
                 Block.PUMPKIN,
+                Block.MELON,
                 Block.JACK_O_LANTERN,
                 Block.BROWN_MUSHROOM_CAP,
                 Block.RED_MUSHROOM_CAP

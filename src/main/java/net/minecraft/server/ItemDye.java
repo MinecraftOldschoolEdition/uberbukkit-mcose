@@ -35,6 +35,15 @@ public class ItemDye extends Item {
                 return true;
             }
 
+            if (i1 == Block.PUMPKIN_STEM.id || i1 == Block.MELON_STEM.id) {
+                if (!world.isStatic) {
+                    ((BlockStem) Block.byId[i1]).d_(world, i, j, k);
+                    --itemstack.count;
+                }
+
+                return true;
+            }
+
             if (i1 == Block.GRASS.id && UberbukkitConfig.getInstance().getBoolean("mechanics.allow_bone_meal_on_grass", true)) {
                 if (!world.isStatic) {
                     --itemstack.count;

@@ -2,6 +2,8 @@ package net.minecraft.server;
 
 import java.util.Random;
 
+import net.minecraft.server.registry.BlockCapabilityRegistryApi;
+
 public class BlockCake extends Block {
 
     protected BlockCake(int i, int j) {
@@ -54,15 +56,16 @@ public class BlockCake extends Block {
 
     private void c(World world, int i, int j, int k, EntityHuman entityhuman) {
         if (entityhuman.health < 20) {
-            entityhuman.b(3);
-            int l = world.getData(i, j, k) + 1;
+            entityhuman.b(BlockCapabilityRegistryApi.getCakeSliceHealAmount());
+        }
 
-            if (l >= 6) {
-                world.setTypeId(i, j, k, 0);
-            } else {
-                world.setData(i, j, k, l);
-                world.i(i, j, k);
-            }
+        int l = BlockCapabilityRegistryApi.getNextCakeSliceMetadata(world.getData(i, j, k));
+
+        if (l >= BlockCapabilityRegistryApi.getCakeMaxSlices()) {
+            world.setTypeId(i, j, k, 0);
+        } else {
+            world.setData(i, j, k, l);
+            world.i(i, j, k);
         }
     }
 

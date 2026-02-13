@@ -32,6 +32,7 @@ public class HelpCommand extends VanillaCommand {
         sender.sendMessage("list                      lists all currently connected players");
         sender.sendMessage("say <message>             broadcasts a message to all players");
         sender.sendMessage("time <add|set> <amount>   adds to or sets the world time (0-24000)");
+        sender.sendMessage("debug tickRate <tps|reset> adjusts server tick rate for debugging");
 
         return true;
     }

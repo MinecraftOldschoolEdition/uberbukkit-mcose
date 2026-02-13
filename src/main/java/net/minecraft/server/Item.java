@@ -114,6 +114,9 @@ public class Item {
     // Book and Quill (writable book) and Written Book
     public static Item WRITABLE_BOOK = (new ItemWritableBook(104)).a("writingBook");
     public static Item WRITTEN_BOOK = (new ItemWrittenBook(105)).a("writtenBook");
+    public static Item MELON_SLICE = (new ItemFood(106, 2, false)).c(64).a(13, 6).a("melon");
+    public static Item PUMPKIN_SEED = (new ItemSeeds(107, Block.PUMPKIN_STEM.id)).a(13, 3).a("pumpkin_seed");
+    public static Item MELON_SEED = (new ItemSeeds(108, Block.MELON_STEM.id)).a(14, 3).a("melon_seed");
     public static Item GOLD_RECORD = (new ItemRecord(2000, "13")).a(0, 15).a("record");
     public static Item GREEN_RECORD = (new ItemRecord(2001, "cat")).a(1, 15).a("record");
     public static Item RECORD_BLOCKS = (new ItemRecord(2002, "blocks")).a(2, 15).a("record");

@@ -47,6 +47,8 @@ public final class CommandAutocompleteRegistry {
     private static final String ARG_GAMERULE_NAME = "gamerule_name";
     private static final String ARG_GAMERULE_VALUE = "gamerule_value";
     private static final String ARG_PROFILE_ACTION = "profile_action";
+    private static final String ARG_DEBUG_ACTION = "debug_action";
+    private static final String ARG_TICK_RATE = "tick_rate";
     private static final String ARG_INTEGER = "integer";
     private static final String ARG_COORD = "coordinate";
     private static final String ARG_TEXT = "text";
@@ -534,6 +536,28 @@ public final class CommandAutocompleteRegistry {
         registerLiteralArgument(ARG_WEATHER_TYPE, WEATHER_VALUES);
         registerLiteralArgument(ARG_TIME_ACTION, TIME_ACTION_VALUES);
         registerLiteralArgument(ARG_PROFILE_ACTION, PROFILE_ACTION_VALUES);
+        registerLiteralArgument(ARG_DEBUG_ACTION, new String[] { "tickRate" });
+
+        registerArgument(ARG_TICK_RATE, new ArgumentProvider() {
+            public List<String> suggest(CommandSender sender, String[] args, int argIndex, String prefixLower) {
+                return filterStrings(Arrays.asList("reset", "1", "20", "40", "80", "200"), prefixLower);
+            }
+
+            public boolean matches(CommandSender sender, String[] args, int argIndex, String token) {
+                if (token == null || token.length() == 0) {
+                    return false;
+                }
+                if ("reset".equalsIgnoreCase(token)) {
+                    return true;
+                }
+                try {
+                    float value = Float.parseFloat(token);
+                    return value > 0.0F && value <= 1000.0F;
+                } catch (NumberFormatException ex) {
+                    return false;
+                }
+            }
+        });
 
         registerArgument(ARG_PLAYER, new ArgumentProvider() {
             public List<String> suggest(CommandSender sender, String[] args, int argIndex, String prefixLower) {
@@ -760,6 +784,11 @@ public final class CommandAutocompleteRegistry {
 
         registerSpec("profile", new String[] { "profiler" }, new String[][] {
             { ARG_PROFILE_ACTION }
+        });
+
+        registerSpec("debug", new String[0], new String[][] {
+            { ARG_DEBUG_ACTION },
+            { ARG_DEBUG_ACTION, ARG_TICK_RATE }
         });
 
         registerSpec("setworldspawn", new String[0], new String[][] {

@@ -72,6 +72,20 @@ public class BlockPumpkin extends Block {
         world.setData(i, j, k, l);
     }
 
+    public void postBreak(World world, int i, int j, int k, int l) {
+        super.postBreak(world, i, j, k, l);
+        this.removeAdjacentStem(world, i - 1, j, k);
+        this.removeAdjacentStem(world, i + 1, j, k);
+        this.removeAdjacentStem(world, i, j, k - 1);
+        this.removeAdjacentStem(world, i, j, k + 1);
+    }
+
+    private void removeAdjacentStem(World world, int i, int j, int k) {
+        if (world.getTypeId(i, j, k) == Block.PUMPKIN_STEM.id) {
+            world.setTypeId(i, j, k, 0);
+        }
+    }
+
     // CraftBukkit start
     public void doPhysics(World world, int i, int j, int k, int l) {
         if (net.minecraft.server.Block.byId[l] != null && net.minecraft.server.Block.byId[l].isPowerSource()) {

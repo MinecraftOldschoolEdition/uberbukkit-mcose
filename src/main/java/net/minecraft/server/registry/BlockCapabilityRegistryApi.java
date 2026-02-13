@@ -18,6 +18,8 @@ import java.util.Set;
 public final class BlockCapabilityRegistryApi {
     private static final Map<ResourceLocation, BlockCapability> byKey = new LinkedHashMap<ResourceLocation, BlockCapability>();
     private static final Map<Block, BlockCapability> byBlock = new IdentityHashMap<Block, BlockCapability>();
+    private static final int CAKE_MAX_SLICES = 6;
+    private static final int CAKE_SLICE_HEAL_AMOUNT = 3;
 
     private BlockCapabilityRegistryApi() {}
 
@@ -388,6 +390,25 @@ public final class BlockCapabilityRegistryApi {
         }
 
         return block == Block.LEAVES;
+    }
+
+    public static int getCakeMaxSlices() {
+        return CAKE_MAX_SLICES;
+    }
+
+    public static int getCakeSliceHealAmount() {
+        return CAKE_SLICE_HEAL_AMOUNT;
+    }
+
+    public static int clampCakeSlicesEaten(int metadata) {
+        if (metadata < 0) {
+            return 0;
+        }
+        return metadata > CAKE_MAX_SLICES ? CAKE_MAX_SLICES : metadata;
+    }
+
+    public static int getNextCakeSliceMetadata(int metadata) {
+        return clampCakeSlicesEaten(metadata) + 1;
     }
 
     static synchronized int bootstrapDefaults() {
