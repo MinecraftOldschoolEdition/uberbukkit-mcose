@@ -174,12 +174,14 @@ public class EntityArrow extends Entity {
                 if (movingobjectposition.entity != null) {
                     // CraftBukkit start
                     boolean stick;
-                    if (entity instanceof EntityLiving) {
+                    Entity hitEntity = movingobjectposition.entity;
+                    boolean wasSkeletonAlive = hitEntity instanceof EntitySkeleton && ((EntitySkeleton) hitEntity).health > 0;
+                    if (hitEntity instanceof EntityLiving) {
                         org.bukkit.Server server = this.world.getServer();
 
                         // TODO decide if we should create DamageCause.ARROW, DamageCause.PROJECTILE
                         // or leave as DamageCause.ENTITY_ATTACK
-                        org.bukkit.entity.Entity damagee = movingobjectposition.entity.getBukkitEntity();
+                        org.bukkit.entity.Entity damagee = hitEntity.getBukkitEntity();
                         Projectile projectile = (Projectile) this.getBukkitEntity();
                         // TODO deal with arrows being fired from a non-entity
 
@@ -192,15 +194,22 @@ public class EntityArrow extends Entity {
                         } else {
                             // UberBukkit - Track fire source if arrow is on fire
                             if (this.fireTicks > 0 && this.shooter instanceof EntityPlayer) {
-                                movingobjectposition.entity.fireSource = (EntityPlayer) this.shooter;
+                                hitEntity.fireSource = (EntityPlayer) this.shooter;
                             }
                             // this function returns if the arrow should stick in or not, i.e. !bounce
-                            stick = movingobjectposition.entity.damageEntity(this, event.getDamage());
+                            stick = hitEntity.damageEntity(this, event.getDamage());
                         }
                     } else {
-                        stick = movingobjectposition.entity.damageEntity(this.shooter, 4);
+                        stick = hitEntity.damageEntity(this.shooter, 4);
                     }
                     if (stick) {
+                        if (wasSkeletonAlive
+                                && hitEntity instanceof EntityLiving
+                                && ((EntityLiving) hitEntity).health <= 0
+                                && this.shooter instanceof EntityPlayer
+                                && ((EntityPlayer) this.shooter).f(hitEntity) >= 50.0F) {
+                            ((EntityPlayer) this.shooter).a(AchievementList.snipeSkeleton, 1);
+                        }
                         // CraftBukkit end
                         this.world.makeSound(this, "random.drr", 1.0F, 1.2F / (this.random.nextFloat() * 0.2F + 0.9F));
                         this.die();

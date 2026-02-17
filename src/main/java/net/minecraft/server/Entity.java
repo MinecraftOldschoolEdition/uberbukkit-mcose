@@ -600,11 +600,22 @@ public abstract class Entity {
                     ++this.b;
                     StepSound stepsound = Block.byId[k].stepSound;
 
+                    boolean playStepSound = false;
                     if (this.world.getTypeId(l, i1 + 1, j1) == Block.SNOW.id) {
                         stepsound = Block.SNOW.stepSound;
-                        this.world.makeSound(this, stepsound.getName(), stepsound.getVolume1() * 0.15F, stepsound.getVolume2());
+                        playStepSound = true;
                     } else if (!Block.byId[k].material.isLiquid()) {
-                        this.world.makeSound(this, stepsound.getName(), stepsound.getVolume1() * 0.15F, stepsound.getVolume2());
+                        playStepSound = true;
+                    }
+
+                    if (playStepSound) {
+                        float stepVolume = stepsound.getVolume1() * 0.15F;
+                        float stepPitch = stepsound.getVolume2();
+                        if (this instanceof EntityHuman) {
+                            this.world.makeSound((EntityHuman) this, this.locX, this.locY - (double) this.height, this.locZ, stepsound.getName(), stepVolume, stepPitch);
+                        } else {
+                            this.world.makeSound(this, stepsound.getName(), stepVolume, stepPitch);
+                        }
                     }
 
                     Block.byId[k].b(this.world, l, i1, j1, this);

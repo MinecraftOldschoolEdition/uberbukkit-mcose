@@ -86,6 +86,8 @@ public class ServerGUI extends JFrame {
     private JTextField maxPlayersField;
     private JTextField viewDistanceField;
     private JTextField motdField;
+    private JSlider spawnProtectionSlider;
+    private JLabel spawnProtectionSliderLabel;
     private JComboBox<String> levelTypeCombo;
     private JComboBox<String> gamemodeCombo;
     private JComboBox<String> difficultyCombo;
@@ -1141,7 +1143,36 @@ public class ServerGUI extends JFrame {
         viewDistanceField = createTextField("10");
         viewDistanceField.setPreferredSize(new Dimension(80, 25));
         propsGrid.add(viewDistanceField, gbc);
-        
+
+        // Spawn protection radius (global, mirrored to gamerule spawnRadius)
+        gbc.gridx = 2; gbc.weightx = 0;
+        propsGrid.add(createLabel("Spawn Protection:"), gbc);
+        gbc.gridx = 3; gbc.weightx = 1;
+        JPanel spawnProtectionRow = new JPanel(new BorderLayout(5, 0));
+        spawnProtectionRow.setBackground(BG_PANEL);
+
+        spawnProtectionSlider = new JSlider(0, 64, 16);
+        spawnProtectionSlider.setBackground(BG_PANEL);
+        spawnProtectionSlider.setForeground(TEXT_COLOR);
+        spawnProtectionSlider.setMajorTickSpacing(16);
+        spawnProtectionSlider.setMinorTickSpacing(1);
+        spawnProtectionSlider.setPaintTicks(true);
+
+        spawnProtectionSliderLabel = new JLabel("16 blocks");
+        spawnProtectionSliderLabel.setForeground(ACCENT_COLOR);
+        spawnProtectionSliderLabel.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        spawnProtectionSliderLabel.setPreferredSize(new Dimension(70, 25));
+
+        spawnProtectionSlider.addChangeListener(e -> {
+            if (spawnProtectionSliderLabel != null) {
+                spawnProtectionSliderLabel.setText(spawnProtectionSlider.getValue() + " blocks");
+            }
+        });
+
+        spawnProtectionRow.add(spawnProtectionSlider, BorderLayout.CENTER);
+        spawnProtectionRow.add(spawnProtectionSliderLabel, BorderLayout.EAST);
+        propsGrid.add(spawnProtectionRow, gbc);
+
         // MOTD (full width)
         row++;
         gbc.gridx = 0; gbc.gridy = row; gbc.weightx = 0;
@@ -1636,6 +1667,8 @@ public class ServerGUI extends JFrame {
     }
     
     private void loadServerProperties() {
+        loadSpawnProtectionRadius();
+
         File propsFile = new File("server.properties");
         boolean exists = propsFile.exists();
         
@@ -1747,6 +1780,8 @@ public class ServerGUI extends JFrame {
             FileOutputStream fos = new FileOutputStream(propsFile);
             props.store(fos, "Minecraft server properties");
             fos.close();
+
+            saveSpawnProtectionRadius();
             
             appendLog("[GUI] Server properties saved successfully.", LogType.INFO);
             setPropertiesEnabled(true);
@@ -1776,6 +1811,9 @@ public class ServerGUI extends JFrame {
         whiteListCheck.setEnabled(enabled);
         voiceChatCheck.setEnabled(enabled);
         voiceChatPortField.setEnabled(enabled);
+        if (spawnProtectionSlider != null) {
+            spawnProtectionSlider.setEnabled(true);
+        }
         
         // Always enable save button - allows creating new server.properties
         savePropertiesButton.setEnabled(true);
@@ -1789,6 +1827,56 @@ public class ServerGUI extends JFrame {
             maxPlayersField.setText("20");
             viewDistanceField.setText("10");
             motdField.setText("A Minecraft Server");
+        }
+    }
+
+    private void loadSpawnProtectionRadius() {
+        if (spawnProtectionSlider == null) {
+            return;
+        }
+
+        int radius = 16;
+        if (server != null && server.server != null) {
+            radius = Math.max(0, server.server.getSpawnRadius());
+        } else {
+            try {
+                Configuration config = new Configuration(new File("bukkit.yml"));
+                config.load();
+                radius = Math.max(0, config.getInt("settings.spawn-radius", 16));
+            } catch (Exception e) {
+                appendLog("[GUI] Error loading spawn protection from bukkit.yml: " + e.getMessage(), LogType.ERROR);
+            }
+        }
+
+        spawnProtectionSlider.setValue(radius);
+        if (spawnProtectionSliderLabel != null) {
+            spawnProtectionSliderLabel.setText(radius + " blocks");
+        }
+    }
+
+    private void saveSpawnProtectionRadius() {
+        if (spawnProtectionSlider == null) {
+            return;
+        }
+
+        int radius = Math.max(0, spawnProtectionSlider.getValue());
+
+        if (server != null && server.server != null) {
+            server.server.setSpawnRadius(radius);
+        } else {
+            try {
+                Configuration config = new Configuration(new File("bukkit.yml"));
+                config.load();
+                config.setProperty("settings.spawn-radius", Integer.valueOf(radius));
+                config.save();
+            } catch (Exception e) {
+                appendLog("[GUI] Error saving spawn protection to bukkit.yml: " + e.getMessage(), LogType.ERROR);
+                return;
+            }
+        }
+
+        if (server != null && !server.worlds.isEmpty() && server.worlds.get(0) != null && server.worlds.get(0).worldData != null) {
+            server.worlds.get(0).worldData.setSpawnRadius(radius);
         }
     }
     

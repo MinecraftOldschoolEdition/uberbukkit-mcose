@@ -165,7 +165,7 @@ world-settings:
     send-explosion-velocity: true
     randomize-spawn: true
     teleport-to-highest-safe-block: true
-    use-modern-fence-bounding-boxes: false
+    use-modern-fence-bounding-boxes: true
 fix:
     optimize-sponges:
         enabled: true

@@ -68,7 +68,7 @@ public final class CommandAutocompleteRegistry {
         "keepInventory"
     };
 
-    private static final String[] INTEGER_GAMERULES = new String[] { "spawnRadius" };
+    private static final String[] INTEGER_GAMERULES = new String[] { "spawnRadius", "spawnProtectionRadius" };
 
     private static final String[] GAMEMODE_VALUES = new String[] {
         "survival", "creative", "hardcore", "s", "c", "h", "0", "1", "2"

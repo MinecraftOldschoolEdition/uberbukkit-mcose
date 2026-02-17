@@ -87,7 +87,12 @@ public class BlockStem extends BlockFlower {
             return false;
         }
 
-        world.setTypeId(fruitX, j, fruitZ, this.fruitBlock.id);
+        if (this.fruitBlock == Block.PUMPKIN) {
+            // Use metadata 4 so stem-grown pumpkins are plain/faceless.
+            world.setTypeIdAndData(fruitX, j, fruitZ, this.fruitBlock.id, 4);
+        } else {
+            world.setTypeId(fruitX, j, fruitZ, this.fruitBlock.id);
+        }
         return true;
     }
 

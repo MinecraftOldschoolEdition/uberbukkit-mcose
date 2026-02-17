@@ -2067,11 +2067,17 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             return; // Already handled
         }
         receivedVersionPacket = true;
+        String minimumVersion = UberbukkitConfig.getInstance().getString("client.minimum_version.value", ModVersion.getMajorMinor(ModVersion.VERSION));
+        if (minimumVersion == null || minimumVersion.trim().isEmpty()) {
+            minimumVersion = ModVersion.getMajorMinor(ModVersion.VERSION);
+        } else {
+            minimumVersion = minimumVersion.trim();
+        }
         
         try {
             if (packet.data == null || packet.data.length == 0) {
                 // No version data - treat as outdated
-                this.disconnect("Outdated client! Please update to " + ModVersion.VERSION);
+                this.disconnect("Outdated client! Please update to " + ModVersion.getMajorMinor(minimumVersion) + " or newer");
                 return;
             }
             
@@ -2083,8 +2089,8 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             a.info("[MCOSE] " + this.player.name + " connected with client version " + this.clientVersion);
             
             // Check version compatibility
-            if (!ModVersion.isCompatible(this.clientVersion)) {
-                this.disconnect(ModVersion.getOutdatedMessage(this.clientVersion));
+            if (!ModVersion.isCompatible(this.clientVersion, minimumVersion)) {
+                this.disconnect(ModVersion.getOutdatedMessage(this.clientVersion, minimumVersion));
                 return;
             }
 
@@ -2092,7 +2098,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             
         } catch (Exception e) {
             a.warning("[MCOSE] Error reading version packet: " + e.getMessage());
-            this.disconnect("Outdated client! Please update to " + ModVersion.VERSION);
+            this.disconnect("Outdated client! Please update to " + ModVersion.getMajorMinor(minimumVersion) + " or newer");
         }
     }
 

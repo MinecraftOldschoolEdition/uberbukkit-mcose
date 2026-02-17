@@ -52,6 +52,8 @@ public class SlotResult extends Slot {
         // === EXPLORATION & BUILDING ===
         else if (itemstack.id == Item.MAP.id) {
             this.e.a(AchievementList.craftMap, 1);
+        } else if (itemstack.id == Item.BOAT.id) {
+            this.e.a(AchievementList.boatTravel, 1);
         } else if (itemstack.id == Block.BOOKSHELF.id) {
             this.e.a(AchievementList.bookshelf, 1);
         } else if (itemstack.id == Block.JUKEBOX.id) {

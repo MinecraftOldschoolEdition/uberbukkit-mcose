@@ -141,13 +141,16 @@ public class BlockLeaves extends BlockLeavesBase {
         // CraftBukkit end
 
         int data = world.getData(i, j, k);
-        // uberbukkit
-        if (data > 0 && !UberbukkitConfig.getInstance().getBoolean("mechanics.drop_saplings_of_leaf_type", true)) {
-            data = 0;
-        }
-
         this.g(world, i, j, k, data);
         world.setTypeId(i, j, k, 0);
+    }
+
+    public void dropNaturally(World world, int i, int j, int k, int l, float f) {
+        super.dropNaturally(world, i, j, k, l, f);
+
+        if ((l & 3) == 0 && world.random.nextFloat() < f && world.random.nextInt(200) == 0) {
+            this.a(world, i, j, k, new ItemStack(Item.APPLE.id, 1, 0));
+        }
     }
 
     public int a(Random random) {

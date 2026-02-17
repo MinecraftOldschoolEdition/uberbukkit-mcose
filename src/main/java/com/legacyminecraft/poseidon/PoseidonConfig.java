@@ -141,7 +141,7 @@ public class PoseidonConfig extends Configuration {
         generateConfigOption("world-settings.send-explosion-velocity", true);
         generateConfigOption("world-settings.randomize-spawn", true);
         generateConfigOption("world-settings.teleport-to-highest-safe-block", true);
-        generateConfigOption("world-settings.use-modern-fence-bounding-boxes", false);
+        generateConfigOption("world-settings.use-modern-fence-bounding-boxes", true);
         //TODO: Actually implement the tree growth functionality stuff
         generateConfigOption("world.settings.block-tree-growth.enabled", true);
         generateConfigOption("world.settings.block-tree-growth.list", "54,63,68");

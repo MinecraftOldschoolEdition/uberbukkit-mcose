@@ -102,7 +102,7 @@ public class ItemInWorldManager {
                 // uberbukkit - play breaking sound and send progress each tick
                 if (block != null) {
                     if (delaySound % 4.0F == 0.0F) {
-            this.world.makeSound((double) i + 0.5D, (double) j + 0.5D, (double) k + 0.5D, block.stepSound.getName(), (block.stepSound.getVolume1() + 1.0F) / 8.0F, block.stepSound.getVolume2() * 0.5F);
+            this.world.makeSound(this.player, (double) i + 0.5D, (double) j + 0.5D, (double) k + 0.5D, block.stepSound.getName(), (block.stepSound.getVolume1() + 1.0F) / 8.0F, block.stepSound.getVolume2() * 0.5F);
                     }
                     float elapsedTicks = (float) ((System.currentTimeMillis() - this.lastDigTick) / 50.0D);
                     ((CraftServer) Bukkit.getServer()).getHandle().sendPacketNearby(player, i, j, k, 64D, player.dimension, new Packet63Digging(i, j, k, l, elapsedTicks));

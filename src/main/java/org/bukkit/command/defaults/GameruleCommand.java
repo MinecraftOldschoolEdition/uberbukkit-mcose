@@ -12,7 +12,7 @@ public class GameruleCommand extends VanillaCommand {
     // Boolean gamerules
     private static final String[] BOOLEAN_RULES = {"doDayNightCycle", "tntexplodes", "mobGriefing", "doWeatherCycle", "showDeathMessages", "sleepEnabled", "advertiseAchievements", "keepInventory"};
     // Integer gamerules
-    private static final String[] INTEGER_RULES = {"spawnRadius"};
+    private static final String[] INTEGER_RULES = {"spawnRadius", "spawnProtectionRadius"};
     
     public GameruleCommand() {
         super("gamerule");
@@ -33,6 +33,10 @@ public class GameruleCommand extends VanillaCommand {
             if (rule.equalsIgnoreCase(name)) return true;
         }
         return false;
+    }
+
+    private boolean isSpawnProtectionRule(String name) {
+        return name.equalsIgnoreCase("spawnradius") || name.equalsIgnoreCase("spawnprotectionradius");
     }
 
     @Override
@@ -84,8 +88,8 @@ public class GameruleCommand extends VanillaCommand {
                 sender.sendMessage(args[0] + " = " + worldData.getAdvertiseAchievements());
             } else if (ruleName.equals("keepinventory")) {
                 sender.sendMessage(args[0] + " = " + worldData.getKeepInventory());
-            } else if (ruleName.equals("spawnradius")) {
-                sender.sendMessage(args[0] + " = " + worldData.getSpawnRadius());
+            } else if (isSpawnProtectionRule(ruleName)) {
+                sender.sendMessage(args[0] + " = " + Bukkit.getServer().getSpawnRadius());
             } else {
                 sender.sendMessage(ChatColor.RED + "Unknown game rule: " + args[0]);
                 return false;
@@ -103,11 +107,13 @@ public class GameruleCommand extends VanillaCommand {
                     return false;
                 }
                 
-                if (ruleName.equals("spawnradius")) {
-                    worldData.setSpawnRadius(intValue);
-                    sender.sendMessage("Game rule " + args[0] + " has been set to " + intValue);
+                if (isSpawnProtectionRule(ruleName)) {
+                    int clampedValue = Math.max(0, intValue);
+                    Bukkit.getServer().setSpawnRadius(clampedValue);
+                    worldData.setSpawnRadius(clampedValue); // Keep world gamerule data aligned
+                    sender.sendMessage("Game rule " + args[0] + " has been set to " + clampedValue);
                     if (!(sender instanceof org.bukkit.command.ConsoleCommandSender)) {
-                        Bukkit.getLogger().info("User " + sender.getName() + " set game rule " + args[0] + " to " + intValue);
+                        Bukkit.getLogger().info("User " + sender.getName() + " set game rule " + args[0] + " to " + clampedValue);
                     }
                 } else {
                     sender.sendMessage(ChatColor.RED + "Unknown game rule: " + args[0]);

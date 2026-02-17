@@ -23,6 +23,7 @@ public class EntityFireball extends Entity {
     private boolean j = false;
     public int a = 0;
     public EntityLiving shooter;
+    private EntityPlayer deflectedBy;
     private int k;
     private int l = 0;
     public double c;
@@ -136,7 +137,13 @@ public class EntityFireball extends Entity {
             // CraftBukkit end
             if (!this.world.isStatic) {
                 // CraftBukkit start
+                EntityGhast hitGhast = null;
+                boolean wasGhastAlive = false;
                 if (movingobjectposition.entity != null) {
+                    if (movingobjectposition.entity instanceof EntityGhast) {
+                        hitGhast = (EntityGhast) movingobjectposition.entity;
+                        wasGhastAlive = hitGhast.health > 0;
+                    }
                     boolean stick;
                     if (movingobjectposition.entity instanceof EntityLiving) {
                         org.bukkit.entity.Entity damagee = movingobjectposition.entity.getBukkitEntity();
@@ -169,6 +176,11 @@ public class EntityFireball extends Entity {
                     // Pass 'this' (the fireball) as the entity causing the explosion
                     // This allows World.createExplosion to check mobGriefing gamerule properly
                     this.world.createExplosion(this, this.locX, this.locY, this.locZ, event.getRadius(), event.getFire());
+                }
+
+                if (this.deflectedBy != null && hitGhast != null && wasGhastAlive && hitGhast.health <= 0) {
+                    this.deflectedBy.a(AchievementList.ghastHunter, 1);
+                    this.deflectedBy = null;
                 }
                 // CraftBukkit end
             }
@@ -257,6 +269,10 @@ public class EntityFireball extends Entity {
                 this.c = this.motX * 0.1D;
                 this.d = this.motY * 0.1D;
                 this.e = this.motZ * 0.1D;
+            }
+
+            if (entity instanceof EntityPlayer) {
+                this.deflectedBy = (EntityPlayer) entity;
             }
 
             return true;

@@ -13,6 +13,26 @@ public class EntitySnowman extends EntitySnowmanBase {
 		this.health = 4;
 	}
 
+	protected void b() {
+		super.b();
+		this.datawatcher.a(16, Byte.valueOf((byte)1));
+	}
+
+	public boolean hasPumpkin() {
+		return (this.datawatcher.a(16) & 1) != 0;
+	}
+
+	public void setPumpkin(boolean hasPumpkin) {
+		byte data = this.datawatcher.a(16);
+		if(hasPumpkin) {
+			data = (byte)(data | 1);
+		} else {
+			data = (byte)(data & -2);
+		}
+
+		this.datawatcher.watch(16, Byte.valueOf(data));
+	}
+
 	public int getMaxHealth() {
 		return 4;
 	}
@@ -77,14 +97,40 @@ public class EntitySnowman extends EntitySnowmanBase {
 
 	public void b(NBTTagCompound var1) {
 		super.b(var1);
+		var1.a("Pumpkin", this.hasPumpkin());
 	}
 
 	public void a(NBTTagCompound var1) {
 		super.a(var1);
+		if(var1.hasKey("Pumpkin")) {
+			this.setPumpkin(var1.m("Pumpkin"));
+		} else {
+			this.setPumpkin(true);
+		}
 	}
 
 	protected int getDropItemId() {
 		return Item.SNOW_BALL.id;
+	}
+
+	public boolean a(EntityHuman entityhuman) {
+		ItemStack heldItem = entityhuman.G();
+		if(this.hasPumpkin() && heldItem != null && heldItem.id == Item.SHEARS.id) {
+			if(!this.world.isStatic) {
+				this.setPumpkin(false);
+				EntityItem pumpkinEntity = this.a(new ItemStack(Block.PUMPKIN.id, 1, 0), 1.0F);
+				pumpkinEntity.motY += (double)(this.random.nextFloat() * 0.05F);
+				pumpkinEntity.motX += (double)((this.random.nextFloat() - this.random.nextFloat()) * 0.1F);
+				pumpkinEntity.motZ += (double)((this.random.nextFloat() - this.random.nextFloat()) * 0.1F);
+				if(entityhuman.gameMode != 1) {
+					heldItem.damage(1, entityhuman);
+				}
+			}
+
+			return true;
+		}
+
+		return super.a(entityhuman);
 	}
 
 	protected void dropFewItems(boolean var1, int var2) {
@@ -97,5 +143,3 @@ public class EntitySnowman extends EntitySnowmanBase {
 		
 	}
 }
-
-

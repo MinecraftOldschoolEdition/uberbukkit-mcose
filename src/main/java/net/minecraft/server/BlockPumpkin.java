@@ -80,6 +80,10 @@ public class BlockPumpkin extends Block {
         this.removeAdjacentStem(world, i, j, k + 1);
     }
 
+    protected int a_(int i) {
+        return this.id == Block.PUMPKIN.id ? 1 : super.a_(i);
+    }
+
     private void removeAdjacentStem(World world, int i, int j, int k) {
         if (world.getTypeId(i, j, k) == Block.PUMPKIN_STEM.id) {
             world.setTypeId(i, j, k, 0);

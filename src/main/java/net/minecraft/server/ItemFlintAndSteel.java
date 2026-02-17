@@ -62,7 +62,7 @@ public class ItemFlintAndSteel extends Item {
             CraftBlockState blockState = CraftBlockState.getBlockState(world, i, j, k);
             // CraftBukkit end
 
-            world.makeSound((double) i + 0.5D, (double) j + 0.5D, (double) k + 0.5D, "fire.ignite", 1.0F, b.nextFloat() * 0.4F + 0.8F);
+            world.makeSound(entityhuman, (double) i + 0.5D, (double) j + 0.5D, (double) k + 0.5D, "fire.ignite", 1.0F, b.nextFloat() * 0.4F + 0.8F);
             world.setTypeId(i, j, k, Block.FIRE.id);
 
             // CraftBukkit start

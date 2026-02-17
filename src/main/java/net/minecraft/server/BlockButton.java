@@ -148,7 +148,7 @@ public class BlockButton extends Block {
 
             world.setData(i, j, k, i1 + j1);
             world.b(i, j, k, i, j, k);
-            world.makeSound((double) i + 0.5D, (double) j + 0.5D, (double) k + 0.5D, "random.click", 0.3F, 0.6F);
+            world.makeSound(entityhuman, (double) i + 0.5D, (double) j + 0.5D, (double) k + 0.5D, "random.click", 0.3F, 0.6F);
             world.applyPhysics(i, j, k, this.id);
             if (i1 == 1) {
                 world.applyPhysics(i - 1, j, k, this.id);

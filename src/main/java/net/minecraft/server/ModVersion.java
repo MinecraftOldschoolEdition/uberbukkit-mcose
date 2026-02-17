@@ -16,35 +16,90 @@ public class ModVersion {
     
     /**
      * Parse the major version number from a version string.
-     * @param version Version string like "1.7" or "1.7.2"
+     * Supports suffixes such as "1.8 Pre-Release 1".
+     * @param version Version string like "1.7", "1.7.2", or "1.8 Pre-Release 1"
      * @return Major version (e.g., 1)
      */
     public static int getMajor(String version) {
-        if (version == null || version.isEmpty()) return 0;
-        try {
-            String[] parts = version.split("\\.");
-            return Integer.parseInt(parts[0]);
-        } catch (Exception e) {
-            return 0;
-        }
+        return getVersionComponent(version, 0);
     }
     
     /**
      * Parse the minor version number from a version string.
-     * @param version Version string like "1.7" or "1.7.2"
+     * Supports suffixes such as "1.8 Pre-Release 1".
+     * @param version Version string like "1.7", "1.7.2", or "1.8 Pre-Release 1"
      * @return Minor version (e.g., 7)
      */
     public static int getMinor(String version) {
-        if (version == null || version.isEmpty()) return 0;
-        try {
-            String[] parts = version.split("\\.");
-            if (parts.length >= 2) {
-                return Integer.parseInt(parts[1]);
-            }
-            return 0;
-        } catch (Exception e) {
+        return getVersionComponent(version, 1);
+    }
+
+    /**
+     * Returns a normalized "major.minor" string.
+     * Examples:
+     * - "1.8 Pre-Release 1" -> "1.8"
+     * - "1.7.3" -> "1.7"
+     */
+    public static String getMajorMinor(String version) {
+        return getMajor(version) + "." + getMinor(version);
+    }
+
+    /**
+     * Compare two version strings using major.minor only.
+     * Returns:
+     * - negative when left < right
+     * - zero when equal
+     * - positive when left > right
+     */
+    public static int compareMajorMinor(String leftVersion, String rightVersion) {
+        int leftMajor = getMajor(leftVersion);
+        int rightMajor = getMajor(rightVersion);
+        if (leftMajor != rightMajor) {
+            return leftMajor - rightMajor;
+        }
+
+        int leftMinor = getMinor(leftVersion);
+        int rightMinor = getMinor(rightVersion);
+        return leftMinor - rightMinor;
+    }
+
+    /**
+     * Extract Nth numeric component from a version string.
+     * Example: "1.8 Pre-Release 1" -> [1, 8, 1]
+     */
+    private static int getVersionComponent(String version, int index) {
+        if (version == null || version.isEmpty() || index < 0) {
             return 0;
         }
+
+        int componentIndex = 0;
+        int value = 0;
+        boolean inNumber = false;
+
+        for (int i = 0; i < version.length(); i++) {
+            char ch = version.charAt(i);
+            if (ch >= '0' && ch <= '9') {
+                if (!inNumber) {
+                    inNumber = true;
+                    value = ch - '0';
+                } else {
+                    value = (value * 10) + (ch - '0');
+                }
+            } else if (inNumber) {
+                if (componentIndex == index) {
+                    return value;
+                }
+                componentIndex++;
+                inNumber = false;
+                value = 0;
+            }
+        }
+
+        if (inNumber && componentIndex == index) {
+            return value;
+        }
+
+        return 0;
     }
     
     /**
@@ -54,23 +109,31 @@ public class ModVersion {
      * @return true if compatible, false if outdated
      */
     public static boolean isCompatible(String clientVersion) {
-        int serverMajor = getMajor(VERSION);
-        int serverMinor = getMinor(VERSION);
-        int clientMajor = getMajor(clientVersion);
-        int clientMinor = getMinor(clientVersion);
-        
-        // Client major must match or exceed server major
-        if (clientMajor < serverMajor) return false;
-        if (clientMajor > serverMajor) return true;
-        
-        // Same major, check minor
-        return clientMinor >= serverMinor;
+        return isCompatible(clientVersion, VERSION);
+    }
+
+    /**
+     * Check if the client version is compatible with a configured minimum.
+     * Comparison uses major.minor only and ignores patch/prerelease suffixes.
+     * @param clientVersion The client's version string
+     * @param minimumVersion Minimum required version string
+     * @return true if client >= minimum major.minor
+     */
+    public static boolean isCompatible(String clientVersion, String minimumVersion) {
+        return compareMajorMinor(clientVersion, minimumVersion) >= 0;
     }
     
     /**
      * Get a user-friendly message for version mismatch.
      */
     public static String getOutdatedMessage(String clientVersion) {
-        return "Outdated client! You have " + clientVersion + ", server requires " + VERSION;
+        return getOutdatedMessage(clientVersion, VERSION);
+    }
+
+    /**
+     * Get a user-friendly message for version mismatch against a minimum version.
+     */
+    public static String getOutdatedMessage(String clientVersion, String minimumVersion) {
+        return "Outdated client! You have " + clientVersion + ", minimum required is " + getMajorMinor(minimumVersion) + " or newer";
     }
 }

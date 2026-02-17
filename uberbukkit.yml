@@ -27,6 +27,9 @@ client:
         info1: Specify client versions to accept (separated by commas - first PVN is treated as target PVN of the server)
         value: '14'
         info2: 6 - a1.2.3_05 to a1.2.6; 7 - b1.0 to b1.1_02; 8 - b1.2 to b1.2_02; 9 - b1.3(_01); 10 - b1.4(_01); 11 - b1.5(_01); 12 - b1.6_test_build_3; 13 - b1.6 to b1.6.6, 14 - b1.7 to b1.7.3
+    minimum_version:
+        value: '1.7'
+        info: Minimum MCOSE client major.minor required. Only major.minor is checked; prerelease suffixes are ignored (for example, "1.8 Pre-Release 1" is treated as 1.8).
 mechanics:
     pre_1_6_fire: false
     nether_bed_explode: true

@@ -522,7 +522,13 @@ public abstract class EntityLiving extends Entity {
             if (j > 0) {
                 StepSound stepsound = Block.byId[j].stepSound;
 
-                this.world.makeSound(this, stepsound.getName(), stepsound.getVolume1() * 0.5F, stepsound.getVolume2() * 0.75F);
+                float stepVolume = stepsound.getVolume1() * 0.5F;
+                float stepPitch = stepsound.getVolume2() * 0.75F;
+                if (this instanceof EntityHuman) {
+                    this.world.makeSound((EntityHuman) this, this.locX, this.locY - (double) this.height, this.locZ, stepsound.getName(), stepVolume, stepPitch);
+                } else {
+                    this.world.makeSound(this, stepsound.getName(), stepVolume, stepPitch);
+                }
             }
         }
     }

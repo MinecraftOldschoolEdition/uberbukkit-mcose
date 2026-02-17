@@ -58,6 +58,7 @@ public abstract class EntityHuman extends EntityLiving {
     public float C;
     public ChunkCoordinates b;
     private ChunkCoordinates c;
+    private ChunkCoordinates startBoatRidingCoordinate;
     public int D = 20;
     protected boolean E = false;
     public float F;
@@ -154,6 +155,7 @@ public abstract class EntityHuman extends EntityLiving {
         this.a(StatisticList.k, 1);
         if (this.vehicle == null) {
             this.c = null;
+            this.startBoatRidingCoordinate = null;
         }
     }
 
@@ -197,6 +199,9 @@ public abstract class EntityHuman extends EntityLiving {
         }
 
         this.inventory.f();
+        if (this.ticksLived % 20 == 0) {
+            this.checkArmorAchievements();
+        }
         this.n = this.o;
         super.v();
         float f = MathHelper.a(this.motX * this.motX + this.motZ * this.motZ);
@@ -1062,6 +1067,11 @@ public abstract class EntityHuman extends EntityLiving {
                     }
                 } else if (this.vehicle instanceof EntityBoat) {
                     this.a(StatisticList.s, i);
+                    if (this.startBoatRidingCoordinate == null) {
+                        this.startBoatRidingCoordinate = new ChunkCoordinates(MathHelper.floor(this.locX), MathHelper.floor(this.locY), MathHelper.floor(this.locZ));
+                    } else if (this.startBoatRidingCoordinate.a(MathHelper.floor(this.locX), MathHelper.floor(this.locY), MathHelper.floor(this.locZ)) >= 1000.0D) {
+                        this.a(AchievementList.boatTravel, 1);
+                    }
                 } else if (this.vehicle instanceof EntityPig) {
                     this.a(StatisticList.t, i);
                 }
@@ -1136,6 +1146,30 @@ public abstract class EntityHuman extends EntityLiving {
         if (this.health <= 0) {
             this.die();
         }
+    }
+
+    private void checkArmorAchievements() {
+        ItemStack[] armor = this.inventory.armor;
+        if (armor[0] == null || armor[1] == null || armor[2] == null || armor[3] == null) {
+            return;
+        }
+
+        boolean fullIron = this.isArmorSet(armor, Item.IRON_BOOTS, Item.IRON_LEGGINGS, Item.IRON_CHESTPLATE, Item.IRON_HELMET);
+        if (fullIron) {
+            this.a(AchievementList.fullIron, 1);
+        }
+
+        boolean fullDiamond = this.isArmorSet(armor, Item.DIAMOND_BOOTS, Item.DIAMOND_LEGGINGS, Item.DIAMOND_CHESTPLATE, Item.DIAMOND_HELMET);
+        if (fullDiamond) {
+            this.a(AchievementList.fullDiamond, 1);
+        }
+    }
+
+    private boolean isArmorSet(ItemStack[] armor, Item boots, Item leggings, Item chest, Item helmet) {
+        return armor[0].getItem() == boots
+                && armor[1].getItem() == leggings
+                && armor[2].getItem() == chest
+                && armor[3].getItem() == helmet;
     }
     
     /**

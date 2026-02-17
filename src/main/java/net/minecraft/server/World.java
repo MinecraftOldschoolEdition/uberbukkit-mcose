@@ -22,6 +22,7 @@ import java.util.*;
 import net.minecraft.server.event.EventBus;
 import net.minecraft.server.event.events.EntitySpawnEvent;
 import net.minecraft.server.registry.BlockCapabilityRegistryApi;
+import uk.betacraft.uberbukkit.packet.Packet62Sound;
 
 // CraftBukkit start
 // CraftBukkit end
@@ -1483,9 +1484,33 @@ public class World implements IBlockAccess {
     }
 
     public void makeSound(Entity entity, String s, float f, float f1) {
+        if (!this.isStatic && entity instanceof EntityHuman) {
+            this.makeSound((EntityHuman) entity, entity.locX, entity.locY - (double) entity.height, entity.locZ, s, f, f1);
+            return;
+        }
+
         String resolved = net.minecraft.server.registry.SoundEventResolver.resolve(s);
         for (int i = 0; i < this.u.size(); ++i) {
             ((IWorldAccess) this.u.get(i)).a(resolved, entity.locX, entity.locY - (double) entity.height, entity.locZ, f, f1);
+        }
+    }
+
+    public void makeSound(EntityHuman source, double d0, double d1, double d2, String s, float f, float f1) {
+        String resolved = net.minecraft.server.registry.SoundEventResolver.resolve(s);
+
+        if (!this.isStatic && this instanceof WorldServer && source != null) {
+            float range = 16.0F;
+            if (f > 1.0F) {
+                range *= f;
+            }
+
+            WorldServer worldServer = (WorldServer) this;
+            worldServer.server.serverConfigurationManager.sendPacketNearby(source, d0, d1, d2, range, worldServer.dimension, new Packet62Sound(resolved, d0, d1, d2, f, f1));
+            return;
+        }
+
+        for (int i = 0; i < this.u.size(); ++i) {
+            ((IWorldAccess) this.u.get(i)).a(resolved, d0, d1, d2, f, f1);
         }
     }
 

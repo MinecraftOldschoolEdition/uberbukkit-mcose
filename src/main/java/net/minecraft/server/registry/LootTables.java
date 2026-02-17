@@ -58,6 +58,8 @@ public final class LootTables {
                 .add(LootEntry.builder("bucket").weight(10))
                 .add(LootEntry.builder("redstone").weight(5).count(1, 4))
                 .add(LootEntry.builder("cocoa_beans").weight(10).metadata(3)) // Cocoa beans are dye metadata 3
+                .add(LootEntry.builder("pumpkin_seed").weight(8).count(1, 3))
+                .add(LootEntry.builder("melon_seed").weight(8).count(1, 3))
                 .build())
             .pool(LootPool.builder("rare")
                 .rolls(0, 1)
@@ -103,6 +105,8 @@ public final class LootTables {
                 .add(LootEntry.builder("bucket").weight(8))
                 .add(LootEntry.builder("redstone").weight(6).count(1, 4))
                 .add(LootEntry.builder("cocoa_beans").weight(8).metadata(3))
+                .add(LootEntry.builder("pumpkin_seed").weight(8).count(1, 3))
+                .add(LootEntry.builder("melon_seed").weight(8).count(1, 3))
                 // Additional items for monster dungeon
                 .add(LootEntry.builder("gold_ingot").weight(5).count(1, 3))
                 .add(LootEntry.builder("iron_sword").weight(3))
