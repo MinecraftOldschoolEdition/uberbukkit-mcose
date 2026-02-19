@@ -386,7 +386,33 @@ public class EntityTrackerEntry {
 
                         // uberbukkit
                         if (entityhuman.isSleeping() && entityplayer.protocol.canReceivePacket(17)) {
-                            entityplayer.netServerHandler.sendPacket(new Packet17(this.tracker, 0, MathHelper.floor(this.tracker.locX), MathHelper.floor(this.tracker.locY), MathHelper.floor(this.tracker.locZ)));
+                            ChunkCoordinates chunkcoordinates = entityhuman.A;
+                            if (chunkcoordinates != null) {
+                                entityplayer.netServerHandler.sendPacket(new Packet17(this.tracker, 0, chunkcoordinates.x, chunkcoordinates.y, chunkcoordinates.z));
+                            } else {
+                                entityplayer.netServerHandler.sendPacket(new Packet17(this.tracker, 0, MathHelper.floor(this.tracker.locX), MathHelper.floor(this.tracker.locY), MathHelper.floor(this.tracker.locZ)));
+                            }
+                        }
+                    }
+
+                    // MCOSE: When a player enters tracking range of a wall map, send the full
+                    // map pixel data so they can see it without having to pick it up first.
+                    if (this.tracker instanceof EntityMapHanging) {
+                        EntityMapHanging mapHanging = (EntityMapHanging) this.tracker;
+                        WorldMap worldmap = (WorldMap) this.tracker.world.a(WorldMap.class, "map_" + mapHanging.mapId);
+                        if (worldmap != null) {
+                            // Send full map data as column packets (128 columns of 128 pixels each)
+                            for (int col = 0; col < 128; ++col) {
+                                byte[] columnData = new byte[131]; // 3 header bytes + 128 pixel bytes
+                                columnData[0] = 0; // type 0 = column data
+                                columnData[1] = (byte) col; // column index
+                                columnData[2] = 0; // start row
+                                for (int row = 0; row < 128; ++row) {
+                                    columnData[row + 3] = worldmap.f[row * 128 + col];
+                                }
+                                entityplayer.netServerHandler.sendPacket(
+                                    new Packet131((short) Item.MAP.id, mapHanging.mapId, columnData));
+                            }
                         }
                     }
                 }

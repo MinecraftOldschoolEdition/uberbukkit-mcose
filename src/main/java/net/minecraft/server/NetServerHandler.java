@@ -735,6 +735,23 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     public long lastMine = 0;
     public int delaySound = 0;
 
+    private boolean isCreativeSwordDig(Packet14BlockDig packet14blockdig) {
+        if (packet14blockdig == null || this.player == null || this.player.itemInWorldManager == null) {
+            return false;
+        }
+
+        if (!this.player.itemInWorldManager.isCreative()) {
+            return false;
+        }
+
+        if (packet14blockdig.e != 0 && packet14blockdig.e != 1 && packet14blockdig.e != 2 && packet14blockdig.e != 3) {
+            return false;
+        }
+
+        ItemStack itemInHand = this.player.inventory.getItemInHand();
+        return itemInHand != null && itemInHand.getItem() instanceof ItemSword;
+    }
+
     public void a(Packet14BlockDig packet14blockdig) {
         // poseidon
         PacketReceivedEvent event = new PacketReceivedEvent(server.getPlayer(player), packet14blockdig);
@@ -744,6 +761,16 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         if (this.player.dead) return; // CraftBukkit
         if (uk.betacraft.uberbukkit.AdminRegistry.isFrozen(this.player.name)) {
             // Cancel digging while frozen
+            return;
+        }
+
+        if (this.isCreativeSwordDig(packet14blockdig)) {
+            if (packet14blockdig.e == 0 || packet14blockdig.e == 1 || packet14blockdig.e == 3) {
+                WorldServer worldserver = this.minecraftServer.getWorldServer(this.player.dimension);
+                this.sendPacket(new Packet53BlockChange(packet14blockdig.a, packet14blockdig.b, packet14blockdig.c, worldserver));
+            }
+            this.mineExpire = 0;
+            this.lastMine = 0;
             return;
         }
 
@@ -1959,6 +1986,21 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
                 // CraftBukkit end
 
                 tileentitysign1.update();
+                try {
+                    if (worldserver.chunkProvider instanceof ChunkProviderServer) {
+                        ChunkProviderServer chunkproviderserver = (ChunkProviderServer) worldserver.chunkProvider;
+                        Chunk chunk = worldserver.getChunkAtWorldCoords(j, i);
+
+                        if (chunk != null) {
+                            chunk.f();
+                            chunkproviderserver.saveChunk(chunk);
+                            worldserver.saveLevel();
+                        }
+                    }
+                } catch (Exception exception) {
+                    a.warning("Failed to persist sign at " + j + "," + k + "," + i + ": " + exception.getMessage());
+                    exception.printStackTrace();
+                }
                 worldserver.notify(j, k, i);
             }
         }

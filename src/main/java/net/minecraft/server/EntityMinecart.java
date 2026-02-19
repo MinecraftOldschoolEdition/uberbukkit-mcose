@@ -27,6 +27,7 @@ public class EntityMinecart extends Entity implements IInventory {
     private double n;
     private double o;
     private double p;
+    private boolean suppressDropsOnCreativeDestroy;
 
     // CraftBukkit start
     public boolean slowWhenEmpty = true;
@@ -50,6 +51,7 @@ public class EntityMinecart extends Entity implements IInventory {
         this.b = 0;
         this.c = 1;
         this.i = false;
+        this.suppressDropsOnCreativeDestroy = false;
         this.aI = true;
         this.b(0.98F, 0.7F);
         this.height = this.width / 2.0F;
@@ -107,6 +109,23 @@ public class EntityMinecart extends Entity implements IInventory {
 
             i = event.getDamage();
             // CraftBukkit end
+
+            if (entity instanceof EntityPlayer && ((EntityPlayer) entity).gameMode == 1) {
+                VehicleDestroyEvent destroyEvent = new VehicleDestroyEvent(vehicle, passenger);
+                this.world.getServer().getPluginManager().callEvent(destroyEvent);
+
+                if (destroyEvent.isCancelled()) {
+                    return true;
+                }
+
+                if (this.passenger != null) {
+                    this.passenger.mount(this);
+                }
+
+                this.suppressDropsOnCreativeDestroy = true;
+                this.die();
+                return true;
+            }
 
             this.c = -this.c;
             this.b = 10;
@@ -177,6 +196,11 @@ public class EntityMinecart extends Entity implements IInventory {
     }
 
     public void die() {
+        if (this.suppressDropsOnCreativeDestroy) {
+            super.die();
+            return;
+        }
+
         for (int i = 0; i < this.getSize(); ++i) {
             ItemStack itemstack = this.getItem(i);
 

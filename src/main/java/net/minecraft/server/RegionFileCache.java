@@ -4,15 +4,18 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.IOException;
-import java.lang.ref.Reference;
-import java.lang.ref.SoftReference;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 
 public class RegionFileCache {
 
-    private static final Map a = new HashMap();
+    // MCOSE: Use strong references instead of SoftReference to prevent GC from
+    // silently collecting RegionFile objects (and their unflushed WAL data)
+    // between chunk saves and flush/close calls. With SoftReference, memory
+    // pressure during a large save could cause the GC to clear references,
+    // meaning RegionFile.b() (close/flush WAL) would be skipped entirely.
+    private static final Map<File, RegionFile> a = new HashMap<File, RegionFile>();
 
     private RegionFileCache() {
     }
@@ -20,14 +23,10 @@ public class RegionFileCache {
     public static synchronized RegionFile a(File file1, int i, int j) {
         File file2 = new File(file1, "region");
         File file3 = new File(file2, "r." + (i >> 5) + "." + (j >> 5) + ".mcr");
-        Reference reference = (Reference) a.get(file3);
-        RegionFile regionfile;
+        RegionFile regionfile = a.get(file3);
 
-        if (reference != null) {
-            regionfile = (RegionFile) reference.get();
-            if (regionfile != null) {
-                return regionfile;
-            }
+        if (regionfile != null) {
+            return regionfile;
         }
 
         if (!file2.exists()) {
@@ -39,18 +38,18 @@ public class RegionFileCache {
         }
 
         regionfile = new RegionFile(file3);
-        a.put(file3, new SoftReference(regionfile));
+        a.put(file3, regionfile);
         return regionfile;
     }
 
     public static synchronized void a() {
-        Iterator iterator = a.values().iterator();
+        Iterator<Map.Entry<File, RegionFile>> iterator = a.entrySet().iterator();
 
         while (iterator.hasNext()) {
-            Reference reference = (Reference) iterator.next();
+            Map.Entry<File, RegionFile> entry = iterator.next();
 
             try {
-                RegionFile regionfile = (RegionFile) reference.get();
+                RegionFile regionfile = entry.getValue();
 
                 if (regionfile != null) {
                     regionfile.b();

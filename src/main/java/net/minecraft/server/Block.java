@@ -46,7 +46,8 @@ public class Block {
     public static final Block COAL_ORE = (new BlockOre(16, 34)).c(3.0F).b(5.0F).a(h).a("oreCoal");
     public static final Block LOG = (new BlockLog(17)).c(2.0F).a(e).a("log").g();
     public static final BlockLeaves LEAVES = (BlockLeaves) (new BlockLeaves(18, 52)).c(0.2F).f(1).a(g).a("leaves").n().g();
-    public static final Block SPONGE = (new BlockSponge(19)).c(0.6F).a(g).a("sponge");
+    public static final Block SPONGE = (new BlockSponge(19, true)).c(0.6F).a(g).a("sponge");
+    public static final Block WET_SPONGE = (new BlockSponge(170, false)).c(0.6F).a(g).a("wetSponge");
     public static final Block GLASS = (new BlockGlass(20, 49, Material.SHATTERABLE, false)).c(0.3F).a(j).a("glass");
     public static final Block LAPIS_ORE = (new BlockOre(21, 160)).c(3.0F).b(5.0F).a(h).a("oreLapis");
     public static final Block LAPIS_BLOCK = (new Block(22, 144, Material.STONE)).c(3.0F).b(5.0F).a(h).a("blockLapis");
@@ -551,6 +552,8 @@ public class Block {
     static {
         Item.byId[WOOL.id] = (new ItemCloth(WOOL.id - 256)).a("cloth");
         Item.byId[LOG.id] = (new ItemLog(LOG.id - 256)).a("log");
+        Item.byId[SPONGE.id] = (new ItemBlock(SPONGE.id - 256)).a("sponge");
+        Item.byId[WET_SPONGE.id] = (new ItemBlock(WET_SPONGE.id - 256)).a("wetSponge");
         Item.byId[STEP.id] = (new ItemStep(STEP.id - 256)).a("stoneSlab");
         Item.byId[SAPLING.id] = (new ItemSapling(SAPLING.id - 256)).a("sapling");
         Item.byId[LEAVES.id] = (new ItemLeaves(LEAVES.id - 256)).a("leaves");

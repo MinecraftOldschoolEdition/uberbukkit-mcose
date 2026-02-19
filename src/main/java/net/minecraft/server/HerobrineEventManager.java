@@ -35,6 +35,7 @@ public class HerobrineEventManager {
     private EntityHerobrine herobrine;
     private EntityHuman primaryTarget;
     private boolean herobrineSpawnedThisEvent = false;
+    private int spawnSearchFailures = 0;
     
     // Fog control
     private float originalFogDistance;
@@ -64,7 +65,8 @@ public class HerobrineEventManager {
     private static final double CLOSE_DISTANCE = 6.0;
     private static final double DESPAWN_DISTANCE = 15.0;
     private static final double AFFECTED_RADIUS = 64.0;      // Players within this distance are affected
-    private static final float STALK_DISTANCE_RATIO = 0.50F; // Herobrine stalks at 50% of fog distance
+    private static final float STALK_DISTANCE_RATIO = 0.78F; // Herobrine stalks at fog-start edge
+    private static final int MAX_SPAWN_SEARCH_FAILURES = 12;
     
     private HerobrineEventManager(World world) {
         this.world = world;
@@ -100,6 +102,7 @@ public class HerobrineEventManager {
         this.stateStartTime = this.eventStartTime;
         this.currentState = STATE_FOG_CLOSING;
         this.herobrineSpawnedThisEvent = false;
+        this.spawnSearchFailures = 0;
         this.herobrine = null;
         this.lastPlayerApproachTime = this.eventStartTime;
         this.lastPlayerDistance = Double.MAX_VALUE;
@@ -142,6 +145,11 @@ public class HerobrineEventManager {
             
             // Update affected players list
             updateAffectedPlayers();
+
+            if (currentState != STATE_FOG_RETURNING) {
+                handleHerobrineDamaged();
+                stateElapsed = System.currentTimeMillis() - stateStartTime;
+            }
             
             // State machine
             switch (currentState) {
@@ -172,6 +180,16 @@ public class HerobrineEventManager {
             e.printStackTrace();
             forceReset();
         }
+    }
+
+    private void handleHerobrineDamaged() {
+        if (herobrine == null || herobrine.dead) {
+            return;
+        }
+        if (!herobrine.consumeDamagedFlag()) {
+            return;
+        }
+        startRetreating();
     }
     
     /**
@@ -277,35 +295,76 @@ public class HerobrineEventManager {
         
         float yawRad = (float) Math.toRadians(primaryTarget.yaw + 180);
         // Spawn at stalking distance - within visible range of fog
-        float spawnDist = Math.min(currentFogDistance * STALK_DISTANCE_RATIO, 25.0F);
+        float spawnDist = getStalkDistance();
         
         
         // Try multiple spawn locations
         double spawnX = 0, spawnZ = 0;
         int groundY = -1;
+        boolean visibleSpawn = false;
         
-        for (int attempt = 0; attempt < 8; attempt++) {
-            float offsetAngle = yawRad + (float)(attempt * 0.2 - 0.7);
-            float offsetDist = spawnDist + (attempt * 2);
-            
-            double testX = primaryTarget.locX - Math.sin(offsetAngle) * offsetDist;
-            double testZ = primaryTarget.locZ + Math.cos(offsetAngle) * offsetDist;
-            int testY = findSolidGround((int)testX, (int)testZ);
-            
-            if (testY > 0 && Math.abs(testY - primaryTarget.locY) < 10) {
-                spawnX = testX;
-                spawnZ = testZ;
-                groundY = testY;
+        float[] angleOffsets = {0, 0.3f, -0.3f, 0.6f, -0.6f, 0.9f, -0.9f, 1.2f, -1.2f,
+                                (float)Math.PI / 2, -(float)Math.PI / 2,
+                                (float)Math.PI * 0.75f, -(float)Math.PI * 0.75f};
+
+        for (float angleOffset : angleOffsets) {
+            for (int distOffset = 0; distOffset < 4; distOffset++) {
+                float testAngle = yawRad + angleOffset;
+                float testDist = spawnDist + (distOffset * 3);
+
+                double testX = primaryTarget.locX - Math.sin(testAngle) * testDist;
+                double testZ = primaryTarget.locZ + Math.cos(testAngle) * testDist;
+                int testY = findSolidGround((int) testX, (int) testZ);
+
+                if (testY > 0 && Math.abs(testY - primaryTarget.locY) < 10) {
+                    if (hasLineOfSightToPlayer(testX, testY + 1.0, testZ, primaryTarget)) {
+                        spawnX = testX;
+                        spawnZ = testZ;
+                        groundY = testY;
+                        visibleSpawn = true;
+                        break;
+                    }
+                }
+            }
+            if (groundY > 0) {
                 break;
             }
         }
-        
+
         if (groundY < 0) {
-            spawnX = primaryTarget.locX - Math.sin(yawRad) * spawnDist;
-            spawnZ = primaryTarget.locZ + Math.cos(yawRad) * spawnDist;
-            groundY = findSolidGround((int)spawnX, (int)spawnZ);
+            spawnSearchFailures++;
+
+            if (spawnSearchFailures <= MAX_SPAWN_SEARCH_FAILURES) {
+                return;
+            }
+
+            float[] fallbackAngles = {0, 0.35f, -0.35f, 0.75f, -0.75f, 1.15f, -1.15f,
+                                      (float)Math.PI / 2, -(float)Math.PI / 2,
+                                      (float)Math.PI * 0.75f, -(float)Math.PI * 0.75f, (float)Math.PI};
+
+            for (float angleOffset : fallbackAngles) {
+                for (int distOffset = -2; distOffset < 4; distOffset++) {
+                    float testAngle = yawRad + angleOffset;
+                    float testDist = Math.max(6.0F, spawnDist + (distOffset * 2.0F));
+
+                    double testX = primaryTarget.locX - Math.sin(testAngle) * testDist;
+                    double testZ = primaryTarget.locZ + Math.cos(testAngle) * testDist;
+                    int testY = findSolidGround((int) testX, (int) testZ);
+
+                    if (testY > 0 && Math.abs(testY - primaryTarget.locY) < 14) {
+                        spawnX = testX;
+                        spawnZ = testZ;
+                        groundY = testY;
+                        break;
+                    }
+                }
+                if (groundY > 0) {
+                    break;
+                }
+            }
+
             if (groundY < 0) {
-                groundY = (int)primaryTarget.locY;
+                return;
             }
         }
         
@@ -314,12 +373,18 @@ public class HerobrineEventManager {
         herobrine.setAIState(EntityHerobrine.AI_STALKING);
         herobrine.setTargetPlayer(primaryTarget);
         herobrine.setCurrentFogDistance(currentFogDistance);
-        herobrine.setTargetDistance(currentFogDistance * STALK_DISTANCE_RATIO);
+        herobrine.setTargetDistance(getStalkDistance());
+
+        if (!visibleSpawn) {
+            herobrine.setAIState(EntityHerobrine.AI_APPROACHING);
+            herobrine.setTargetDistance(Math.max(4.0F, getStalkDistance() - 4.0F));
+        }
         
         // Add to world
         boolean added = world.addEntity(herobrine);
         
         herobrineSpawnedThisEvent = true;
+        spawnSearchFailures = 0;
     }
     
     private int findSolidGround(int x, int z) {
@@ -372,7 +437,7 @@ public class HerobrineEventManager {
         // Update Herobrine's target and fog distance
         herobrine.setTargetPlayer(primaryTarget);
         herobrine.setCurrentFogDistance(currentFogDistance);
-        herobrine.setTargetDistance(currentFogDistance * STALK_DISTANCE_RATIO);
+        herobrine.setTargetDistance(getStalkDistance());
         
         // Check if close to any player
         double dx = herobrine.locX - primaryTarget.locX;
@@ -419,7 +484,7 @@ public class HerobrineEventManager {
         double dz = herobrine.locZ - primaryTarget.locZ;
         double distance = Math.sqrt(dx * dx + dz * dz);
         
-        float visibleDistance = currentFogDistance * STALK_DISTANCE_RATIO;
+        float visibleDistance = getStalkDistance();
         
         if (distance > visibleDistance) {
             // Walk into visible area first
@@ -477,7 +542,7 @@ public class HerobrineEventManager {
         double dz = herobrine.locZ - primaryTarget.locZ;
         double distance = Math.sqrt(dx * dx + dz * dz);
         
-        float targetVisibleDistance = currentFogDistance * STALK_DISTANCE_RATIO;
+        float targetVisibleDistance = getStalkDistance();
         
         if (distance <= targetVisibleDistance) {
             currentState = STATE_HEROBRINE_RETREATING;
@@ -595,6 +660,7 @@ public class HerobrineEventManager {
         }
         herobrine = null;
         herobrineSpawnedThisEvent = false;
+        spawnSearchFailures = 0;
         primaryTarget = null;
         affectedPlayers.clear();
         
@@ -606,6 +672,7 @@ public class HerobrineEventManager {
         }
         herobrine = null;
         herobrineSpawnedThisEvent = false;
+        spawnSearchFailures = 0;
         currentState = STATE_INACTIVE;
         affectedPlayers.clear();
     }
@@ -625,6 +692,56 @@ public class HerobrineEventManager {
     // Utility
     private static float lerp(float a, float b, float t) {
         return a + (b - a) * t;
+    }
+
+    private float getStalkDistance() {
+        return Math.max(6.0F, currentFogDistance * STALK_DISTANCE_RATIO);
+    }
+
+    private boolean hasLineOfSightToPlayer(double x, double y, double z, EntityHuman player) {
+        double targetEyeY = player.locY + player.t();
+
+        double dx = player.locX - x;
+        double dy = targetEyeY - y;
+        double dz = player.locZ - z;
+        double distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+        if (distance < 1.0D) {
+            return true;
+        }
+
+        dx /= distance;
+        dy /= distance;
+        dz /= distance;
+
+        for (double d = 0.5D; d < distance - 0.5D; d += 0.5D) {
+            int blockX = MathHelper.floor(x + dx * d);
+            int blockY = MathHelper.floor(y + dy * d);
+            int blockZ = MathHelper.floor(z + dz * d);
+
+            int blockId = this.world.getTypeId(blockX, blockY, blockZ);
+            if (blockId == 0) {
+                continue;
+            }
+
+            Block block = Block.byId[blockId];
+            if (block == null) {
+                continue;
+            }
+
+            Material mat = block.material;
+            if (mat == Material.LEAVES || mat == Material.PLANT || mat == Material.WATER ||
+                mat == Material.LAVA || mat == Material.SNOW_LAYER || mat == Material.ORIENTABLE ||
+                mat == Material.FIRE) {
+                continue;
+            }
+
+            if (mat.isBuildable()) {
+                return false;
+            }
+        }
+
+        return true;
     }
     
     private static float easeInOut(float t) {

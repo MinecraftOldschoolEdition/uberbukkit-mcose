@@ -540,24 +540,57 @@ public class MinecraftServer implements Runnable, ICommandListener {
         log.info("Saving chunks");
 
         // CraftBukkit start
+        int worldsSaved = 0;
         for (int i = 0; i < this.worlds.size(); ++i) {
             WorldServer worldserver = this.worlds.get(i);
 
-            worldserver.save(true, (IProgressUpdate) null);
-            worldserver.saveLevel();
+            try {
+                // MCOSE: Force-enable saving for each world during shutdown save,
+                // just like save-all does. If save-off was active, the world would
+                // silently skip saving all chunks (including signs, tile entities, etc).
+                boolean wasSaveDisabled = worldserver.canSave;
+                worldserver.canSave = false; // false = saving enabled
 
-            WorldSaveEvent event = new WorldSaveEvent(worldserver.getWorld());
-            this.server.getPluginManager().callEvent(event);
+                worldserver.save(true, (IProgressUpdate) null);
+                worldserver.saveLevel();
+
+                worldserver.canSave = wasSaveDisabled; // restore original state
+                ++worldsSaved;
+                log.info("Saved world " + (i + 1) + "/" + this.worlds.size()
+                    + " '" + worldserver.worldData.name + "' (tile entities, chunks, WAL flushed)");
+
+                WorldSaveEvent event = new WorldSaveEvent(worldserver.getWorld());
+                this.server.getPluginManager().callEvent(event);
+            } catch (Exception e) {
+                log.severe("[MCOSE] Failed to save world " + (i + 1) + "/"
+                    + this.worlds.size() + ": " + e.getMessage());
+                e.printStackTrace();
+            }
         }
 
-        WorldServer world = this.worlds.get(0);
-        if (!world.canSave) {
+        // Always save players on shutdown regardless of save-off state
+        try {
             this.serverConfigurationManager.savePlayers();
+        } catch (Exception e) {
+            log.severe("[MCOSE] Failed to save players: " + e.getMessage());
+            e.printStackTrace();
         }
+
+        log.info("Chunk saving complete (" + worldsSaved + "/" + this.worlds.size() + " worlds saved)");
         // CraftBukkit end
     }
 
+    private volatile boolean hasStopped = false;
+
     public void stop() { // CraftBukkit - private -> public
+        // MCOSE: Guard against double-invocation (shutdown hook + finally block)
+        synchronized (this) {
+            if (this.hasStopped) {
+                return;
+            }
+            this.hasStopped = true;
+        }
+
         log.info("Stopping server");
         
         // UberBukkit - Save server-wide statistics on shutdown
@@ -575,7 +608,11 @@ public class MinecraftServer implements Runnable, ICommandListener {
         //Project Poseidon Start
 
         // This is done before disablePlugins() to ensure the watchdog doesn't detect plugins disabling as a server hang
-        Poseidon.getServer().shutdownServer();
+        try {
+            Poseidon.getServer().shutdownServer();
+        } catch (Exception e) {
+            log.warning("[MCOSE] Poseidon shutdown error (non-fatal): " + e.getMessage());
+        }
 
         //Project Poseidon End
 
@@ -601,12 +638,21 @@ public class MinecraftServer implements Runnable, ICommandListener {
         ThreadingManager.getInstance().shutdown();
 
         // CraftBukkit start - multiworld is handled in saveChunks() already.
-        WorldServer worldserver = this.worlds.get(0);
-
-        if (worldserver != null) {
+        if (!this.worlds.isEmpty() && this.worlds.get(0) != null) {
             this.saveChunks();
         }
         // CraftBukkit end
+
+        // MCOSE: Final safety-net flush — ensure all region files are closed and
+        // WAL entries are synced to disk, even if saveLevel() failed or was skipped
+        // for any reason during saveChunks().
+        try {
+            RegionFileCache.a();
+            log.info("Region file cache flushed successfully");
+        } catch (Exception e) {
+            log.severe("[MCOSE] Failed to flush region file cache: " + e.getMessage());
+            e.printStackTrace();
+        }
 
         // Poseidon Start
         // UberBukkit: Performance statistics not available; stubbed to empty

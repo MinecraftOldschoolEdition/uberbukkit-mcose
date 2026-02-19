@@ -222,7 +222,7 @@ public class TileEntityFurnace extends TileEntity implements IInventory {
         }
         
         // Fall back to normal furnace recipes
-        ItemStack itemstack = FurnaceRecipes.getInstance().a(this.items[0].getItem().id);
+        ItemStack itemstack = FurnaceRecipes.getInstance().a(this.items[0]);
 
         // CraftBukkit - consider resultant count instead of current count
         return itemstack == null ? false : (this.items[2] == null ? true : (!this.items[2].doMaterialsMatch(itemstack) ? false : (this.items[2].count + itemstack.count <= this.getMaxStackSize() && this.items[2].count < this.items[2].getMaxStackSize() ? true : this.items[2].count + itemstack.count <= itemstack.getMaxStackSize())));
@@ -261,7 +261,7 @@ public class TileEntityFurnace extends TileEntity implements IInventory {
             }
             
             // Fall back to normal furnace smelting
-            ItemStack itemstack = FurnaceRecipes.getInstance().a(this.items[0].getItem().id);
+            ItemStack itemstack = FurnaceRecipes.getInstance().a(this.items[0]);
 
             // CraftBukkit start
             CraftItemStack source = new CraftItemStack(this.items[0]);

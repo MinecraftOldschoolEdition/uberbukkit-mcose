@@ -24,7 +24,7 @@ public class EntityHerobrine extends EntityLiving {
     private EntityHuman targetPlayer;
     private float targetDistance = 25.0F;
     private float moveSpeed = 0.216F; // Match player walking speed
-    private float retreatSpeed = 0.35F; // Faster when retreating
+    private float retreatSpeed = 0.281F; // Player sprint-like speed
     
     // Fog and event tracking
     private float currentFogDistance = 50.0F;
@@ -34,12 +34,32 @@ public class EntityHerobrine extends EntityLiving {
     private int pathfindCooldown = 0;
     private double lastPathX, lastPathZ;
     private int stuckTicks = 0;
+    private int embeddedTicks = 0;
     private int consecutiveBlockedTicks = 0;
     private int totallyStuckTicks = 0;
     private static final int STUCK_THRESHOLD_FOR_ESCAPE = 30;
+    private PathEntity navigationPath;
+    private int navigationRepathCooldown = 0;
+    private double navTargetX = Double.NaN;
+    private double navTargetY = Double.NaN;
+    private double navTargetZ = Double.NaN;
+    private double smoothedNavMoveX = 0.0D;
+    private double smoothedNavMoveZ = 0.0D;
+    private static final int NAVIGATION_REPATH_TICKS = 8;
+    private static final float NAVIGATION_RANGE = 28.0F;
+    private static final double NAVIGATION_SMOOTHING = 0.35D;
     
     // Stalking behavior constants - should match client and HerobrineEventManager
-    private static final float STALK_DISTANCE_RATIO = 0.50F;
+    private static final float STALK_DISTANCE_RATIO = 0.78F;
+    private static final double STALK_DISTANCE_TOLERANCE = 0.35D;
+    private static final double STALK_FAST_CATCHUP_DISTANCE = 3.0D;
+    private double lastStalkPlayerX = 0.0D;
+    private double lastStalkPlayerZ = 0.0D;
+    private double lastStalkDistance = 0.0D;
+    private boolean hasStalkSample = false;
+
+    // Damage trigger tracking (consumed by HerobrineEventManager)
+    private boolean damagedByPlayerThisTick = false;
     
     // Escape behavior
     private int escapeAttemptTicks = 0;
@@ -116,6 +136,18 @@ public class EntityHerobrine extends EntityLiving {
         
         // Pathfinding cooldown
         if (pathfindCooldown > 0) pathfindCooldown--;
+        if (navigationRepathCooldown > 0) navigationRepathCooldown--;
+
+        // Never stay embedded in blocks (trees/terrain); recover if persistent
+        if (isEmbeddedInSolidBlock()) {
+            embeddedTicks++;
+            if (embeddedTicks > 5) {
+                escapeFromEmbeddedBlock();
+                embeddedTicks = 0;
+            }
+        } else {
+            embeddedTicks = 0;
+        }
         
         // Handle jumping - improved vertical movement
         if (isJumping) {
@@ -167,6 +199,8 @@ public class EntityHerobrine extends EntityLiving {
                     if (targetPlayer != null) {
                         faceEntity(targetPlayer);
                     }
+                    clearNavigationPath();
+                    haltHorizontalMotion();
                     break;
             }
         } else if (aiState == AI_IDLE) {
@@ -175,6 +209,8 @@ public class EntityHerobrine extends EntityLiving {
             if (nearbyPlayer != null) {
                 faceEntity(nearbyPlayer);
             }
+            clearNavigationPath();
+            haltHorizontalMotion();
         }
         
         // Force update head rotation (server sends this to clients)
@@ -217,8 +253,10 @@ public class EntityHerobrine extends EntityLiving {
     private void doStalkingBehavior() {
         if (targetPlayer == null) return;
         
-        // Stay JUST inside the visible fog
-        this.targetDistance = currentFogDistance * STALK_DISTANCE_RATIO;
+        // Keep externally configured target distance; only use fallback when unset
+        if (this.targetDistance <= 0.0F) {
+            this.targetDistance = currentFogDistance * STALK_DISTANCE_RATIO;
+        }
         
         // Always face the player
         faceEntitySmooth(targetPlayer);
@@ -229,16 +267,49 @@ public class EntityHerobrine extends EntityLiving {
         // Check if we're currently visible to the player - if not, try to reposition
         if (!isVisibleToPlayer(targetPlayer)) {
             tryMoveToVisiblePosition(targetPlayer);
+            if (!isVisibleToPlayer(targetPlayer)) {
+                forceVisibleStalkingPosition(targetPlayer);
+            }
         }
         
         // Calculate current distance to player (EXACTLY like client)
         double dx = this.locX - targetPlayer.locX;
         double dz = this.locZ - targetPlayer.locZ;
         double currentDist = Math.sqrt(dx * dx + dz * dz);
+        double distanceError = currentDist - targetDistance;
+
+        if (!hasStalkSample) {
+            lastStalkPlayerX = targetPlayer.locX;
+            lastStalkPlayerZ = targetPlayer.locZ;
+            lastStalkDistance = currentDist;
+            hasStalkSample = true;
+            clearNavigationPath();
+            haltHorizontalMotion();
+            return;
+        }
+
+        double playerMoveX = targetPlayer.locX - lastStalkPlayerX;
+        double playerMoveZ = targetPlayer.locZ - lastStalkPlayerZ;
+        double playerMoveDist = Math.sqrt(playerMoveX * playerMoveX + playerMoveZ * playerMoveZ);
+        boolean playerWalkedAway = currentDist > lastStalkDistance + 0.05D && playerMoveDist > 0.02D;
+
+        if (!playerWalkedAway) {
+            lastStalkPlayerX = targetPlayer.locX;
+            lastStalkPlayerZ = targetPlayer.locZ;
+            lastStalkDistance = currentDist;
+            clearNavigationPath();
+            haltHorizontalMotion();
+            return;
+        }
         
         
-        // Only move if player is getting FARTHER away
-        if (currentDist <= targetDistance + 1.0) {
+        // Maintain a tight distance band while stalking
+        if (distanceError <= STALK_DISTANCE_TOLERANCE) {
+            lastStalkPlayerX = targetPlayer.locX;
+            lastStalkPlayerZ = targetPlayer.locZ;
+            lastStalkDistance = currentDist;
+            clearNavigationPath();
+            haltHorizontalMotion();
             return; // Stand still and stare
         }
         
@@ -259,12 +330,16 @@ public class EntityHerobrine extends EntityLiving {
         
         
         if (toIdealDist > 0.5) {
-            double moveX = (toIdealX / toIdealDist) * moveSpeed;
-            double moveZ = (toIdealZ / toIdealDist) * moveSpeed;
-            
-            
-            tryMove(moveX, moveZ);
+            float followSpeed = distanceError > STALK_FAST_CATCHUP_DISTANCE ? retreatSpeed : moveSpeed;
+            navigateTowards(idealX, this.locY, idealZ, followSpeed);
+        } else {
+            clearNavigationPath();
+            haltHorizontalMotion();
         }
+
+        lastStalkPlayerX = targetPlayer.locX;
+        lastStalkPlayerZ = targetPlayer.locZ;
+        lastStalkDistance = currentDist;
     }
     
     /**
@@ -304,6 +379,41 @@ public class EntityHerobrine extends EntityLiving {
             }
         }
         // If no suitable position found, don't move at all (no fallback!)
+    }
+
+    private void forceVisibleStalkingPosition(EntityHuman player) {
+        if (player == null) return;
+
+        double preferredAngle = Math.toRadians(player.yaw + 180.0F);
+        double[] angleOffsets = {0.0, 0.35, -0.35, 0.7, -0.7, 1.05, -1.05, 1.4, -1.4, Math.PI * 0.5, -Math.PI * 0.5};
+        double[] radiusOffsets = {0.0, -1.5, 1.5, -3.0, 3.0};
+
+        for (double angleOffset : angleOffsets) {
+            for (double radiusOffset : radiusOffsets) {
+                double dist = Math.max(5.0, this.targetDistance + radiusOffset);
+                double angle = preferredAngle + angleOffset;
+                double testX = player.locX - Math.sin(angle) * dist;
+                double testZ = player.locZ + Math.cos(angle) * dist;
+                int testY = findGroundAt(MathHelper.floor(testX), MathHelper.floor(player.locY), MathHelper.floor(testZ));
+
+                if (testY <= 0) continue;
+                if (Math.abs(testY - player.locY) > 10.0) continue;
+                if (!canStandAt(testX, testY, testZ)) continue;
+                if (!hasLineOfSightFrom(testX, testY + 1.6, testZ, player.locX, player.locY + 1.6, player.locZ)) continue;
+
+                navigateTowards(testX, testY, testZ, moveSpeed);
+                return;
+            }
+        }
+    }
+
+    private boolean canStandAt(double x, double y, double z) {
+        int blockX = MathHelper.floor(x);
+        int blockY = MathHelper.floor(y);
+        int blockZ = MathHelper.floor(z);
+        return !isBlockSolid(blockX, blockY, blockZ)
+            && !isBlockSolid(blockX, blockY + 1, blockZ)
+            && isBlockSolid(blockX, blockY - 1, blockZ);
     }
     
     /**
@@ -385,18 +495,14 @@ public class EntityHerobrine extends EntityLiving {
         double dist = Math.sqrt(dx * dx + dz * dz);
         
         // Walk towards player to get into visible range (use stalk ratio)
-        float visibleRange = currentFogDistance * STALK_DISTANCE_RATIO;
+        float visibleRange = targetDistance > 0.0F ? targetDistance : currentFogDistance * STALK_DISTANCE_RATIO;
         
         if (dist > visibleRange && dist > 0.1) {
-            dx /= dist;
-            dz /= dist;
-            
-            // Slow, deliberate approach
-            double approachSpeed = moveSpeed * 0.7;
-            smoothMove(dx * approachSpeed, dz * approachSpeed);
+            navigateTowards(targetPlayer.locX, targetPlayer.locY, targetPlayer.locZ, (float)(moveSpeed * 0.7));
         } else {
             // Close enough - stop and stare, then event manager will trigger retreat
-            // Just stand still
+            clearNavigationPath();
+            haltHorizontalMotion();
         }
     }
     
@@ -423,9 +529,13 @@ public class EntityHerobrine extends EntityLiving {
         if (dist > 0.1) {
             dx /= dist;
             dz /= dist;
-            
-            // Smooth backward movement
-            smoothMove(dx * retreatSpeed, dz * retreatSpeed);
+
+            double retreatTargetX = this.locX + dx * 8.0;
+            double retreatTargetZ = this.locZ + dz * 8.0;
+            navigateTowards(retreatTargetX, this.locY, retreatTargetZ, retreatSpeed);
+        } else {
+            clearNavigationPath();
+            haltHorizontalMotion();
         }
     }
     
@@ -462,11 +572,97 @@ public class EntityHerobrine extends EntityLiving {
         escapeAttemptTicks = 0;
         stuckTicks = 0;
         totallyStuckTicks = 0;
+        clearNavigationPath();
     }
     
     // === MOVEMENT AND PATHFINDING ===
+
+    private void navigateTowards(double targetX, double targetY, double targetZ, float speed) {
+        boolean needsRepath = this.navigationPath == null || this.navigationPath.b() || this.navigationRepathCooldown <= 0;
+
+        if (!needsRepath) {
+            if (Double.isNaN(this.navTargetX) || Double.isNaN(this.navTargetY) || Double.isNaN(this.navTargetZ)) {
+                needsRepath = true;
+            } else {
+                double navDx = targetX - this.navTargetX;
+                double navDy = targetY - this.navTargetY;
+                double navDz = targetZ - this.navTargetZ;
+                needsRepath = navDx * navDx + navDy * navDy + navDz * navDz > 4.0D;
+            }
+        }
+
+        if (needsRepath) {
+            this.navigationPath = this.world.a(
+                this,
+                MathHelper.floor(targetX),
+                MathHelper.floor(targetY),
+                MathHelper.floor(targetZ),
+                NAVIGATION_RANGE
+            );
+            this.navTargetX = targetX;
+            this.navTargetY = targetY;
+            this.navTargetZ = targetZ;
+            this.navigationRepathCooldown = NAVIGATION_REPATH_TICKS;
+        }
+
+        if (this.navigationPath != null && !this.navigationPath.b()) {
+            Vec3D nextPoint = this.navigationPath.a(this);
+            double entityWidth = this.length * 2.0F;
+
+            while (nextPoint != null && nextPoint.d(this.locX, nextPoint.b, this.locZ) < entityWidth * entityWidth) {
+                this.navigationPath.a();
+                if (this.navigationPath.b()) {
+                    nextPoint = null;
+                    break;
+                }
+                nextPoint = this.navigationPath.a(this);
+            }
+
+            if (nextPoint != null) {
+                double dx = nextPoint.a - this.locX;
+                double dz = nextPoint.c - this.locZ;
+                double dist = Math.sqrt(dx * dx + dz * dz);
+                if (dist > 0.001D) {
+                    double desiredMoveX = (dx / dist) * speed;
+                    double desiredMoveZ = (dz / dist) * speed;
+                    smoothedNavMoveX = smoothedNavMoveX * (1.0D - NAVIGATION_SMOOTHING) + desiredMoveX * NAVIGATION_SMOOTHING;
+                    smoothedNavMoveZ = smoothedNavMoveZ * (1.0D - NAVIGATION_SMOOTHING) + desiredMoveZ * NAVIGATION_SMOOTHING;
+                    tryMove(smoothedNavMoveX, smoothedNavMoveZ, true, nextPoint.b);
+                    return;
+                }
+            }
+        }
+
+        double directX = targetX - this.locX;
+        double directZ = targetZ - this.locZ;
+        double directDist = Math.sqrt(directX * directX + directZ * directZ);
+        if (directDist > 0.001D) {
+            tryMove((directX / directDist) * speed, (directZ / directDist) * speed, false, this.locY);
+        }
+    }
+
+    private void clearNavigationPath() {
+        this.navigationPath = null;
+        this.navTargetX = Double.NaN;
+        this.navTargetY = Double.NaN;
+        this.navTargetZ = Double.NaN;
+        this.smoothedNavMoveX = 0.0D;
+        this.smoothedNavMoveZ = 0.0D;
+    }
+
+    private void haltHorizontalMotion() {
+        this.motX = 0.0D;
+        this.motZ = 0.0D;
+        if (this.onGround && !isJumping) {
+            this.motY = 0.0D;
+        }
+    }
     
     private void tryMove(double moveX, double moveZ) {
+		tryMove(moveX, moveZ, false, this.locY);
+	}
+
+	private void tryMove(double moveX, double moveZ, boolean pathGuided, double nextPointY) {
         double startX = this.locX;
         double startZ = this.locZ;
         
@@ -478,42 +674,42 @@ public class EntityHerobrine extends EntityLiving {
         tryOpenDoorsAt(targetBlockX, currentY, targetBlockZ);
         tryOpenDoorsAt(targetBlockX, currentY + 1, targetBlockZ);
         
-        // Analyze the path to decide if we need to jump
-        PathAnalysis path = analyzePath(moveX, moveZ);
-        
         // Decide if we need to jump
         if (!isJumping && this.onGround) {
-            if (path.type == PathType.STEP_UP) {
-                // Need to jump up one block
-                this.motY = JUMP_VELOCITY;
-                isJumping = true;
-                jumpTicks = 0;
-                jumpTargetX = this.locX + moveX * 3; // Where we're trying to land
-                jumpTargetZ = this.locZ + moveZ * 3;
-                
-                // Give initial horizontal boost
-                this.motX = moveX * 1.2;
-                this.motZ = moveZ * 1.2;
-            } else if (path.type == PathType.GAP && path.gapSize <= 4) {
-                // Need to jump over a gap - stronger jump for larger gaps
-                double gapBoost = 1.0 + path.gapSize * 0.2;
-                this.motY = JUMP_VELOCITY * gapBoost;
-                isJumping = true;
-                jumpTicks = 0;
-                jumpTargetX = this.locX + moveX * (path.gapSize + 2);
-                jumpTargetZ = this.locZ + moveZ * (path.gapSize + 2);
-                
-                // Strong horizontal boost for gap jumping
-                this.motX = moveX * (1.5 + path.gapSize * 0.3);
-                this.motZ = moveZ * (1.5 + path.gapSize * 0.3);
-            } else if (path.type == PathType.WALL) {
-                // Wall - try to go around
-                consecutiveBlockedTicks++;
-                if (pathfindCooldown <= 0) {
-                    pathfindCooldown = 3;
-                    if (trySmartPathAround(moveX, moveZ)) {
-                        consecutiveBlockedTicks = 0;
-                        return;
+            if (pathGuided) {
+                int floorY = MathHelper.floor(this.boundingBox.b + 0.5D);
+                if (nextPointY > (double) floorY + 0.05D || this.positionChanged) {
+                    this.motY = JUMP_VELOCITY;
+                    isJumping = true;
+                    jumpTicks = 0;
+                }
+            } else {
+                PathAnalysis path = analyzePath(moveX, moveZ);
+                if (path.type == PathType.STEP_UP) {
+                    this.motY = JUMP_VELOCITY;
+                    isJumping = true;
+                    jumpTicks = 0;
+                    jumpTargetX = this.locX + moveX * 3;
+                    jumpTargetZ = this.locZ + moveZ * 3;
+                    this.motX = moveX * 1.2;
+                    this.motZ = moveZ * 1.2;
+                } else if (path.type == PathType.GAP && path.gapSize <= 4) {
+                    double gapBoost = 1.0 + path.gapSize * 0.2;
+                    this.motY = JUMP_VELOCITY * gapBoost;
+                    isJumping = true;
+                    jumpTicks = 0;
+                    jumpTargetX = this.locX + moveX * (path.gapSize + 2);
+                    jumpTargetZ = this.locZ + moveZ * (path.gapSize + 2);
+                    this.motX = moveX * (1.5 + path.gapSize * 0.3);
+                    this.motZ = moveZ * (1.5 + path.gapSize * 0.3);
+                } else if (path.type == PathType.WALL) {
+                    consecutiveBlockedTicks++;
+                    if (pathfindCooldown <= 0) {
+                        pathfindCooldown = 3;
+                        if (trySmartPathAround(moveX, moveZ)) {
+                            consecutiveBlockedTicks = 0;
+                            return;
+                        }
                     }
                 }
             }
@@ -555,6 +751,10 @@ public class EntityHerobrine extends EntityLiving {
             stuckTicks++;
             totallyStuckTicks++;
             if (stuckTicks > 8) {
+                if (pathGuided) {
+                    clearNavigationPath();
+                    navigationRepathCooldown = 0;
+                }
                 tryUnstick();
                 stuckTicks = 0;
                 consecutiveBlockedTicks = 0;
@@ -1117,6 +1317,13 @@ public class EntityHerobrine extends EntityLiving {
     
     public void setAIState(int state) {
         this.aiState = state;
+        if (state != AI_STALKING) {
+            hasStalkSample = false;
+        }
+        if (state == AI_IDLE) {
+            clearNavigationPath();
+            haltHorizontalMotion();
+        }
     }
     
     public int getAIState() {
@@ -1125,6 +1332,14 @@ public class EntityHerobrine extends EntityLiving {
     
     public void setTargetDistance(float distance) {
         this.targetDistance = distance;
+    }
+
+    public boolean consumeDamagedFlag() {
+        if (!this.damagedByPlayerThisTick) {
+            return false;
+        }
+        this.damagedByPlayerThisTick = false;
+        return true;
     }
     
     public boolean shouldDespawn() {
@@ -1202,11 +1417,59 @@ public class EntityHerobrine extends EntityLiving {
     protected int j() { // dropped item ID
         return 0; // Drops nothing
     }
+
+    @Override
+    protected void a(float f) {
+        super.a(0.0F);
+    }
+
+    @Override
+    public boolean K() {
+        return false;
+    }
     
     @Override
     public boolean damageEntity(Entity entity, int i) {
-        // Herobrine cannot be damaged
-        return false;
+        boolean tookDamage = super.damageEntity(entity, i);
+        if (tookDamage && entity instanceof EntityHuman) {
+            this.targetPlayer = (EntityHuman) entity;
+            this.damagedByPlayerThisTick = true;
+            if (this.aiState != AI_ESCAPING) {
+                this.aiState = AI_RETREATING;
+            }
+        }
+        return tookDamage;
+    }
+
+    private void escapeFromEmbeddedBlock() {
+        int x = MathHelper.floor(this.locX);
+        int y = MathHelper.floor(this.locY);
+        int z = MathHelper.floor(this.locZ);
+
+        for (int radius = 1; radius <= 3; radius++) {
+            for (int ox = -radius; ox <= radius; ox++) {
+                for (int oz = -radius; oz <= radius; oz++) {
+                    int testX = x + ox;
+                    int testZ = z + oz;
+                    int groundY = findGroundAt(testX, y, testZ);
+                    if (groundY <= 0) continue;
+                    if (!canStandAt(testX + 0.5D, groundY, testZ + 0.5D)) continue;
+
+                    this.setPosition(testX + 0.5D, groundY, testZ + 0.5D);
+                    this.motX = 0.0D;
+                    this.motY = 0.0D;
+                    this.motZ = 0.0D;
+                    return;
+                }
+            }
+        }
+    }
+
+    private boolean isEmbeddedInSolidBlock() {
+        int x = MathHelper.floor(this.locX);
+        int y = MathHelper.floor(this.locY);
+        int z = MathHelper.floor(this.locZ);
+        return isBlockSolid(x, y, z) || isBlockSolid(x, y + 1, z);
     }
     
     @Override

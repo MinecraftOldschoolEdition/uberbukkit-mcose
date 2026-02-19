@@ -101,6 +101,10 @@ public class InventoryPlayer implements IInventory {
         } else {
             if (this.items[k] == null) {
                 this.items[k] = new ItemStack(i, 0, itemstack.getData());
+                // Preserve NBT tag (e.g. written book pages, map data, enchantments)
+                if (itemstack.tag != null) {
+                    this.items[k].tag = itemstack.tag;
+                }
             }
 
             int l = j;

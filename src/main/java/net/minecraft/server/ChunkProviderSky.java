@@ -5,8 +5,27 @@ import java.util.Random;
 public class ChunkProviderSky implements IChunkProvider {
     private static final int SKY_EXTRA_TREE_ATTEMPTS = 6;
     private static final int SKY_COLD_EXTRA_TREE_ATTEMPTS = 2;
+    private static final int SKY_BIRCH_TREE_CHANCE = 8;
     private static final int SKY_SANDSTONE_SUPPORT_BASE = 4;
     private static final int SKY_SANDSTONE_SUPPORT_VARIATION = 4;
+    private static final double SKY_BASE_STONE_DENSITY = 0.6D;
+    private static final double SKY_MIN_STONE_DENSITY = 0.15D;
+    private static final double SKY_MAX_ORE_SCALE = 4.0D;
+    private static final double SKY_RARE_ORE_EXTRA_MULTIPLIER = 1.35D;
+    private static final double SKY_MAX_RARE_ORE_SCALE = 8.0D;
+    private static final int SKY_GOLD_MIN_Y = 8;
+    private static final int SKY_GOLD_Y_SPAN = 32;
+    private static final int SKY_REDSTONE_MIN_Y = 8;
+    private static final int SKY_REDSTONE_Y_SPAN = 24;
+    private static final int SKY_DIAMOND_MIN_Y = 10;
+    private static final int SKY_DIAMOND_Y_SPAN = 24;
+    private static final int SKY_LAPIS_MIN_Y = 8;
+    private static final int SKY_LAPIS_Y_SPAN = 24;
+    private static final int SKY_ORE_SAMPLE_XZ_STEP = 2;
+    private static final int SKY_ORE_SAMPLE_Y_STEP = 8;
+    private static final int SKY_PUMPKIN_BASE_CHANCE = 64;
+    private static final int SKY_PUMPKIN_MIN_CHANCE = 12;
+    private static final int SKY_PUMPKIN_CHANCE_ROLLS = 2;
 
     private Random j;
     private NoiseGeneratorOctaves k;
@@ -299,7 +318,75 @@ public class ChunkProviderSky implements IChunkProvider {
             return this.getSpruceTreeGenerator();
         }
 
-        return biomebase.a(this.j);
+        return this.applySkyBirchVariation(biomebase.a(this.j));
+    }
+
+    private WorldGenerator applySkyBirchVariation(WorldGenerator worldgenerator) {
+        return worldgenerator instanceof WorldGenTrees && this.j.nextInt(SKY_BIRCH_TREE_CHANCE) == 0 ? new WorldGenForest() : worldgenerator;
+    }
+
+    private double getSkyStoneDensityForChunk(int i, int j) {
+        int k = 0;
+        int l = 0;
+
+        for (int i1 = 0; i1 < 16; i1 += SKY_ORE_SAMPLE_XZ_STEP) {
+            for (int j1 = 0; j1 < 16; j1 += SKY_ORE_SAMPLE_XZ_STEP) {
+                for (int k1 = 0; k1 < 128; k1 += SKY_ORE_SAMPLE_Y_STEP) {
+                    ++l;
+                    if (this.p.getTypeId(i + i1, k1, j + j1) == Block.STONE.id) {
+                        ++k;
+                    }
+                }
+            }
+        }
+
+        return l == 0 ? 1.0D : (double) k / (double) l;
+    }
+
+    private int getSkyScaledOreAttempts(int i, double d0) {
+        double d1 = SKY_BASE_STONE_DENSITY / Math.max(d0, SKY_MIN_STONE_DENSITY);
+
+        if (d1 < 1.0D) {
+            d1 = 1.0D;
+        } else if (d1 > SKY_MAX_ORE_SCALE) {
+            d1 = SKY_MAX_ORE_SCALE;
+        }
+
+        return Math.max(i, (int) Math.round((double) i * d1));
+    }
+
+    private int getSkyScaledRareOreAttempts(int i, double d0) {
+        double d1 = SKY_BASE_STONE_DENSITY / Math.max(d0, SKY_MIN_STONE_DENSITY);
+        d1 *= SKY_RARE_ORE_EXTRA_MULTIPLIER;
+
+        if (d1 < 1.0D) {
+            d1 = 1.0D;
+        } else if (d1 > SKY_MAX_RARE_ORE_SCALE) {
+            d1 = SKY_MAX_RARE_ORE_SCALE;
+        }
+
+        return Math.max(i, (int) Math.round((double) i * d1));
+    }
+
+    private int getSkyPumpkinPatchAttempts(double d0) {
+        double d1 = SKY_BASE_STONE_DENSITY / Math.max(d0, SKY_MIN_STONE_DENSITY);
+
+        if (d1 < 1.0D) {
+            d1 = 1.0D;
+        } else if (d1 > SKY_MAX_ORE_SCALE) {
+            d1 = SKY_MAX_ORE_SCALE;
+        }
+
+        int i = Math.max(SKY_PUMPKIN_MIN_CHANCE, (int) Math.round((double) SKY_PUMPKIN_BASE_CHANCE / d1));
+        int j = 0;
+
+        for (int k = 0; k < SKY_PUMPKIN_CHANCE_ROLLS; ++k) {
+            if (this.j.nextInt(i) == 0) {
+                ++j;
+            }
+        }
+
+        return j;
     }
 
     public void getChunkAt(IChunkProvider ichunkprovider, int i, int j) {
@@ -334,6 +421,8 @@ public class ChunkProviderSky implements IChunkProvider {
             }
         }
 
+        double skyStoneDensity = this.getSkyStoneDensityForChunk(k, l);
+
         int j2;
 
         net.minecraft.server.WorldGenerator dungeonGen = net.minecraft.server.registry.Features.create("minecraft:dungeon");
@@ -365,44 +454,44 @@ public class ChunkProviderSky implements IChunkProvider {
             (new WorldGenMinable(Block.GRAVEL.id, 32)).a(this.p, this.j, l1, i2, j2);
         }
 
-        for (k1 = 0; k1 < 20; ++k1) {
+        for (k1 = 0; k1 < this.getSkyScaledOreAttempts(20, skyStoneDensity); ++k1) {
             l1 = k + this.j.nextInt(16);
             i2 = this.j.nextInt(128);
             j2 = l + this.j.nextInt(16);
             (new WorldGenMinable(Block.COAL_ORE.id, 16)).a(this.p, this.j, l1, i2, j2);
         }
 
-        for (k1 = 0; k1 < 20; ++k1) {
+        for (k1 = 0; k1 < this.getSkyScaledOreAttempts(20, skyStoneDensity); ++k1) {
             l1 = k + this.j.nextInt(16);
             i2 = this.j.nextInt(64);
             j2 = l + this.j.nextInt(16);
             (new WorldGenMinable(Block.IRON_ORE.id, 8)).a(this.p, this.j, l1, i2, j2);
         }
 
-        for (k1 = 0; k1 < 2; ++k1) {
+        for (k1 = 0; k1 < this.getSkyScaledRareOreAttempts(2, skyStoneDensity); ++k1) {
             l1 = k + this.j.nextInt(16);
-            i2 = this.j.nextInt(32);
+            i2 = SKY_GOLD_MIN_Y + this.j.nextInt(SKY_GOLD_Y_SPAN);
             j2 = l + this.j.nextInt(16);
             (new WorldGenMinable(Block.GOLD_ORE.id, 8)).a(this.p, this.j, l1, i2, j2);
         }
 
-        for (k1 = 0; k1 < 8; ++k1) {
+        for (k1 = 0; k1 < this.getSkyScaledOreAttempts(8, skyStoneDensity); ++k1) {
             l1 = k + this.j.nextInt(16);
-            i2 = this.j.nextInt(16);
+            i2 = SKY_REDSTONE_MIN_Y + this.j.nextInt(SKY_REDSTONE_Y_SPAN);
             j2 = l + this.j.nextInt(16);
             (new WorldGenMinable(Block.REDSTONE_ORE.id, 7)).a(this.p, this.j, l1, i2, j2);
         }
 
-        for (k1 = 0; k1 < 1; ++k1) {
+        for (k1 = 0; k1 < this.getSkyScaledRareOreAttempts(1, skyStoneDensity); ++k1) {
             l1 = k + this.j.nextInt(16);
-            i2 = this.j.nextInt(16);
+            i2 = SKY_DIAMOND_MIN_Y + this.j.nextInt(SKY_DIAMOND_Y_SPAN);
             j2 = l + this.j.nextInt(16);
             (new WorldGenMinable(Block.DIAMOND_ORE.id, 7)).a(this.p, this.j, l1, i2, j2);
         }
 
-        for (k1 = 0; k1 < 1; ++k1) {
+        for (k1 = 0; k1 < this.getSkyScaledRareOreAttempts(1, skyStoneDensity); ++k1) {
             l1 = k + this.j.nextInt(16);
-            i2 = this.j.nextInt(16) + this.j.nextInt(16);
+            i2 = SKY_LAPIS_MIN_Y + this.j.nextInt(SKY_LAPIS_Y_SPAN) + this.j.nextInt(SKY_LAPIS_Y_SPAN);
             j2 = l + this.j.nextInt(16);
             (new WorldGenMinable(Block.LAPIS_ORE.id, 6)).a(this.p, this.j, l1, i2, j2);
         }
@@ -511,11 +600,21 @@ public class ChunkProviderSky implements IChunkProvider {
             (new WorldGenReed()).a(this.p, this.j, j2, k2, l2);
         }
 
-        if (this.j.nextInt(32) == 0) {
-            i2 = k + this.j.nextInt(16) + 8;
-            j2 = this.j.nextInt(128);
+        for (i2 = 0; i2 < this.getSkyPumpkinPatchAttempts(skyStoneDensity); ++i2) {
+            j2 = k + this.j.nextInt(16) + 8;
             k2 = l + this.j.nextInt(16) + 8;
-            (new WorldGenPumpkin()).a(this.p, this.j, i2, j2, k2);
+            l2 = this.p.getHighestBlockYAt(j2, k2);
+
+            while (l2 > 1 && !this.p.getMaterial(j2, l2 - 1, k2).isSolid()) {
+                --l2;
+            }
+
+            if (l2 > 1) {
+                int groundBlockId = this.p.getTypeId(j2, l2 - 1, k2);
+                if (groundBlockId == Block.GRASS.id || groundBlockId == Block.DIRT.id) {
+                    (new WorldGenPumpkin()).a(this.p, this.j, j2, l2, k2);
+                }
+            }
         }
 
         i2 = 0;

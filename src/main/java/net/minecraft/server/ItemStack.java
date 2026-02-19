@@ -259,7 +259,16 @@ public final class ItemStack {
     }
 
     private boolean d(ItemStack itemstack) {
-        return this.count != itemstack.count ? false : (this.id != itemstack.id ? false : this.damage == itemstack.damage);
+        if (this.count != itemstack.count) return false;
+        if (this.id != itemstack.id) return false;
+        if (this.damage != itemstack.damage) return false;
+        // MCOSE: Also compare NBT tags so items with different data (e.g. written books,
+        // maps, enchanted items) are detected as changed by container sync.
+        // Without this, a book picked up after being dropped would not trigger a
+        // Packet103SetSlot because id/count/damage match the cached slot.
+        if (this.tag == null && itemstack.tag == null) return true;
+        if (this.tag == null || itemstack.tag == null) return false;
+        return this.tag.equals(itemstack.tag);
     }
 
     public boolean doMaterialsMatch(ItemStack itemstack) {

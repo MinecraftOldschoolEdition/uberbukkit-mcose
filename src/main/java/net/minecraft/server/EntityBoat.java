@@ -99,6 +99,22 @@ public class EntityBoat extends Entity {
             // i = event.getDamage(); // TODO Why don't we do this?
             // CraftBukkit end
 
+            if (entity instanceof EntityPlayer && ((EntityPlayer) entity).gameMode == 1) {
+                VehicleDestroyEvent destroyEvent = new VehicleDestroyEvent(vehicle, attacker);
+                this.world.getServer().getPluginManager().callEvent(destroyEvent);
+
+                if (destroyEvent.isCancelled()) {
+                    return true;
+                }
+
+                if (this.passenger != null) {
+                    this.passenger.mount(this);
+                }
+
+                this.die();
+                return true;
+            }
+
             this.c = -this.c;
             this.b = 10;
             this.damage += i * 10;
