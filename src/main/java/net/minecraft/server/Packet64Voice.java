@@ -6,7 +6,8 @@ import java.io.IOException;
 import java.util.Arrays;
 
 public class Packet64Voice extends Packet {
-    public static final int MAX_PAYLOAD_SIZE = 8192;
+    // Opus voice packets are capped to a small payload to prevent raw-PCM fallback traffic.
+    public static final int MAX_PAYLOAD_SIZE = 1024;
 
     public int entityId;
     public float maxDistance;

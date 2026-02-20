@@ -220,6 +220,10 @@ public class VoiceChatUDPServer {
         
         byte[] audioData = new byte[data.length - 10];
         buf.get(audioData);
+
+        if (audioData.length == 0 || audioData.length > Packet64Voice.MAX_PAYLOAD_SIZE) {
+            return;
+        }
         
         // Find the sending player
         EntityPlayer senderPlayer = findPlayerByUUID(sender.playerId);
@@ -303,6 +307,10 @@ public class VoiceChatUDPServer {
     private void sendPlayerSound(VoiceClient recipient, UUID senderId, String senderName,
                                   byte[] audioData, double x, double y, double z,
                                   float distance, float maxDistance, boolean whispering) {
+        if (audioData == null || audioData.length == 0 || audioData.length > Packet64Voice.MAX_PAYLOAD_SIZE) {
+            return;
+        }
+
         try {
             byte[] nameBytes = senderName.getBytes("UTF-8");
             ByteBuffer buf = ByteBuffer.allocate(1 + 16 + 1 + nameBytes.length + 8 + 8 + 8 + 4 + 4 + 1 + audioData.length);
