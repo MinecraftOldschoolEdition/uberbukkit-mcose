@@ -73,8 +73,18 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     // Vanilla ordering: no pre-login buffering required
     private boolean loginSent = true;
     private java.util.List preLoginWorldPackets = null;
-    private static final long VOICE_PACKET_COOLDOWN_MS = 40L;
-    private long lastVoicePacketAt = 0L;
+    // Keep an abuse guard for TCP voice failover, but set thresholds high enough so
+    // legitimate WAN jitter/burst delivery is not clipped.
+    private static final long VOICE_TCP_RATE_WINDOW_MS = 1000L;
+    private static final int VOICE_TCP_MAX_PACKETS_PER_WINDOW = 320;
+    private static final int VOICE_TCP_MAX_BYTES_PER_WINDOW = 512 * 1024;
+    private long voiceTcpWindowStartAt = 0L;
+    private int voiceTcpPacketsInWindow = 0;
+    private int voiceTcpBytesInWindow = 0;
+    private static final long VOICE_TCP_ATTEMPT_LOG_INTERVAL_MS = 1000L;
+    private static final long VOICE_TCP_DROP_LOG_INTERVAL_MS = 1500L;
+    private long lastVoiceTcpAttemptLogAt = 0L;
+    private long lastVoiceTcpDropLogAt = 0L;
     
     // MCOSE version checking
     private boolean receivedVersionPacket = false;
@@ -671,44 +681,107 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     }
 
     public void handle64Voice(Packet64Voice packet64voice) {
+        long now = System.currentTimeMillis();
+        int payloadLength = packet64voice != null && packet64voice.audioData != null ? packet64voice.audioData.length : -1;
+
         if (!this.minecraftServer.isVoiceChatEnabled()) {
+            logVoiceTcpDrop(now, payloadLength, "voice-chat-disabled");
             return;
         }
 
-        if (packet64voice == null || packet64voice.audioData == null || packet64voice.audioData.length == 0) {
+        if (packet64voice == null || packet64voice.audioData == null) {
+            logVoiceTcpDrop(now, payloadLength, "empty-payload");
             return;
         }
+
+        boolean stopMarker = packet64voice.audioData.length == 0;
 
         if (packet64voice.audioData.length > Packet64Voice.MAX_PAYLOAD_SIZE) {
+            logVoiceTcpDrop(now, packet64voice.audioData.length, "payload-too-large");
             this.disconnect("Invalid voice payload");
             return;
         }
 
         if (this.player == null || this.player.dead) {
+            logVoiceTcpDrop(now, packet64voice.audioData.length, "player-missing-or-dead");
             return;
         }
 
-        long now = System.currentTimeMillis();
-        if (this.lastVoicePacketAt != 0L && now - this.lastVoicePacketAt < VOICE_PACKET_COOLDOWN_MS) {
+        if (!stopMarker && isTcpVoiceRateLimited(now, packet64voice.audioData.length)) {
+            logVoiceTcpDrop(now, packet64voice.audioData.length, "rate-limited");
             return;
         }
-        this.lastVoicePacketAt = now;
 
 		if(uk.betacraft.uberbukkit.AdminRegistry.isMuted(this.player.name)) {
+            logVoiceTcpDrop(now, packet64voice.audioData.length, "player-muted");
 			return;
 		}
 
 		if(!this.canUseVoiceChat()) {
+            logVoiceTcpDrop(now, packet64voice.audioData.length, "permission-denied");
 			return;
 		}
 
-        if(this.minecraftServer.chatRoomManager.getRoomForPlayer(this.player) != null) {
-            this.minecraftServer.chatRoomManager.broadcastVoice(this.player, packet64voice);
+        if(this.minecraftServer.chatRoomManager.hasVoiceRoom(this.player)) {
+            logVoiceTcpAttempt(now, packet64voice.audioData.length, stopMarker ? "room-stop" : "room");
+            Packet64Voice outbound = packet64voice.cloneForForwarding(this.player.id, 0.0F, this.player.name);
+            this.minecraftServer.chatRoomManager.broadcastVoice(this.player, outbound);
             return;
         }
 
+        logVoiceTcpAttempt(now, packet64voice.audioData.length, stopMarker ? "proximity-stop" : "proximity");
         Packet64Voice outbound = packet64voice.cloneForForwarding(this.player.id, (float) this.minecraftServer.getVoiceChatBroadcastRadius(), this.player.name);
         this.minecraftServer.serverConfigurationManager.sendPacketNearby(this.player, this.player.locX, this.player.locY, this.player.locZ, this.minecraftServer.getVoiceChatBroadcastRadius(), this.player.dimension, outbound);
+    }
+
+    private void logVoiceTcpAttempt(long now, int payloadLength, String route) {
+        if (now - this.lastVoiceTcpAttemptLogAt < VOICE_TCP_ATTEMPT_LOG_INTERVAL_MS) {
+            return;
+        }
+        this.lastVoiceTcpAttemptLogAt = now;
+        String playerName = this.player != null && this.player.name != null ? this.player.name : "<unknown>";
+        a.info(
+            "[VoiceChat][ServerTcpRx] Voice transmit attempt player=" + playerName +
+            ", bytes=" + payloadLength +
+            ", route=" + route
+        );
+    }
+
+    private void logVoiceTcpDrop(long now, int payloadLength, String reason) {
+        if (now - this.lastVoiceTcpDropLogAt < VOICE_TCP_DROP_LOG_INTERVAL_MS) {
+            return;
+        }
+        this.lastVoiceTcpDropLogAt = now;
+        String playerName = this.player != null && this.player.name != null ? this.player.name : "<unknown>";
+        a.info(
+            "[VoiceChat][ServerTcpRx] Dropped voice transmit from " + playerName +
+            ", reason=" + reason +
+            ", bytes=" + payloadLength
+        );
+    }
+
+    private boolean isTcpVoiceRateLimited(long now, int payloadLength) {
+        if (this.voiceTcpWindowStartAt == 0L || now - this.voiceTcpWindowStartAt >= VOICE_TCP_RATE_WINDOW_MS) {
+            this.voiceTcpWindowStartAt = now;
+            this.voiceTcpPacketsInWindow = 0;
+            this.voiceTcpBytesInWindow = 0;
+        }
+
+        int safePayloadLength = payloadLength;
+        if (safePayloadLength < 0) {
+            safePayloadLength = 0;
+        }
+
+        if (this.voiceTcpPacketsInWindow >= VOICE_TCP_MAX_PACKETS_PER_WINDOW) {
+            return true;
+        }
+        if (this.voiceTcpBytesInWindow + safePayloadLength > VOICE_TCP_MAX_BYTES_PER_WINDOW) {
+            return true;
+        }
+
+        this.voiceTcpPacketsInWindow++;
+        this.voiceTcpBytesInWindow += safePayloadLength;
+        return false;
     }
 
 	private boolean canUseVoiceChat() {

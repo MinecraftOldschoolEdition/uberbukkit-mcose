@@ -18,23 +18,22 @@ public class ItemWorldMap extends ItemWorldMapBase {
      * Places the map on the block face if valid.
      */
     public boolean a(ItemStack itemstack, EntityHuman entityhuman, World world, int x, int y, int z, int face) {
-        // Only allow placing on walls (sides of blocks), not top/bottom
         if (face == 0 || face == 1) {
             return false;
         }
 
-        // Convert face direction to map direction
-        // face: 2=north, 3=south, 4=west, 5=east
-        // direction: 0=south, 1=west, 2=north, 3=east
-        int direction = 0;
-        if (face == 4) {
-            direction = 1; // west
-        } else if (face == 2) {
-            direction = 2; // north
-        } else if (face == 5) {
-            direction = 3; // east
+        int wallFace = face;
+        if (entityhuman != null) {
+            int expectedFace = expectedHorizontalFace(entityhuman, x, z);
+            if (isOppositeHorizontalFace(wallFace, expectedFace)) {
+                wallFace = expectedFace;
+            }
         }
-        // face == 3 (south) -> direction = 0 (default)
+
+        int direction = wallDirectionFromFace(wallFace);
+        if (direction < 0) {
+            return false;
+        }
 
         int mapId = itemstack.getData();
         EntityMapHanging mapHanging = new EntityMapHanging(world, x, y, z, direction, mapId);
@@ -48,6 +47,31 @@ public class ItemWorldMap extends ItemWorldMapBase {
         }
 
         return false;
+    }
+
+    private static int wallDirectionFromFace(int face) {
+        // Match ItemPainting mapping:
+        // face 2 -> dir 0, face 4 -> dir 1, face 3 -> dir 2, face 5 -> dir 3
+        if (face == 2) return 0;
+        if (face == 4) return 1;
+        if (face == 3) return 2;
+        if (face == 5) return 3;
+        return -1;
+    }
+
+    private static int expectedHorizontalFace(EntityHuman entityhuman, int x, int z) {
+        double dx = entityhuman.locX - ((double) x + 0.5D);
+        double dz = entityhuman.locZ - ((double) z + 0.5D);
+
+        if (Math.abs(dx) > Math.abs(dz)) {
+            return dx > 0.0D ? 5 : 4;
+        }
+
+        return dz > 0.0D ? 3 : 2;
+    }
+
+    private static boolean isOppositeHorizontalFace(int left, int right) {
+        return (left == 2 && right == 3) || (left == 3 && right == 2) || (left == 4 && right == 5) || (left == 5 && right == 4);
     }
 
     public WorldMap a(ItemStack itemstack, World world) {

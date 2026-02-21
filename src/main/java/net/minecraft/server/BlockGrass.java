@@ -17,7 +17,8 @@ public class BlockGrass extends Block {
 
     public void a(World world, int i, int j, int k, Random random) {
         if (!world.isStatic) {
-            if (world.getLightLevel(i, j + 1, k) < 4 && Block.q[world.getTypeId(i, j + 1, k)] > 2) {
+            Material material = world.getMaterial(i, j + 1, k);
+            if (world.getLightLevel(i, j + 1, k) < 4 && material.blocksLight()) {
                 if (random.nextInt(4) != 0) {
                     return;
                 }
@@ -38,9 +39,9 @@ public class BlockGrass extends Block {
                 int l = i + random.nextInt(3) - 1;
                 int i1 = j + random.nextInt(5) - 3;
                 int j1 = k + random.nextInt(3) - 1;
-                int k1 = world.getTypeId(l, i1 + 1, j1);
+                Material spreadMaterial = world.getMaterial(l, i1 + 1, j1);
 
-                if (world.getTypeId(l, i1, j1) == Block.DIRT.id && world.getLightLevel(l, i1 + 1, j1) >= 4 && Block.q[k1] <= 2) {
+                if (world.getTypeId(l, i1, j1) == Block.DIRT.id && world.getLightLevel(l, i1 + 1, j1) >= 4 && !spreadMaterial.blocksLight()) {
                     // CraftBukkit start
                     org.bukkit.World bworld = world.getWorld();
                     org.bukkit.block.BlockState blockState = bworld.getBlockAt(l, i1, j1).getState();

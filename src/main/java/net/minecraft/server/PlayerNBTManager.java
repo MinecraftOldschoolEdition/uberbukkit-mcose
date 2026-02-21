@@ -5,6 +5,9 @@ import com.projectposeidon.johnymuffin.UUIDManager;
 
 import java.io.*;
 import java.util.List;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
 import java.util.logging.Logger;
 
@@ -173,16 +176,27 @@ public class PlayerNBTManager implements PlayerFileData, IDataManager {
                 NBTTagCompound nbttagcompound = new NBTTagCompound();
 
                 entityhuman.d(nbttagcompound);
+                UUID resolvedUuid = UUIDManager.getInstance().getUUIDGraceful(entityhuman.name);
                 File file1 = new File(this.c, "_tmp_.dat");
-                //File file2 = new File(this.c, entityhuman.name + ".dat");
-                //UUIDPlayerStorage.getInstance().getUUIDGraceful(entityhuman.name)
-                File file2 = new File(this.c, UUIDManager.getInstance().getUUIDGraceful(entityhuman.name) + ".dat");
+                File file2 = new File(this.c, resolvedUuid + ".dat");
+                File legacyNameFile = new File(this.c, entityhuman.name + ".dat");
+
                 CompressedStreamTools.a(nbttagcompound, (OutputStream) (new FileOutputStream(file1)));
                 if (file2.exists()) {
                     file2.delete();
                 }
 
                 file1.renameTo(file2);
+
+                // Keep a username-based compatibility copy so data survives UUID source
+                // transitions (online <-> graceful/offline) across restarts.
+                if (!file2.equals(legacyNameFile)) {
+                    try {
+                        copyFileUsingStream(file2, legacyNameFile);
+                    } catch (IOException copyEx) {
+                        a.warning("Failed to write legacy username player data copy for " + entityhuman.name + ": " + copyEx.getMessage());
+                    }
+                }
             } catch (Exception exception) {
                 a.warning("Failed to save player data for " + entityhuman.name);
             }
@@ -234,25 +248,44 @@ public class PlayerNBTManager implements PlayerFileData, IDataManager {
 
     public NBTTagCompound a(String s) {
         if ((boolean) PoseidonConfig.getInstance().getConfigOption("settings.save-playerdata-by-uuid")) {
-            try {
-                File file1 = new File(this.c, UUIDManager.getInstance().getUUIDGraceful(s) + ".dat");
-                File file2 = new File(this.c, s + ".dat");
-                if (!file1.exists()) {
-                    if (file2.exists()) {
-                        //Convert player data
-                        copyFileUsingStream(file2, file1);
-                        File file3 = new File(this.c, s + ".datbackup");
-                        file2.renameTo(file3);
-                        System.out.println("Converting playerdata for " + s + " to a UUID");
+            UUIDManager uuidManager = UUIDManager.getInstance();
+            UUID gracefulUuid = uuidManager.getUUIDGraceful(s);
+            UUID onlineUuid = uuidManager.getUUIDFromUsername(s, true);
+            UUID offlineUuid = UUIDManager.generateOfflineUUID(s);
+
+            File primaryFile = new File(this.c, gracefulUuid + ".dat");
+
+            List<File> candidates = new ArrayList<File>(4);
+            Set<String> seenPaths = new HashSet<String>(4);
+
+            addCandidate(candidates, seenPaths, primaryFile);
+            addCandidate(candidates, seenPaths, onlineUuid == null ? null : new File(this.c, onlineUuid + ".dat"));
+            addCandidate(candidates, seenPaths, offlineUuid == null ? null : new File(this.c, offlineUuid + ".dat"));
+            addCandidate(candidates, seenPaths, new File(this.c, s + ".dat"));
+
+            for (File candidate : candidates) {
+                if (!candidate.exists()) {
+                    continue;
+                }
+
+                try {
+                    NBTTagCompound data = CompressedStreamTools.a((InputStream) (new FileInputStream(candidate)));
+
+                    // If we loaded from a fallback file, migrate to the primary UUID filename
+                    // to stabilize subsequent loads and preserve restart consistency.
+                    if (!candidate.equals(primaryFile) && !primaryFile.exists()) {
+                        try {
+                            copyFileUsingStream(candidate, primaryFile);
+                            System.out.println("Migrated playerdata for " + s + " from " + candidate.getName() + " to " + primaryFile.getName());
+                        } catch (IOException migrationEx) {
+                            a.warning("Failed to migrate player data for " + s + " to " + primaryFile.getName() + ": " + migrationEx.getMessage());
+                        }
                     }
-                }
 
-
-                if (file1.exists()) {
-                    return CompressedStreamTools.a((InputStream) (new FileInputStream(file1)));
+                    return data;
+                } catch (Exception exception) {
+                    a.warning("Failed to load player data for " + s + " from " + candidate.getName());
                 }
-            } catch (Exception exception) {
-                a.warning("Failed to load player data for " + s);
             }
 
             return null;
@@ -260,7 +293,7 @@ public class PlayerNBTManager implements PlayerFileData, IDataManager {
             try {
                 File file1 = new File(this.c, s + ".dat");
 
-                if (file1.exists()) {
+                if (file1.isFile()) {
                     return CompressedStreamTools.a((InputStream) (new FileInputStream(file1)));
                 }
             } catch (Exception exception) {
@@ -269,7 +302,17 @@ public class PlayerNBTManager implements PlayerFileData, IDataManager {
 
             return null;
         }
+    }
 
+    private static void addCandidate(List<File> candidates, Set<String> seenPaths, File candidate) {
+        if (candidate == null) {
+            return;
+        }
+
+        String path = candidate.getPath();
+        if (seenPaths.add(path)) {
+            candidates.add(candidate);
+        }
     }
 
     public PlayerFileData d() {

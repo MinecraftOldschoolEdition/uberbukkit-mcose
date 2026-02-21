@@ -48,6 +48,31 @@ public class VoiceChatRoomManager {
 		return roomName != null ? this.rooms.get(roomName) : null;
 	}
 
+	public synchronized boolean hasVoiceRoom(EntityPlayer player) {
+		return getRoomForPlayer(player) != null;
+	}
+
+	public synchronized List<EntityPlayer> getVoiceRoomRecipients(EntityPlayer speaker) {
+		ChatRoom room = getRoomForPlayer(speaker);
+		if (room == null) {
+			return Collections.emptyList();
+		}
+		List<EntityPlayer> recipients = new ArrayList<EntityPlayer>();
+		for (Object obj : this.server.serverConfigurationManager.players) {
+			if (!(obj instanceof EntityPlayer)) {
+				continue;
+			}
+			EntityPlayer member = (EntityPlayer) obj;
+			if (speaker != null && member == speaker) {
+				continue;
+			}
+			if (room.members.contains(member.name.toLowerCase(Locale.ROOT))) {
+				recipients.add(member);
+			}
+		}
+		return recipients;
+	}
+
 	public synchronized void handleAction(EntityPlayer player, Packet66ChatRoomAction packet) {
 		if(player == null || packet == null) {
 			return;

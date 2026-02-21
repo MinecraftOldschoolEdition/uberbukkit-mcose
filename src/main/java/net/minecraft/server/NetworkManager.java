@@ -93,7 +93,11 @@ public class NetworkManager {
         try {
             // CraftBukkit start - cant compile these outside the try
             socket.setSoTimeout(30000);
-            if (PoseidonConfig.getEmptyNode().getBoolean("settings.enable-tpc-nodelay", false)) {
+            boolean tcpNoDelay = PoseidonConfig.getEmptyNode().getBoolean(
+                    "settings.enable-tpc-nodelay",
+                    PoseidonConfig.getEmptyNode().getBoolean("settings.enable-tcp-nodelay", true)
+            );
+            if (tcpNoDelay) {
                 socket.setTcpNoDelay(true);
             }
 
@@ -251,6 +255,7 @@ public class NetworkManager {
             case 105: // update progress bar
             case 106: // transaction
             case 255: // kick
+            case 64:  // voice (TCP failover) - latency sensitive
                 return true;
             default:
                 return false;
@@ -301,6 +306,7 @@ public class NetworkManager {
             case 130: // sign update
             case 205: // client command
             case 250: // plugin payload
+            case 64:  // voice (TCP failover) - latency sensitive
                 return true;
             default:
                 return false;

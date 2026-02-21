@@ -18,6 +18,7 @@ public final class RegistryBootstrap {
 
         BlockRegistryBootstrap.initialize();
         ItemRegistryBootstrap.initialize();
+        NaturalGrowthRegistryBootstrap.initialize();
         ItemCapabilityRegistryBootstrap.initialize();
         BlockCapabilityRegistryBootstrap.initialize();
         BlockMiningRegistryBootstrap.initialize();

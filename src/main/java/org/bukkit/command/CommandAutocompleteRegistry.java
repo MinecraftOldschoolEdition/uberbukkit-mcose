@@ -701,29 +701,11 @@ public final class CommandAutocompleteRegistry {
 
         registerBuiltinArgument(ARG_PLAYER, new ArgumentProvider() {
             public List<String> suggest(CommandSender sender, String[] args, int argIndex, String prefixLower) {
-                ArrayList<String> names = new ArrayList<String>();
-                for (Player player : Bukkit.getOnlinePlayers()) {
-                    if (player == null || player.getName() == null) {
-                        continue;
-                    }
-                    String name = player.getName();
-                    if (safeLower(name).startsWith(prefixLower)) {
-                        names.add(name);
-                    }
-                }
-                return sortAndDedupe(names);
+                return sortAndDedupe(PlayerArgumentResolver.suggest(prefixLower));
             }
 
             public boolean matches(CommandSender sender, String[] args, int argIndex, String token) {
-                if (token == null || token.length() == 0) {
-                    return false;
-                }
-                for (Player player : Bukkit.getOnlinePlayers()) {
-                    if (player != null && player.getName() != null && player.getName().equalsIgnoreCase(token)) {
-                        return true;
-                    }
-                }
-                return false;
+                return PlayerArgumentResolver.isValidPlayerArgument(sender, token);
             }
         });
 

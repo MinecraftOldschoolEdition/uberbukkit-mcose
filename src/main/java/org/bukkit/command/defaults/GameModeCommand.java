@@ -1,9 +1,9 @@
 package org.bukkit.command.defaults;
 
-import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
+import org.bukkit.command.PlayerArgumentResolver;
 import org.bukkit.entity.Player;
 import net.minecraft.server.EntityPlayer;
 import net.minecraft.server.Packet70Bed;
@@ -26,7 +26,7 @@ public class GameModeCommand extends VanillaCommand {
             return false;
         }
 
-        Player target;
+        java.util.List<Player> targets = new java.util.ArrayList<Player>();
         int gameMode;
 
         if (args.length == 1) {
@@ -39,12 +39,12 @@ public class GameModeCommand extends VanillaCommand {
                 sender.sendMessage(ChatColor.RED + "Please specify a player!");
                 return false;
             }
-            target = (Player) sender;
+            targets.add((Player) sender);
         } else {
-            Player playerFirstTarget = Bukkit.getPlayerExact(args[0]);
+            java.util.List<Player> playerFirstTargets = PlayerArgumentResolver.resolve(sender, args[0]);
             int playerFirstMode = parseGameMode(args[1]);
-            if (playerFirstTarget != null && playerFirstMode >= 0) {
-                target = playerFirstTarget;
+            if (!playerFirstTargets.isEmpty() && playerFirstMode >= 0) {
+                targets.addAll(playerFirstTargets);
                 gameMode = playerFirstMode;
             } else {
                 // Mode-first compatibility: /gamemode <mode> <player>
@@ -54,63 +54,74 @@ public class GameModeCommand extends VanillaCommand {
                     return false;
                 }
 
-                target = Bukkit.getPlayerExact(args[1]);
-                if (target == null) {
+                targets.addAll(PlayerArgumentResolver.resolve(sender, args[1]));
+                if (targets.isEmpty()) {
                     sender.sendMessage(ChatColor.RED + "Can't find player " + args[1]);
                     return false;
                 }
             }
         }
 
-        if (target == null) {
+        if (targets.isEmpty()) {
             sender.sendMessage(ChatColor.RED + "Please specify a player!");
             return false;
         }
 
+        String modeName = "survival";
+        for (int i = 0; i < targets.size(); i++) {
+            modeName = applyGameMode(targets.get(i), gameMode);
+        }
+
+        if (targets.size() == 1) {
+            Player target = targets.get(0);
+            if (!sender.equals(target)) {
+                Command.broadcastCommandMessage(sender, "Set " + target.getName() + "'s game mode to " + modeName + " mode");
+            }
+        } else {
+            Command.broadcastCommandMessage(sender, "Set " + targets.size() + " players to " + modeName + " mode");
+        }
+        return true;
+    }
+
+    private String applyGameMode(Player target, int gameMode) {
         EntityPlayer entityPlayer = ((org.bukkit.craftbukkit.entity.CraftPlayer) target).getHandle();
-        String modeName;
+        WorldServer worldserver = ((org.bukkit.craftbukkit.CraftServer)entityPlayer.world.getServer()).getServer().getWorldServer(entityPlayer.dimension);
 
         if (gameMode == 1) {
             entityPlayer.gameMode = 1;
             entityPlayer.updateContainer();
             entityPlayer.netServerHandler.sendPacket(new Packet70Bed(3));
             entityPlayer.netServerHandler.sendPacket(new Packet70Bed(18)); // Disable hardcore hearts
-            WorldServer worldserver = ((org.bukkit.craftbukkit.CraftServer)entityPlayer.world.getServer()).getServer().getWorldServer(entityPlayer.dimension);
             if (worldserver.worldData != null && worldserver.worldData.getTerrainType() == 3) {
                 entityPlayer.netServerHandler.sendPacket(new Packet70Bed(2));
             }
-            modeName = "creative";
             target.sendMessage(ChatColor.GRAY + "Your game mode has been updated to creative mode");
-        } else if (gameMode == 2) {
+            return "creative";
+        }
+
+        if (gameMode == 2) {
             // Hardcore mode: uses survival mechanics but player is banned on death
             entityPlayer.gameMode = 2;
             entityPlayer.updateContainer();
             entityPlayer.netServerHandler.sendPacket(new Packet70Bed(4)); // Same HUD as survival
             entityPlayer.netServerHandler.sendPacket(new Packet70Bed(17)); // Enable hardcore hearts
-            WorldServer worldserver = ((org.bukkit.craftbukkit.CraftServer)entityPlayer.world.getServer()).getServer().getWorldServer(entityPlayer.dimension);
             if (worldserver.worldData != null && worldserver.worldData.getTerrainType() == 3) {
                 entityPlayer.netServerHandler.sendPacket(new Packet70Bed(2));
             }
-            modeName = "hardcore";
             target.sendMessage(ChatColor.DARK_RED + "Your game mode has been updated to HARDCORE mode!");
             target.sendMessage(ChatColor.RED + "Warning: Death is permanent - you will be banned if you die!");
-        } else {
-            entityPlayer.gameMode = 0;
-            entityPlayer.updateContainer();
-            entityPlayer.netServerHandler.sendPacket(new Packet70Bed(4));
-            entityPlayer.netServerHandler.sendPacket(new Packet70Bed(18)); // Disable hardcore hearts
-            WorldServer worldserver = ((org.bukkit.craftbukkit.CraftServer)entityPlayer.world.getServer()).getServer().getWorldServer(entityPlayer.dimension);
-            if (worldserver.worldData != null && worldserver.worldData.getTerrainType() == 3) {
-                entityPlayer.netServerHandler.sendPacket(new Packet70Bed(2));
-            }
-            modeName = "survival";
-            target.sendMessage(ChatColor.GRAY + "Your game mode has been updated to survival mode");
+            return "hardcore";
         }
 
-        if (!sender.equals(target)) {
-            Command.broadcastCommandMessage(sender, "Set " + target.getName() + "'s game mode to " + modeName + " mode");
+        entityPlayer.gameMode = 0;
+        entityPlayer.updateContainer();
+        entityPlayer.netServerHandler.sendPacket(new Packet70Bed(4));
+        entityPlayer.netServerHandler.sendPacket(new Packet70Bed(18)); // Disable hardcore hearts
+        if (worldserver.worldData != null && worldserver.worldData.getTerrainType() == 3) {
+            entityPlayer.netServerHandler.sendPacket(new Packet70Bed(2));
         }
-        return true;
+        target.sendMessage(ChatColor.GRAY + "Your game mode has been updated to survival mode");
+        return "survival";
     }
 
     private int parseGameMode(String token) {
@@ -137,23 +148,7 @@ public class GameModeCommand extends VanillaCommand {
     }
 
     private void addPlayerSuggestions(java.util.List<String> completions, String prefix) {
-        for (org.bukkit.entity.Player p : org.bukkit.Bukkit.getOnlinePlayers()) {
-            if (p.getName().toLowerCase().startsWith(prefix)) {
-                completions.add(p.getName());
-            }
-        }
-    }
-
-    private boolean isOnlinePlayerName(String name) {
-        if (name == null || name.length() == 0) {
-            return false;
-        }
-        for (org.bukkit.entity.Player p : org.bukkit.Bukkit.getOnlinePlayers()) {
-            if (p.getName().equalsIgnoreCase(name)) {
-                return true;
-            }
-        }
-        return false;
+        completions.addAll(PlayerArgumentResolver.suggest(prefix));
     }
 
     @Override
@@ -166,15 +161,17 @@ public class GameModeCommand extends VanillaCommand {
         java.util.List<String> completions = new java.util.ArrayList<String>();
         if (args.length == 1) {
             String prefix = args[0].toLowerCase();
+            addModeSuggestions(completions, prefix);
             addPlayerSuggestions(completions, prefix);
         } else if (args.length == 2) {
             String prefix = args[1].toLowerCase();
-            if (isOnlinePlayerName(args[0])) {
-                addModeSuggestions(completions, prefix);
-            } else if (parseGameMode(args[0]) >= 0) {
+            if (parseGameMode(args[0]) >= 0) {
                 addPlayerSuggestions(completions, prefix);
+            } else if (PlayerArgumentResolver.isValidPlayerArgument(sender, args[0])) {
+                addModeSuggestions(completions, prefix);
             } else {
                 addModeSuggestions(completions, prefix);
+                addPlayerSuggestions(completions, prefix);
             }
         }
         return completions;

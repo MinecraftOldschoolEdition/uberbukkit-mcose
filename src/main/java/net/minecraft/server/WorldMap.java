@@ -159,8 +159,8 @@ public class WorldMap extends WorldMapBase {
                 // Check if player is within map bounds
                 boolean isOutsideBounds = f < (float) (-b0) || f1 < (float) (-b1) || f > (float) b0 || f1 > (float) b1;
                 
-                // Icon type: 0 = normal player arrow, 6 = small dot for off-map players
-                byte b2 = isOutsideBounds ? (byte) 6 : (byte) 0;
+                // Always use the normal player cursor icon, including when clamped off-map.
+                byte b2 = (byte) 0;
                 
                 // Clamp position to map edges when outside bounds (like modern Minecraft)
                 float clampedX = f;
@@ -170,24 +170,10 @@ public class WorldMap extends WorldMapBase {
                     clampedZ = Math.max(-b1, Math.min(b1, f1));
                 }
                 
-                byte b3 = (byte) ((int) ((double) (clampedX * 2.0F) + 0.5D));
-                byte b4 = (byte) ((int) ((double) (clampedZ * 2.0F) + 0.5D));
-                
-                // Calculate rotation to point towards player's actual position when outside bounds
-                byte b5;
-                if (isOutsideBounds) {
-                    // Point towards the player's actual position relative to the map edge
-                    double dx = f - clampedX;
-                    double dz = f1 - clampedZ;
-                    if (dx != 0 || dz != 0) {
-                        double angle = Math.atan2(dz, dx);
-                        b5 = (byte) ((int) ((angle * 16.0 / (2 * Math.PI)) + 8.5) & 15);
-                    } else {
-                        b5 = (byte) ((int) ((double) (worldmaphumantracker1.trackee.yaw * 16.0F / 360.0F) + 0.5D));
-                    }
-                } else {
-                    b5 = (byte) ((int) ((double) (worldmaphumantracker1.trackee.yaw * 16.0F / 360.0F) + 0.5D));
-                }
+                byte b3 = clampMapIconCoord(clampedX);
+                byte b4 = clampMapIconCoord(clampedZ);
+                // Keep marker facing consistent with player yaw even while clamped off-map.
+                byte b5 = (byte) ((int) ((double) (worldmaphumantracker1.trackee.yaw * 16.0F / 360.0F) + 0.5D));
 
                 if (this.map < 0) {
                     int j = this.g / 10;
@@ -214,6 +200,19 @@ public class WorldMap extends WorldMapBase {
 
             return abyte;
         }
+    }
+
+    private static byte clampMapIconCoord(float value) {
+        int coord = (int) ((double) (value * 2.0F) + 0.5D);
+        if (coord < -128) {
+            coord = -128;
+        }
+
+        if (coord > 127) {
+            coord = 127;
+        }
+
+        return (byte) coord;
     }
 
     public void a(int i, int j, int k) {

@@ -70,6 +70,7 @@ public final class AchievementManager {
         }
 
         unlockedAchievementIds.add(Integer.valueOf(achievement.e));
+        persistPlayerData();
         ServerStatistics.getInstance().recordAchievement(player.name, achievement);
         sendAchievementPacket(achievement);
         broadcastAchievement(achievement);
@@ -92,6 +93,7 @@ public final class AchievementManager {
         }
 
         unlockedAchievementIds.add(Integer.valueOf(achievement.e));
+        persistPlayerData();
         ServerStatistics.getInstance().recordAchievement(player.name, achievement);
         sendAchievementPacket(achievement);
         broadcastAchievement(achievement);
@@ -154,6 +156,21 @@ public final class AchievementManager {
     private void sendChatToPlayer(String message) {
         if (player.netServerHandler != null) {
             player.netServerHandler.sendPacket(new Packet3Chat(message));
+        }
+    }
+
+    private void persistPlayerData() {
+        try {
+            if (player == null || player.b == null || player.b.serverConfigurationManager == null) {
+                return;
+            }
+
+            PlayerFileData playerFileData = player.b.serverConfigurationManager.playerFileData;
+            if (playerFileData != null) {
+                playerFileData.a(player);
+            }
+        } catch (Throwable t) {
+            log.warning("[AchievementManager] Failed to persist achievements for " + player.name + ": " + t.getMessage());
         }
     }
 

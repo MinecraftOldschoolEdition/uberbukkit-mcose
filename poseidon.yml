@@ -122,7 +122,7 @@ settings:
     delete-duplicate-uuids: false
     save-playerdata-by-uuid: true
     remove-join-leave-debug: true
-    enable-tpc-nodelay: false
+    enable-tpc-nodelay: true
 world:
     settings:
         speed-hack-check:

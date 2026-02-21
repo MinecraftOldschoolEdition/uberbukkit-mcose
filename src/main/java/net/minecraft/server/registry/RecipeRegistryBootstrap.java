@@ -57,6 +57,19 @@ public final class RecipeRegistryBootstrap {
                 new Object[]{"#", Character.valueOf('#'), Block.COAL_BLOCK}
         );
 
+        RecipeRegistryApi.registerShaped(
+                new ResourceLocation("minecraft", "crafting/flint_and_steel"),
+                new ItemStack(Item.FLINT_AND_STEEL, 1),
+                new Object[]{
+                        "A ",
+                        " B",
+                        Character.valueOf('A'),
+                        Item.IRON_INGOT,
+                        Character.valueOf('B'),
+                        Item.FLINT
+                }
+        );
+
         System.out.println("[RecipeRegistryBootstrap] Registered " + RecipeRegistryApi.size() + " recipes");
     }
 }

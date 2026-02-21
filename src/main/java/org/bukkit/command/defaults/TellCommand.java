@@ -4,6 +4,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.ConsoleCommandSender;
+import org.bukkit.command.PlayerArgumentResolver;
 import org.bukkit.entity.Player;
 
 public class TellCommand extends VanillaCommand {
@@ -22,9 +23,20 @@ public class TellCommand extends VanillaCommand {
             return false;
         }
 
-        Player player = Bukkit.getPlayerExact(args[0]);
+        java.util.List<Player> targets = PlayerArgumentResolver.resolve(sender, args[0]);
+        if (sender instanceof Player) {
+            Player source = (Player) sender;
+            java.util.ArrayList<Player> visibleTargets = new java.util.ArrayList<Player>();
+            for (int i = 0; i < targets.size(); i++) {
+                Player candidate = targets.get(i);
+                if (source.canSee(candidate)) {
+                    visibleTargets.add(candidate);
+                }
+            }
+            targets = visibleTargets;
+        }
 
-        if (player == null || (sender instanceof Player && !((Player) sender).canSee(player))) {
+        if (targets.isEmpty()) {
             sender.sendMessage("There's no player by that name online.");
         } else {
             String message = "";
@@ -36,12 +48,13 @@ public class TellCommand extends VanillaCommand {
 
             String result = ChatColor.GRAY + sender.getName() + " whispers " + message;
 
-            if (sender instanceof ConsoleCommandSender) {
-                Bukkit.getLogger().info("[" + sender.getName() + "->" + player.getName() + "] " + message);
-                Bukkit.getLogger().info(result);
+            for (int i = 0; i < targets.size(); i++) {
+                Player target = targets.get(i);
+                if (sender instanceof ConsoleCommandSender) {
+                    Bukkit.getLogger().info("[" + sender.getName() + "->" + target.getName() + "] " + message);
+                }
+                target.sendMessage(result);
             }
-
-            player.sendMessage(result);
         }
 
         return true;
@@ -56,12 +69,7 @@ public class TellCommand extends VanillaCommand {
     public java.util.List<String> tabComplete(org.bukkit.command.CommandSender sender, String alias, String[] args) {
         java.util.List<String> completions = new java.util.ArrayList<String>();
         if (args.length == 1) {
-            String prefix = args[0].toLowerCase();
-            for (Player p : Bukkit.getOnlinePlayers()) {
-                if (p.getName().toLowerCase().startsWith(prefix)) {
-                    completions.add(p.getName());
-                }
-            }
+            completions.addAll(PlayerArgumentResolver.suggest(args[0].toLowerCase()));
         }
         return completions;
     }
