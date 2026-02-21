@@ -12,6 +12,7 @@ public class Packet66ChatRoomAction extends Packet {
 	public static final byte ACTION_REFRESH = 4;
 	public static final byte ACTION_TOGGLE_PIN = 5;
 	public static final byte ACTION_KICK = 6;
+	public static final byte ACTION_SET_VOICE_ROUTE = 7;
 
 	public byte action;
 	public String roomName;
@@ -55,4 +56,3 @@ public class Packet66ChatRoomAction extends Packet {
 		return 1 + (this.roomName != null ? this.roomName.length() : 0) + (this.targetName != null ? this.targetName.length() : 0);
 	}
 }
-

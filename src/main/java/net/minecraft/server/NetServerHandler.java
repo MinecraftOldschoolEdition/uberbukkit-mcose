@@ -522,7 +522,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             this.player.move(d4, d6, d7);
             d4 = d1 - this.player.locX;
             d6 = d2 - this.player.locY;
-            if (d6 > -0.5D || d6 < 0.5D) {
+            if (d6 > -0.5D && d6 < 0.5D) {
                 d6 = 0.0D;
             }
 
@@ -574,11 +574,15 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             // Treat ladders (including ladder gaps via EntityLiving.p()) as valid support to avoid false fly checks
             boolean supported = worldserver.b(axisalignedbb) || this.player.p();
             if (!this.minecraftServer.allowFlight && !supported && !bool) {
-                if (d6 >= -0.03125D) {
+                boolean creativeBypass = this.player != null && this.player instanceof EntityPlayer && ((EntityPlayer) this.player).gameMode == 1;
+                // Consider real downward motion as falling, not hovering/flying.
+                // This avoids false positives on long descents in non-LAN conditions.
+                boolean falling = d6 < -0.03125D || this.player.motY < -0.08D || this.player.fallDistance > 0.0F;
+                if (creativeBypass || falling) {
+                    this.h = 0;
+                } else {
                     ++this.h;
-            if (this.player != null && this.player instanceof EntityPlayer && ((EntityPlayer) this.player).gameMode == 1) {
-                this.h = 0; // Creative bypass
-            } else if (this.h > 80) {
+                    if (this.h > 80) {
                         a.warning(this.player.name + " was kicked for floating too long!");
                         this.disconnect("Flying is not enabled on this server");
                         return;
@@ -722,7 +726,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
 			return;
 		}
 
-        if(this.minecraftServer.chatRoomManager.hasVoiceRoom(this.player)) {
+        if(this.minecraftServer.chatRoomManager.shouldRouteVoiceToRoom(this.player)) {
             logVoiceTcpAttempt(now, packet64voice.audioData.length, stopMarker ? "room-stop" : "room");
             Packet64Voice outbound = packet64voice.cloneForForwarding(this.player.id, 0.0F, this.player.name);
             this.minecraftServer.chatRoomManager.broadcastVoice(this.player, outbound);
@@ -1400,7 +1404,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
 
         String s = packet3chat.message;
 
-        if (s.length() > 100) {
+        if (s.length() > Packet3Chat.MAX_CHAT_LENGTH) {
             this.disconnect("Chat message too long");
         } else {
             s = s.trim();

@@ -350,7 +350,7 @@ public class VoiceChatUDPServer {
                 return;
             }
 
-            boolean routeRoom = server.chatRoomManager.hasVoiceRoom(senderPlayer);
+            boolean routeRoom = server.chatRoomManager.shouldRouteVoiceToRoom(senderPlayer);
             int recipients;
             if (routeRoom) {
                 recipients = broadcastToRoom(senderPlayer, sequence, audioData, whispering);

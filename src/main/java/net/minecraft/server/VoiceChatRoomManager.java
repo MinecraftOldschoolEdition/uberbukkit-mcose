@@ -16,6 +16,7 @@ public class VoiceChatRoomManager {
 	private final MinecraftServer server;
 	private final Map<String, ChatRoom> rooms = new LinkedHashMap<String, ChatRoom>();
 	private final Map<String, String> playerToRoom = new HashMap<String, String>();
+	private final Map<String, Boolean> playerRoomVoiceRouting = new HashMap<String, Boolean>();
 	private final File storageDir;
 	private final File roomsFile;
 
@@ -33,6 +34,7 @@ public class VoiceChatRoomManager {
 		if(player == null) return;
 		String key = player.name.toLowerCase(Locale.ROOT);
 		String roomName = this.playerToRoom.remove(key);
+		this.playerRoomVoiceRouting.remove(key);
 		if(roomName != null) {
 			ChatRoom room = this.rooms.get(roomName);
 			if(room != null) {
@@ -50,6 +52,15 @@ public class VoiceChatRoomManager {
 
 	public synchronized boolean hasVoiceRoom(EntityPlayer player) {
 		return getRoomForPlayer(player) != null;
+	}
+
+	public synchronized boolean shouldRouteVoiceToRoom(EntityPlayer player) {
+		if(!hasVoiceRoom(player) || player == null) {
+			return false;
+		}
+		String key = player.name.toLowerCase(Locale.ROOT);
+		Boolean routeToRoom = this.playerRoomVoiceRouting.get(key);
+		return routeToRoom == null || routeToRoom.booleanValue();
 	}
 
 	public synchronized List<EntityPlayer> getVoiceRoomRecipients(EntityPlayer speaker) {
@@ -99,9 +110,29 @@ public class VoiceChatRoomManager {
 			case Packet66ChatRoomAction.ACTION_KICK:
 				this.kickMember(player, packet.roomName, packet.targetName);
 				break;
+			case Packet66ChatRoomAction.ACTION_SET_VOICE_ROUTE:
+				this.setVoiceRoutePreference(player, packet.targetName);
+				break;
 			default:
 				break;
 		}
+	}
+
+	private void setVoiceRoutePreference(EntityPlayer player, String route) {
+		if(player == null) {
+			return;
+		}
+		String normalized = route != null ? route.trim().toLowerCase(Locale.ROOT) : "";
+		boolean routeToRoom;
+		if("room".equals(normalized) || "chatroom".equals(normalized)) {
+			routeToRoom = true;
+		} else if("proximity".equals(normalized) || "local".equals(normalized)) {
+			routeToRoom = false;
+		} else {
+			return;
+		}
+		this.playerRoomVoiceRouting.put(player.name.toLowerCase(Locale.ROOT), Boolean.valueOf(routeToRoom));
+		sendMessage(player, routeToRoom ? "\u00A77Voice route set to chat room." : "\u00A77Voice route set to proximity.");
 	}
 
 	private boolean canCreate(EntityPlayer player) {
