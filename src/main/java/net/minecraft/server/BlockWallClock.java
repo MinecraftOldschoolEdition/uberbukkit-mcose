@@ -13,12 +13,12 @@ public class BlockWallClock extends Block {
     }
 
     public AxisAlignedBB e(World world, int i, int j, int k) {
-        this.setBoundsForData(world.getData(i, j, k));
+        this.setBoundsForData(CriticalBlockStateAccess.getWallClockMetadata(world, i, j, k));
         return super.e(world, i, j, k);
     }
 
     public void a(IBlockAccess iblockaccess, int i, int j, int k) {
-        this.setBoundsForData(iblockaccess.getData(i, j, k));
+        this.setBoundsForData(CriticalBlockStateAccess.getWallClockMetadata(iblockaccess, i, j, k));
     }
 
     public boolean a() {
@@ -82,7 +82,7 @@ public class BlockWallClock extends Block {
 
     public void doPhysics(World world, int i, int j, int k, int l) {
         if (!this.canClockStay(world, i, j, k)) {
-            this.g(world, i, j, k, world.getData(i, j, k));
+            this.g(world, i, j, k, CriticalBlockStateAccess.getWallClockMetadata(world, i, j, k));
             world.setTypeId(i, j, k, 0);
             return;
         }
@@ -101,7 +101,7 @@ public class BlockWallClock extends Block {
         }
 
         if (!this.canClockStay(world, i, j, k)) {
-            this.g(world, i, j, k, world.getData(i, j, k));
+            this.g(world, i, j, k, CriticalBlockStateAccess.getWallClockMetadata(world, i, j, k));
             world.setTypeId(i, j, k, 0);
             return;
         }
@@ -175,7 +175,7 @@ public class BlockWallClock extends Block {
     }
 
     public void applyPlacement(World world, int i, int j, int k, int metadata) {
-        world.setData(i, j, k, metadata);
+        CriticalBlockStateAccess.setMetadata(world, i, j, k, metadata, true);
         if (!world.isStatic) {
             world.c(i, j, k, this.id, this.c());
             this.notifySignalNeighbors(world, i, j, k);
@@ -183,7 +183,7 @@ public class BlockWallClock extends Block {
     }
 
     private boolean canClockStay(World world, int i, int j, int k) {
-        int l = world.getData(i, j, k);
+        int l = CriticalBlockStateAccess.getWallClockMetadata(world, i, j, k);
         if (l == 0) {
             return this.canPlace(world, i, j, k);
         }

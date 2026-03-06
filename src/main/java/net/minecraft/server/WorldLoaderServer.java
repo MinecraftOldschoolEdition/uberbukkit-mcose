@@ -19,7 +19,7 @@ public class WorldLoaderServer extends WorldLoader {
     public boolean isConvertable(String s) {
         WorldData worlddata = this.b(s);
 
-        return worlddata != null && worlddata.i() == 0;
+        return worlddata != null && worlddata.i() == WorldSaveVersions.LEGACY_PRE_MCREGION;
     }
 
     public boolean convert(String s, IProgressUpdate iprogressupdate) {
@@ -44,7 +44,7 @@ public class WorldLoaderServer extends WorldLoader {
         this.a(file2, arraylist2, arraylist.size(), i, iprogressupdate);
         WorldData worlddata = this.b(s);
 
-        worlddata.a(19132);
+        worlddata.a(WorldSaveVersions.MCREGION_1);
         IDataManager idatamanager = this.a(s, false);
 
         idatamanager.a(worlddata);

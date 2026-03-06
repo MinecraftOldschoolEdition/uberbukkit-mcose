@@ -1106,7 +1106,7 @@ public class ServerGUI extends JFrame {
         gbc.gridx = 0; gbc.gridy = row; gbc.weightx = 0;
         propsGrid.add(createLabel("World Type:"), gbc);
         gbc.gridx = 1; gbc.weightx = 1;
-        levelTypeCombo = createComboBox(new String[]{"DEFAULT", "FLAT", "ALPHA", "ALPHA_SNOW", "SKY", "CLASSIC"});
+        levelTypeCombo = createComboBox(new String[]{"DEFAULT", "FLAT", "ALPHA", "ALPHA_SNOW", "SKY", "CLASSIC", "INFDEV"});
         propsGrid.add(levelTypeCombo, gbc);
         
         // Max Players
@@ -1144,7 +1144,7 @@ public class ServerGUI extends JFrame {
         viewDistanceField.setPreferredSize(new Dimension(80, 25));
         propsGrid.add(viewDistanceField, gbc);
 
-        // Spawn protection radius (global, mirrored to gamerule spawnRadius)
+        // Spawn protection radius (global server setting)
         gbc.gridx = 2; gbc.weightx = 0;
         propsGrid.add(createLabel("Spawn Protection:"), gbc);
         gbc.gridx = 3; gbc.weightx = 1;
@@ -1875,9 +1875,6 @@ public class ServerGUI extends JFrame {
             }
         }
 
-        if (server != null && !server.worlds.isEmpty() && server.worlds.get(0) != null && server.worlds.get(0).worldData != null) {
-            server.worlds.get(0).worldData.setSpawnRadius(radius);
-        }
     }
     
     private void styleSpinner(JSpinner spinner) {

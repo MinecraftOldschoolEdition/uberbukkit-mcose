@@ -81,6 +81,16 @@ public class PoseidonConfig extends Configuration {
         generateConfigOption("settings.uuid-fetcher.allow-graceful-uuids.value", true);
         generateConfigOption("settings.uuid-fetcher.allow-graceful-uuids.info", "This setting means offline UUIDs are generated for players who don't have a Mojang UUID. This is useful for cracked or semi-cracked servers.");
 
+        // Session authentication retry controls
+        generateConfigOption("settings.authentication.session.max-attempts", 3);
+        generateConfigOption("settings.authentication.session.max-attempts-info", "Maximum modern session verification attempts per login before failing authentication.");
+        generateConfigOption("settings.authentication.session.retry-delay-ms", 250);
+        generateConfigOption("settings.authentication.session.retry-delay-ms-info", "Base delay in milliseconds before retrying modern session verification after transient failures.");
+        generateConfigOption("settings.authentication.session.max-retry-delay-ms", 1000);
+        generateConfigOption("settings.authentication.session.max-retry-delay-ms-info", "Upper bound in milliseconds for exponential authentication retry backoff.");
+        generateConfigOption("settings.authentication.session.parallel-no-ip-fallback", true);
+        generateConfigOption("settings.authentication.session.parallel-no-ip-fallback-info", "If enabled, authentication additionally sends a no-IP hasJoined request in parallel to reduce false negatives during Mojang API issues.");
+
         generateConfigOption("settings.remove-join-leave-debug", true);
         generateConfigOption("settings.enable-tpc-nodelay", true);
         generateConfigOption("settings.enable-tcp-nodelay", true);

@@ -10,6 +10,8 @@ import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -18,6 +20,7 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Logger;
 
 /**
@@ -74,6 +77,9 @@ public class VoiceChatUDPServer {
 
     // Secret generation for authentication
     private final Map<UUID, UUID> playerSecrets = new ConcurrentHashMap<UUID, UUID>();
+    private final AtomicLong udpMicAttemptsWindow = new AtomicLong();
+    private final AtomicLong udpQueueOverflowDropsWindow = new AtomicLong();
+    private final ConcurrentHashMap<String, AtomicLong> udpDropReasonsWindow = new ConcurrentHashMap<String, AtomicLong>();
 
     public VoiceChatUDPServer(MinecraftServer server, int port) {
         this.server = server;
@@ -183,6 +189,8 @@ public class VoiceChatUDPServer {
             return;
         }
         if (packetQueue.size() >= MAX_PACKET_QUEUE_SIZE) {
+            this.udpQueueOverflowDropsWindow.incrementAndGet();
+            recordUdpDropReason("queue-overflow");
             logQueueDrop(receivedAt, packetQueue.size());
             return;
         }
@@ -287,7 +295,6 @@ public class VoiceChatUDPServer {
             uncheckedClients.put(playerId, candidate);
             addressToClient.put(addressKey(address, port), candidate);
 
-            log.info("[VoiceChat] Player " + player.name + " authenticated for voice chat from " + address + ", waiting for connection check");
             sendAuthAck(address, port, true, "OK");
         } catch (IOException e) {
             sendAuthAck(address, port, false, "Malformed auth packet");
@@ -296,6 +303,7 @@ public class VoiceChatUDPServer {
 
     private void handleMicPacket(byte[] data, InetAddress address, int port, long receivedAt) {
         long now = System.currentTimeMillis();
+        this.udpMicAttemptsWindow.incrementAndGet();
 
         VoiceClient sender = findConnectedClientByAddress(address, port);
         if (sender == null) {
@@ -507,7 +515,6 @@ public class VoiceChatUDPServer {
 
         clients.put(client.secret, client);
         addressToClient.put(addressKey(client.address, client.port), client);
-        log.info("[VoiceChat] Player " + client.playerName + " connected to voice chat from " + client.address);
     }
 
     private VoiceClient findConnectedClientByAddress(InetAddress address, int port) {
@@ -602,33 +609,25 @@ public class VoiceChatUDPServer {
             return;
         }
         sender.lastTransmitLogAt = now;
-        log.info(
-            "[VoiceChat][ServerRx] Voice transmit attempt player=" + sender.playerName +
-            ", seq=" + sequence +
-            ", bytes=" + payloadLength +
-            ", whisper=" + whispering +
-            ", route=" + route +
-            ", recipients=" + recipients
-        );
     }
 
     private void logMicDrop(VoiceClient sender, String reason, long now) {
         if (sender == null) {
             return;
         }
+        recordUdpDropReason(reason);
         if (now - sender.lastTransmitDropLogAt < MIC_DROP_LOG_INTERVAL_MS) {
             return;
         }
         sender.lastTransmitDropLogAt = now;
-        log.info("[VoiceChat][ServerRx] Dropped voice transmit from " + sender.playerName + ", reason=" + reason);
     }
 
     private void logUnknownMicDrop(InetAddress address, int port, String reason, long now) {
+        recordUdpDropReason(reason);
         if (now - this.lastUnknownMicDropLogAt < UNKNOWN_MIC_DROP_LOG_INTERVAL_MS) {
             return;
         }
         this.lastUnknownMicDropLogAt = now;
-        log.info("[VoiceChat][ServerRx] Dropped voice transmit from " + address.getHostAddress() + ":" + port + ", reason=" + reason);
     }
 
     private void logQueueDrop(long now, int queueSize) {
@@ -665,7 +664,6 @@ public class VoiceChatUDPServer {
             }
             if (now - client.lastActivity > CLIENT_TIMEOUT_MS) {
                 removeClient(client, false);
-                log.info("[VoiceChat] Player " + client.playerName + " timed out from voice chat");
             }
         }
 
@@ -715,12 +713,68 @@ public class VoiceChatUDPServer {
         playerSecrets.remove(playerId);
     }
 
-    private EntityPlayer findPlayerByUUID(UUID playerId) {
-        for (Object obj : server.serverConfigurationManager.players) {
-            if (!(obj instanceof EntityPlayer)) {
+    public int getValidatedClientCount() {
+        return this.playerToClient.size();
+    }
+
+    public VoiceUdpWindowStats consumeWindowStats() {
+        return new VoiceUdpWindowStats(
+            this.udpMicAttemptsWindow.getAndSet(0L),
+            this.udpQueueOverflowDropsWindow.getAndSet(0L),
+            consumeUdpDropReasonsWindow()
+        );
+    }
+
+    private Map<String, Long> consumeUdpDropReasonsWindow() {
+        Map<String, Long> snapshot = new HashMap<String, Long>();
+        for (Map.Entry<String, AtomicLong> entry : this.udpDropReasonsWindow.entrySet()) {
+            AtomicLong counter = entry.getValue();
+            if (counter == null) {
                 continue;
             }
-            EntityPlayer player = (EntityPlayer) obj;
+            long count = counter.getAndSet(0L);
+            if (count > 0L) {
+                snapshot.put(entry.getKey(), Long.valueOf(count));
+            }
+        }
+        return snapshot;
+    }
+
+    private void recordUdpDropReason(String reason) {
+        String normalizedReason = normalizeDropReason(reason);
+        AtomicLong counter = this.udpDropReasonsWindow.get(normalizedReason);
+        if (counter == null) {
+            AtomicLong created = new AtomicLong();
+            AtomicLong existing = this.udpDropReasonsWindow.putIfAbsent(normalizedReason, created);
+            counter = existing != null ? existing : created;
+        }
+        counter.incrementAndGet();
+    }
+
+    private String normalizeDropReason(String reason) {
+        if (reason == null) {
+            return "unknown";
+        }
+        String trimmed = reason.trim();
+        if (trimmed.length() == 0) {
+            return "unknown";
+        }
+        int end = trimmed.length();
+        int colon = trimmed.indexOf(':');
+        if (colon >= 0 && colon < end) {
+            end = colon;
+        }
+        int space = trimmed.indexOf(' ');
+        if (space >= 0 && space < end) {
+            end = space;
+        }
+        return trimmed.substring(0, end);
+    }
+
+    private EntityPlayer findPlayerByUUID(UUID playerId) {
+        List<EntityPlayer> onlinePlayers = server.serverConfigurationManager.getOnlinePlayersSnapshot();
+        for (int i = 0; i < onlinePlayers.size(); i++) {
+            EntityPlayer player = onlinePlayers.get(i);
             if (player.getMojangUUID() != null && player.getMojangUUID().equals(playerId)) {
                 return player;
             }
@@ -779,6 +833,32 @@ public class VoiceChatUDPServer {
             this.address = address;
             this.port = port;
             this.secret = secret;
+        }
+    }
+
+    public static final class VoiceUdpWindowStats {
+        public final long attempts;
+        public final long queueOverflowDrops;
+        public final Map<String, Long> dropReasons;
+
+        public static VoiceUdpWindowStats empty() {
+            return new VoiceUdpWindowStats(0L, 0L, Collections.<String, Long>emptyMap());
+        }
+
+        private VoiceUdpWindowStats(long attempts, long queueOverflowDrops, Map<String, Long> dropReasons) {
+            this.attempts = attempts;
+            this.queueOverflowDrops = queueOverflowDrops;
+            this.dropReasons = dropReasons == null ? Collections.<String, Long>emptyMap() : dropReasons;
+        }
+
+        public long getTotalDrops() {
+            long total = 0L;
+            for (Long value : this.dropReasons.values()) {
+                if (value != null) {
+                    total += value.longValue();
+                }
+            }
+            return total;
         }
     }
 }

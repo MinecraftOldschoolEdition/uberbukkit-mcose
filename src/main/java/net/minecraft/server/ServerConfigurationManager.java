@@ -110,6 +110,7 @@ public class ServerConfigurationManager {
     public void b(EntityPlayer entityplayer) {
         // Check if player data file exists before loading (to detect new players)
         boolean isNewPlayer = !this.playerHasData(entityplayer.name);
+        boolean isOperator = this.isOp(entityplayer.name);
         
         this.playerFileData.b(entityplayer);
         
@@ -133,6 +134,15 @@ public class ServerConfigurationManager {
             }
             entityplayer.dead = false;
             entityplayer.deathTicks = 0;
+        }
+
+        // UberBukkit - On relog, keep non-OP players on server default gamemode.
+        if (!isNewPlayer && !isOperator && entityplayer.gameMode != this.server.defaultGameMode) {
+            a.info("[GameMode] Non-op player " + entityplayer.name + " relogged in " +
+                   (entityplayer.gameMode == 1 ? "creative" : entityplayer.gameMode == 2 ? "hardcore" : "survival") +
+                   " - resetting to server default " +
+                   (this.server.defaultGameMode == 1 ? "creative" : this.server.defaultGameMode == 2 ? "hardcore" : "survival"));
+            entityplayer.gameMode = this.server.defaultGameMode;
         }
         
         // MCOSE - Check if this is an unbanned hardcore player who died
@@ -293,6 +303,12 @@ public class ServerConfigurationManager {
         // CraftBukkit end
 
         this.server.chatRoomManager.removePlayer(entityplayer);
+        try {
+            VoiceChatUDPServer voiceServer = this.server.getVoiceChatUDPServer();
+            if (voiceServer != null && entityplayer != null && entityplayer.getMojangUUID() != null) {
+                voiceServer.onPlayerDisconnect(entityplayer.getMojangUUID());
+            }
+        } catch (Throwable ignored) {}
 
         //Project POSEIDON Start
         //        boolean found = false;
@@ -395,6 +411,7 @@ public class ServerConfigurationManager {
     }
 
     public EntityPlayer moveToWorld(EntityPlayer entityplayer, int i, Location location) {
+        boolean explicitLocationProvided = location != null;
         this.server.getTracker(entityplayer.dimension).untrackPlayer(entityplayer);
         // this.server.getTracker(entityplayer.dimension).untrackEntity(entityplayer); // CraftBukkit
         this.getPlayerManager(entityplayer.dimension).removePlayer(entityplayer);
@@ -438,8 +455,9 @@ public class ServerConfigurationManager {
             location.setWorld(this.server.getWorldServer(i).getWorld());
         }
 
-        // Resolve all non-bed spawns to safe, above-ground coordinates across terrain types.
-        if (location != null) {
+        // Resolve respawn positions to safe, above-ground coordinates.
+        // Only apply this path for respawns (location inferred in this method), not explicit teleports/portals.
+        if (!explicitLocationProvided && location != null) {
             CraftWorld craftWorld = (CraftWorld) location.getWorld();
             if (craftWorld != null) {
                 WorldServer targetWorld = craftWorld.getHandle();
@@ -448,14 +466,12 @@ public class ServerConfigurationManager {
                 int lz = MathHelper.floor(location.getZ());
                 boolean locationIsSafe = targetWorld.isSafePlayerSpawnAt(lx, ly, lz);
 
-                if (!isBedSpawn || !locationIsSafe) {
-                    boolean preferShoreline = !isBedSpawn && this.shouldPreferShorelineSpawn(targetWorld);
-                    int searchRadius = isBedSpawn ? 24 : 128;
-                    ChunkCoordinates safe = targetWorld.findSafeSpawnNear(lx, lz, searchRadius, preferShoreline);
+                if (!isBedSpawn) {
+                    ChunkCoordinates safe = this.resolveRespawnFromWorldSpawn(targetWorld);
                     location = new Location(craftWorld, safe.x + 0.5D, safe.y + 0.01D, safe.z + 0.5D, location.getYaw(), location.getPitch());
-                    if (!isBedSpawn) {
-                        targetWorld.worldData.setSpawn(safe.x, safe.y, safe.z);
-                    }
+                } else if (!locationIsSafe) {
+                    ChunkCoordinates safe = targetWorld.findSafeSpawnNear(lx, lz, 24, false);
+                    location = new Location(craftWorld, safe.x + 0.5D, safe.y + 0.01D, safe.z + 0.5D, location.getYaw(), location.getPitch());
                 }
             }
         }
@@ -506,22 +522,30 @@ public class ServerConfigurationManager {
         entityplayer1.netServerHandler.teleport(new Location(worldserver.getWorld(), entityplayer1.locX, entityplayer1.locY, entityplayer1.locZ, entityplayer1.yaw, entityplayer1.pitch));
         // CraftBukkit end
         this.a(entityplayer1, worldserver);
-        // Notify client to enable/disable Alpha terrain rendering based on overworld terrain type on world change
+        // Notify client to enable/disable special terrain rendering based on overworld terrain type on world change.
         try {
             int terrainType = worldserver.worldData != null ? worldserver.worldData.getTerrainType() : 0;
             // Apply only when attaching to overworld
             if (worldserver.worldProvider != null && !(worldserver.worldProvider instanceof WorldProviderHell)) {
-                if (terrainType == 1 || terrainType == 5) {
-                    // Mirror login behavior for Alpha: deferred alpha enable before first chunk (code 5)
+                if (isAlphaVisualTerrain(terrainType)) {
+                    // Mirror login behavior for Alpha: deferred alpha enable before first chunk.
                     entityplayer1.netServerHandler.sendPacket(new Packet70Bed(5));
                     // Explicit ALPHA_SNOW indicator so client uses snowy biomes for precipitation
                     if (terrainType == 5) {
                         entityplayer1.netServerHandler.sendPacket(new Packet70Bed(10));
                     }
-                    // And immediate alpha override in case chunks already started
+                    // And immediate terrain override in case chunks already started
+                    entityplayer1.netServerHandler.sendPacket(new Packet70Bed(8));
+                } else if (terrainType == 7) {
+                    // Mirror deferred path for INFDEV visuals.
+                    entityplayer1.netServerHandler.sendPacket(new Packet70Bed(20));
+                    entityplayer1.netServerHandler.sendPacket(new Packet70Bed(8));
+                } else if (terrainType == 6) {
+                    // CLASSIC uses the same renderer path as INFDEV.
+                    entityplayer1.netServerHandler.sendPacket(new Packet70Bed(21));
                     entityplayer1.netServerHandler.sendPacket(new Packet70Bed(8));
                 } else {
-                    // Explicitly disable alpha override
+                    // Explicitly disable terrain override
                     entityplayer1.netServerHandler.sendPacket(new Packet70Bed(9));
                 }
             }
@@ -593,16 +617,17 @@ public class ServerConfigurationManager {
     }
 
     public void sendAll(Packet packet) {
-        for (int i = 0; i < this.players.size(); ++i) {
-            EntityPlayer entityplayer = (EntityPlayer) this.players.get(i);
-
+        List<EntityPlayer> recipients = this.getOnlinePlayersSnapshot();
+        for (int i = 0; i < recipients.size(); ++i) {
+            EntityPlayer entityplayer = recipients.get(i);
             entityplayer.netServerHandler.sendPacket(packet);
         }
     }
 
     public void a(Packet packet, int i) {
-        for (int j = 0; j < this.players.size(); ++j) {
-            EntityPlayer entityplayer = (EntityPlayer) this.players.get(j);
+        List<EntityPlayer> recipients = this.getOnlinePlayersSnapshot();
+        for (int j = 0; j < recipients.size(); ++j) {
+            EntityPlayer entityplayer = recipients.get(j);
 
             if (entityplayer.dimension == i) {
                 entityplayer.netServerHandler.sendPacket(packet);
@@ -612,13 +637,14 @@ public class ServerConfigurationManager {
 
     public String c() {
         String s = "";
+        List<EntityPlayer> recipients = this.getOnlinePlayersSnapshot();
 
-        for (int i = 0; i < this.players.size(); ++i) {
+        for (int i = 0; i < recipients.size(); ++i) {
             if (i > 0) {
                 s = s + ", ";
             }
 
-            s = s + ((EntityPlayer) this.players.get(i)).name;
+            s = s + recipients.get(i).name;
         }
 
         return s;
@@ -849,8 +875,9 @@ public class ServerConfigurationManager {
     }
 
     public EntityPlayer i(String s) {
-        for (int i = 0; i < this.players.size(); ++i) {
-            EntityPlayer entityplayer = (EntityPlayer) this.players.get(i);
+        List<EntityPlayer> recipients = this.getOnlinePlayersSnapshot();
+        for (int i = 0; i < recipients.size(); ++i) {
+            EntityPlayer entityplayer = recipients.get(i);
 
             if (entityplayer.name.equalsIgnoreCase(s)) {
                 return entityplayer;
@@ -881,31 +908,60 @@ public class ServerConfigurationManager {
     }
 
     public void sendPacketNearby(EntityHuman entityhuman, double d0, double d1, double d2, double d3, int i, Packet packet) {
-        for (int j = 0; j < this.players.size(); ++j) {
-            EntityPlayer entityplayer = (EntityPlayer) this.players.get(j);
-
-            if (entityplayer != entityhuman && entityplayer.dimension == i) {
-                double d4 = d0 - entityplayer.locX;
-                double d5 = d1 - entityplayer.locY;
-                double d6 = d2 - entityplayer.locZ;
-
-                if (d4 * d4 + d5 * d5 + d6 * d6 < d3 * d3) {
-                    entityplayer.netServerHandler.sendPacket(packet);
-                }
-            }
+        List<EntityPlayer> recipients = this.getNearbyPlayersSnapshot(entityhuman, d0, d1, d2, d3, i);
+        for (int j = 0; j < recipients.size(); ++j) {
+            recipients.get(j).netServerHandler.sendPacket(packet);
         }
     }
 
     public void j(String s) {
         Packet3Chat packet3chat = new Packet3Chat(s);
+        List<EntityPlayer> recipients = this.getOnlinePlayersSnapshot();
 
-        for (int i = 0; i < this.players.size(); ++i) {
-            EntityPlayer entityplayer = (EntityPlayer) this.players.get(i);
+        for (int i = 0; i < recipients.size(); ++i) {
+            EntityPlayer entityplayer = recipients.get(i);
 
             if (this.isOp(entityplayer.name)) {
                 entityplayer.netServerHandler.sendPacket(packet3chat);
             }
         }
+    }
+
+    public List<EntityPlayer> getOnlinePlayersSnapshot() {
+        Object[] raw = this.players.toArray();
+        List<EntityPlayer> snapshot = new ArrayList<EntityPlayer>(raw.length);
+        for (int i = 0; i < raw.length; i++) {
+            Object obj = raw[i];
+            if (obj instanceof EntityPlayer) {
+                snapshot.add((EntityPlayer) obj);
+            }
+        }
+        return snapshot;
+    }
+
+    public List<EntityPlayer> getNearbyPlayersSnapshot(EntityHuman excluded,
+                                                       double x,
+                                                       double y,
+                                                       double z,
+                                                       double radius,
+                                                       int dimension) {
+        List<EntityPlayer> online = this.getOnlinePlayersSnapshot();
+        List<EntityPlayer> nearby = new ArrayList<EntityPlayer>();
+        double radiusSq = radius * radius;
+
+        for (int i = 0; i < online.size(); i++) {
+            EntityPlayer entityplayer = online.get(i);
+            if (entityplayer == null || entityplayer == excluded || entityplayer.dimension != dimension) {
+                continue;
+            }
+            double dx = x - entityplayer.locX;
+            double dy = y - entityplayer.locY;
+            double dz = z - entityplayer.locZ;
+            if (dx * dx + dy * dy + dz * dz < radiusSq) {
+                nearby.add(entityplayer);
+            }
+        }
+        return nearby;
     }
 
     public boolean a(String s, Packet packet) {
@@ -970,6 +1026,14 @@ public class ServerConfigurationManager {
         entityplayer.C();
     }
 
+    private static boolean isAlphaVisualTerrain(int terrainType) {
+        return terrainType == 1 || terrainType == 5;
+    }
+
+    private static boolean isInfdevVisualTerrain(int terrainType) {
+        return terrainType == 6 || terrainType == 7;
+    }
+
     private byte getClientDimensionForWorld(WorldServer worldserver) {
         if (worldserver == null || worldserver.worldProvider == null) {
             return 0;
@@ -994,6 +1058,67 @@ public class ServerConfigurationManager {
             && worldserver.worldData != null
             && worldserver.worldData.getTerrainType() == 3
             && !(worldserver.worldProvider instanceof WorldProviderHell);
+    }
+
+    private boolean isWithinRespawnRadius(ChunkCoordinates center, ChunkCoordinates point, int radius) {
+        if (center == null || point == null) {
+            return false;
+        }
+        if (radius <= 0) {
+            return point.x == center.x && point.z == center.z;
+        }
+
+        long dx = (long) point.x - (long) center.x;
+        long dz = (long) point.z - (long) center.z;
+        long radiusSq = (long) radius * (long) radius;
+        return dx * dx + dz * dz <= radiusSq;
+    }
+
+    private ChunkCoordinates resolveRespawnFromWorldSpawn(WorldServer worldserver) {
+        if (worldserver == null) {
+            return new ChunkCoordinates(0, 64, 0);
+        }
+
+        ChunkCoordinates worldSpawn = worldserver.getSpawn();
+        int centerX = worldSpawn != null ? worldSpawn.x : 0;
+        int centerZ = worldSpawn != null ? worldSpawn.z : 0;
+        int radius = worldserver.worldData != null ? worldserver.worldData.getSpawnRadius() : 10;
+        if (radius < 0) {
+            radius = 0;
+        }
+
+        boolean preferShoreline = this.shouldPreferShorelineSpawn(worldserver);
+
+        if (radius == 0) {
+            return worldserver.findSafeSpawnNear(centerX, centerZ, 0, preferShoreline);
+        }
+
+        int attempts = Math.max(64, radius * 10);
+        if (attempts > 4096) {
+            attempts = 4096;
+        }
+
+        long radiusSq = (long) radius * (long) radius;
+        for (int attempt = 0; attempt < attempts; ++attempt) {
+            int dx = worldserver.random.nextInt(radius * 2 + 1) - radius;
+            int dz = worldserver.random.nextInt(radius * 2 + 1) - radius;
+            long distSq = (long) dx * (long) dx + (long) dz * (long) dz;
+            if (distSq > radiusSq) {
+                continue;
+            }
+
+            ChunkCoordinates candidate = worldserver.findSafeSpawnNear(centerX + dx, centerZ + dz, 0, preferShoreline);
+            if (this.isWithinRespawnRadius(worldSpawn, candidate, radius)) {
+                return candidate;
+            }
+        }
+
+        ChunkCoordinates fallback = worldserver.findSafeSpawnNear(centerX, centerZ, radius, preferShoreline);
+        if (this.isWithinRespawnRadius(worldSpawn, fallback, radius)) {
+            return fallback;
+        }
+
+        return worldserver.findSafeSpawnNear(centerX, centerZ, 0, preferShoreline);
     }
 
     private boolean shouldPreferShorelineSpawn(WorldServer worldserver) {

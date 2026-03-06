@@ -61,6 +61,16 @@ settings:
                 info: The Mojang API is case-insensitive by default meaning usernames with different casing will return the same UUID. This setting checks the case of the username to prevent this issue. If the name is invalid, the player will be kicked.
             info: This setting allows you to change the URL that the server fetches UUIDs from. This is useful if you have a custom UUID server or a proxy server that fetches UUIDs.
             value: https://api.minecraftservices.com/minecraft/profile/lookup/name/{username}
+    authentication:
+        session:
+            max-attempts: 3
+            max-attempts-info: Maximum modern session verification attempts per login before failing authentication.
+            retry-delay-ms: 250
+            retry-delay-ms-info: Base delay in milliseconds before retrying modern session verification after transient failures.
+            max-retry-delay-ms: 1000
+            max-retry-delay-ms-info: Upper bound in milliseconds for exponential authentication retry backoff.
+            parallel-no-ip-fallback: true
+            parallel-no-ip-fallback-info: If enabled, authentication additionally sends a no-IP hasJoined request in parallel to reduce false negatives during Mojang API issues.
     support:
         modloader:
             enable: false

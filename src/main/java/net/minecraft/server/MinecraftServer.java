@@ -75,8 +75,21 @@ public class MinecraftServer implements Runnable, ICommandListener {
     public final VoiceChatRoomManager chatRoomManager;
     private static final double DEFAULT_VOICE_CHAT_RADIUS = 48.0D;
     private static final int DEFAULT_VOICE_CHAT_PORT = 24454;
+    private static final int DEFAULT_VOICE_RATE_MAX_PACKETS_PER_SEC = 120;
+    private static final int DEFAULT_VOICE_RATE_MAX_BYTES_PER_SEC = 131072;
+    private static final int DEFAULT_VOICE_RATE_BURST_SECONDS = 2;
+    private static final long VOICE_DEBUG_SUMMARY_INTERVAL_MS = 30000L;
     private double voiceChatBroadcastRadius = DEFAULT_VOICE_CHAT_RADIUS;
+    private int voiceRateMaxPacketsPerSec = DEFAULT_VOICE_RATE_MAX_PACKETS_PER_SEC;
+    private int voiceRateMaxBytesPerSec = DEFAULT_VOICE_RATE_MAX_BYTES_PER_SEC;
+    private int voiceRateBurstSeconds = DEFAULT_VOICE_RATE_BURST_SECONDS;
+    private boolean voiceRequireUdpBind = false;
     private VoiceChatUDPServer voiceChatUDPServer;
+    private volatile boolean voiceUdpHealthy = false;
+    private volatile String voiceUdpState = "not-started";
+    private long lastVoiceDebugSummaryAt = 0L;
+    private String lastVoiceDebugSummarySignature = null;
+    private CommunicationDispatcher communicationDispatcher;
 
     // CraftBukkit start
     public List<WorldServer> worlds = new ArrayList<WorldServer>();
@@ -180,8 +193,20 @@ public class MinecraftServer implements Runnable, ICommandListener {
         this.allowFlight = this.propertyManager.getBoolean("allow-flight", false);
         this.voiceChatEnabled = this.propertyManager.getBoolean("voice-chat", true);
         this.voiceChatPort = this.propertyManager.getInt("voice-chat-port", DEFAULT_VOICE_CHAT_PORT);
+        this.voiceRateMaxPacketsPerSec = Math.max(1, this.propertyManager.getInt("voice-rate-max-packets-per-sec", DEFAULT_VOICE_RATE_MAX_PACKETS_PER_SEC));
+        this.voiceRateMaxBytesPerSec = Math.max(1, this.propertyManager.getInt("voice-rate-max-bytes-per-sec", DEFAULT_VOICE_RATE_MAX_BYTES_PER_SEC));
+        this.voiceRateBurstSeconds = Math.max(1, this.propertyManager.getInt("voice-rate-burst-seconds", DEFAULT_VOICE_RATE_BURST_SECONDS));
+        this.voiceRequireUdpBind = this.propertyManager.getBoolean("voice-require-udp-bind", false);
         if (this.voiceChatEnabled) {
             log.info("Voice chat broadcasting enabled (UDP port: " + this.voiceChatPort + ")");
+            log.info("Voice TCP fallback limiter configured (packets/sec=" + this.voiceRateMaxPacketsPerSec
+                + ", bytes/sec=" + this.voiceRateMaxBytesPerSec
+                + ", burst-seconds=" + this.voiceRateBurstSeconds + ")");
+            if (this.voiceRequireUdpBind) {
+                log.info("Voice UDP bind is required for startup (voice-require-udp-bind=true).");
+            }
+        } else {
+            this.voiceUdpState = "disabled";
         }
         this.configuredLevelType = this.propertyManager.getString("level-type", "DEFAULT").toUpperCase(); // Added
         
@@ -202,6 +227,23 @@ public class MinecraftServer implements Runnable, ICommandListener {
             }
         }
         
+        String preflightWorldName = this.propertyManager.getString("level-name", "world");
+        try {
+            WorldLoaderServer preflightLoader = new WorldLoaderServer(new File("."));
+            if (preflightLoader.isConvertable(preflightWorldName)) {
+                log.info("Converting map!");
+                preflightLoader.convert(preflightWorldName, new ConvertProgressUpdater(this));
+            }
+            McRegion2WorldUpgrader.upgradeWorldToMcRegion2(new File(preflightWorldName), log);
+            if (this.propertyManager.getBoolean("allow-nether", true)) {
+                String preflightNetherName = preflightWorldName + "_" + Environment.getEnvironment(-1).toString().toLowerCase();
+                McRegion2WorldUpgrader.upgradeWorldToMcRegion2(new File(preflightNetherName), log);
+            }
+        } catch (RuntimeException conversionFailure) {
+            log.log(Level.SEVERE, "[McRegion2] Failed to upgrade world data during preflight startup.", conversionFailure);
+            return false;
+        }
+
         InetAddress inetaddress = null;
 
         if (s.length() > 0) {
@@ -270,6 +312,7 @@ public class MinecraftServer implements Runnable, ICommandListener {
         
         // Start voice chat UDP server
         this.startVoiceChatServer();
+        this.startCommunicationDispatcher();
 
         this.setStartupReadinessStatus(StartupReadinessStatus.READY);
         log.info("Done (" + time + ")! For help, type \"help\" or \"?\"");
@@ -319,10 +362,7 @@ public class MinecraftServer implements Runnable, ICommandListener {
     }
 
     private void a(Convertable convertable, String s, long i) {
-        if (convertable.isConvertable(s)) {
-            log.info("Converting map!");
-            convertable.convert(s, new ConvertProgressUpdater(this));
-        }
+        // World storage has already been preflight-upgraded to McRegion2 before bind.
 
         // CraftBukkit start
         for (int j = 0; j < (this.propertyManager.getBoolean("allow-nether", true) ? 2 : 1); ++j) {
@@ -355,6 +395,7 @@ public class MinecraftServer implements Runnable, ICommandListener {
                         else if (lt.equalsIgnoreCase("SKY")) { typeId = 3; log.info("[MinecraftServer] Configured level-type SKY maps to ID 3."); }
                         else if (lt.equalsIgnoreCase("ALPHA_SNOW") || lt.equalsIgnoreCase("ALPHA-SNOW") || lt.equalsIgnoreCase("ALPHASNOW")) { typeId = 5; log.info("[MinecraftServer] Configured level-type ALPHA_SNOW maps to ID 5."); }
                         else if (lt.equalsIgnoreCase("CLASSIC")) { typeId = 6; log.info("[MinecraftServer] Configured level-type CLASSIC maps to ID 6."); }
+                        else if (lt.equalsIgnoreCase("INFDEV")) { typeId = 7; log.info("[MinecraftServer] Configured level-type INFDEV maps to ID 7."); }
                         else if (!lt.equalsIgnoreCase("DEFAULT") && !lt.equalsIgnoreCase("NORMAL")) {
                             log.warning("[MinecraftServer] Unknown level-type in server.properties: '" + lt + "'. Defaulting to type ID 0.");
                         }
@@ -447,6 +488,8 @@ public class MinecraftServer implements Runnable, ICommandListener {
                         dataNether.setTerrainType(ot);
                     } else if (this.configuredLevelType != null && this.configuredLevelType.equalsIgnoreCase("CLASSIC")) {
                         dataNether.setTerrainType(6);
+                    } else if (this.configuredLevelType != null && this.configuredLevelType.equalsIgnoreCase("INFDEV")) {
+                        dataNether.setTerrainType(7);
                     }
                 } catch (Throwable ignore) {}
                 dataManagerNether.a(dataNether);
@@ -633,6 +676,8 @@ public class MinecraftServer implements Runnable, ICommandListener {
 
         // Shutdown chunk compression workers
         org.bukkit.craftbukkit.ChunkCompressionThread.stopThread();
+        this.stopCommunicationDispatcher();
+        this.stopVoiceChatServer();
 
         // Shutdown async threading systems
         ThreadingManager.getInstance().shutdown();
@@ -1033,12 +1078,29 @@ public class MinecraftServer implements Runnable, ICommandListener {
             ChunkBuffer.getRegionWriteZlibTotal(),
             ChunkBuffer.getRegionWriteZstdFallbackTotal(),
             ChunkBuffer.getRegionWriteZstdNanosTotal(),
-            ChunkBuffer.getRegionWriteZlibNanosTotal()
+            ChunkBuffer.getRegionWriteZlibNanosTotal(),
+            this.communicationDispatcher != null ? this.communicationDispatcher.getCurrentChatQueueDepth() : 0,
+            this.communicationDispatcher != null ? this.communicationDispatcher.getCurrentChatQueueCapacity() : 0,
+            this.communicationDispatcher != null ? this.communicationDispatcher.getParallelChatQueuedTotal() : 0L,
+            this.communicationDispatcher != null ? this.communicationDispatcher.getParallelChatSentTotal() : 0L,
+            this.communicationDispatcher != null ? this.communicationDispatcher.getParallelChatDroppedOverflowTotal() : 0L,
+            this.communicationDispatcher != null ? this.communicationDispatcher.getParallelChatDroppedRateTotal() : 0L,
+            this.communicationDispatcher != null ? this.communicationDispatcher.getParallelChatQueueWaitNanosTotal() : 0L,
+            this.communicationDispatcher != null ? this.communicationDispatcher.getParallelChatQueueWaitSamplesTotal() : 0L,
+            this.communicationDispatcher != null ? this.communicationDispatcher.consumeParallelChatQueueWaitMaxNanos() : 0L,
+            NetServerHandler.getParallelVoiceConsumedTotal(),
+            NetServerHandler.getParallelVoiceDroppedRateTotal(),
+            NetServerHandler.getParallelVoiceDroppedInvalidTotal(),
+            NetServerHandler.getParallelVoiceDroppedOverflowTotal(),
+            NetServerHandler.getParallelVoiceQueueWaitNanosTotal(),
+            NetServerHandler.getParallelVoiceQueueWaitSamplesTotal(),
+            NetServerHandler.consumeParallelVoiceQueueWaitMaxNanos()
         );
 
         int playerCount = this.serverConfigurationManager != null ? this.serverConfigurationManager.players.size() : 0;
         double tickDurationMs = (System.nanoTime() - tickStartNanos) / 1_000_000.0D;
         profiler.recordTickSample(tickDurationMs, commandQueueDepth, this.worlds.size(), playerCount);
+        maybeLogVoiceDebugSummary(System.currentTimeMillis());
 
         profiler.endSection(); // End "tick" section
     }
@@ -1203,6 +1265,26 @@ public class MinecraftServer implements Runnable, ICommandListener {
         return this.voiceChatBroadcastRadius;
     }
     
+    public int getVoiceRateMaxPacketsPerSec() {
+        return this.voiceRateMaxPacketsPerSec;
+    }
+
+    public int getVoiceRateMaxBytesPerSec() {
+        return this.voiceRateMaxBytesPerSec;
+    }
+
+    public int getVoiceRateBurstSeconds() {
+        return this.voiceRateBurstSeconds;
+    }
+
+    public boolean isVoiceUdpHealthy() {
+        return this.voiceUdpHealthy;
+    }
+
+    public String getVoiceUdpState() {
+        return this.voiceUdpState;
+    }
+
     public int getVoiceChatPort() {
         return this.voiceChatPort;
     }
@@ -1210,15 +1292,40 @@ public class MinecraftServer implements Runnable, ICommandListener {
     public VoiceChatUDPServer getVoiceChatUDPServer() {
         return this.voiceChatUDPServer;
     }
+
+    public CommunicationDispatcher getCommunicationDispatcher() {
+        return this.communicationDispatcher;
+    }
     
     public void startVoiceChatServer() {
-        if (this.voiceChatEnabled && this.voiceChatUDPServer == null) {
-            try {
-                this.voiceChatUDPServer = new VoiceChatUDPServer(this, this.voiceChatPort);
-                this.voiceChatUDPServer.start();
-                log.info("Voice chat UDP server started on port " + this.voiceChatPort);
-            } catch (Exception e) {
-                log.warning("Failed to start voice chat UDP server: " + e.getMessage());
+        if (!this.voiceChatEnabled) {
+            this.voiceUdpHealthy = false;
+            this.voiceUdpState = "disabled";
+            return;
+        }
+        if (this.voiceChatUDPServer != null) {
+            return;
+        }
+        try {
+            this.voiceChatUDPServer = new VoiceChatUDPServer(this, this.voiceChatPort);
+            this.voiceChatUDPServer.start();
+            this.voiceUdpHealthy = true;
+            this.voiceUdpState = "bound:" + this.voiceChatPort;
+            log.info("Voice chat UDP server started on port " + this.voiceChatPort);
+        } catch (Exception e) {
+            this.voiceChatUDPServer = null;
+            this.voiceUdpHealthy = false;
+            this.voiceUdpState = "bind-failed:" + e.getClass().getSimpleName();
+            log.log(Level.SEVERE,
+                "[VoiceChat] UDP bind failed on port " + this.voiceChatPort
+                    + ". Voice is degraded to TCP failover-only transport until UDP recovers.",
+                e
+            );
+            if (this.voiceRequireUdpBind) {
+                throw new IllegalStateException(
+                    "voice-require-udp-bind=true and UDP bind failed on port " + this.voiceChatPort,
+                    e
+                );
             }
         }
     }
@@ -1228,5 +1335,93 @@ public class MinecraftServer implements Runnable, ICommandListener {
             this.voiceChatUDPServer.stop();
             this.voiceChatUDPServer = null;
         }
+        this.voiceUdpHealthy = false;
+        this.voiceUdpState = this.voiceChatEnabled ? "stopped" : "disabled";
+    }
+
+    public void startCommunicationDispatcher() {
+        if (this.communicationDispatcher == null) {
+            this.communicationDispatcher = new CommunicationDispatcher(this);
+        }
+        this.communicationDispatcher.start();
+    }
+
+    public void stopCommunicationDispatcher() {
+        if (this.communicationDispatcher != null) {
+            this.communicationDispatcher.stop();
+        }
+    }
+
+    private boolean isVoiceDebugEnabled() {
+        return log.isLoggable(Level.FINE) || (this.options != null && this.options.has("debug-config"));
+    }
+
+    private void maybeLogVoiceDebugSummary(long nowMs) {
+        if (!isVoiceDebugEnabled()) {
+            return;
+        }
+        if (nowMs - this.lastVoiceDebugSummaryAt < VOICE_DEBUG_SUMMARY_INTERVAL_MS) {
+            return;
+        }
+        this.lastVoiceDebugSummaryAt = nowMs;
+
+        NetServerHandler.VoiceTcpWindowStats tcpStats = NetServerHandler.consumeVoiceTcpWindowStats();
+        VoiceChatUDPServer.VoiceUdpWindowStats udpStats = this.voiceChatUDPServer != null
+            ? this.voiceChatUDPServer.consumeWindowStats()
+            : VoiceChatUDPServer.VoiceUdpWindowStats.empty();
+        int activeUdpClients = this.voiceChatUDPServer != null ? this.voiceChatUDPServer.getValidatedClientCount() : 0;
+        String udpTransportState = this.voiceUdpHealthy ? "up" : "degraded(" + this.voiceUdpState + ")";
+        String tcpDropReasonSummary = formatVoiceDropReasons(tcpStats.dropReasons);
+        String udpDropReasonSummary = formatVoiceDropReasons(udpStats.dropReasons);
+        String summaryBody = "udpState=" + udpTransportState
+            + " activeUdpClients=" + activeUdpClients
+            + " tcpFallbackUsage=" + tcpStats.attempts
+            + " attempts(udp/tcp)=" + udpStats.attempts + "/" + tcpStats.attempts
+            + " drops(udp/tcp)=" + udpStats.getTotalDrops() + "/" + tcpStats.getTotalDrops()
+            + " queueOverflow(udp/tcp)=" + udpStats.queueOverflowDrops + "/" + tcpStats.queueOverflowDrops
+            + " tcpQueueWaitP95Ms=" + formatOneDecimal(tcpStats.queueWaitP95Ms)
+            + " dropsByReason udp{" + udpDropReasonSummary + "} tcp{" + tcpDropReasonSummary + "}";
+
+        if (summaryBody.equals(this.lastVoiceDebugSummarySignature)) {
+            return;
+        }
+        this.lastVoiceDebugSummarySignature = summaryBody;
+
+        log.info("[VoiceChat][Summary] " + summaryBody);
+    }
+
+    private static String formatVoiceDropReasons(Map<String, Long> reasons) {
+        if (reasons == null || reasons.isEmpty()) {
+            return "none";
+        }
+        List<Map.Entry<String, Long>> entries = new ArrayList<Map.Entry<String, Long>>(reasons.entrySet());
+        Collections.sort(entries, new Comparator<Map.Entry<String, Long>>() {
+            public int compare(Map.Entry<String, Long> a, Map.Entry<String, Long> b) {
+                long aValue = a != null && a.getValue() != null ? a.getValue().longValue() : 0L;
+                long bValue = b != null && b.getValue() != null ? b.getValue().longValue() : 0L;
+                if (aValue == bValue) {
+                    String aKey = a != null && a.getKey() != null ? a.getKey() : "";
+                    String bKey = b != null && b.getKey() != null ? b.getKey() : "";
+                    return aKey.compareTo(bKey);
+                }
+                return aValue < bValue ? 1 : -1;
+            }
+        });
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < entries.size(); ++i) {
+            Map.Entry<String, Long> entry = entries.get(i);
+            if (entry == null || entry.getValue() == null || entry.getValue().longValue() <= 0L) {
+                continue;
+            }
+            if (sb.length() > 0) {
+                sb.append(',');
+            }
+            sb.append(entry.getKey()).append('=').append(entry.getValue().longValue());
+        }
+        return sb.length() == 0 ? "none" : sb.toString();
+    }
+
+    private static String formatOneDecimal(double value) {
+        return String.format(Locale.ROOT, "%.1f", value);
     }
 }

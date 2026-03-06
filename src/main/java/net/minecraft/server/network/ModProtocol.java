@@ -11,9 +11,20 @@ import java.io.DataOutputStream;
  * Versioned mod handshake and registry sync payload helpers.
  */
 public final class ModProtocol {
-    public static final int PROTOCOL_VERSION = 2;
+    public static final int PROTOCOL_VERSION = 4;
     public static final int PROTOCOL_VERSION_LEGACY = 1;
+    public static final int PROTOCOL_VERSION_ITEMS = 2;
+    public static final int PROTOCOL_VERSION_EXPERIMENTAL = 5;
+    private static final int FEATURE_BITS_INTRODUCED_IN = 2;
+
     public static final int FEATURE_CHUNK_ZSTD = 1 << 0;
+    public static final int FEATURE_ITEM_STACK_V2 = 1 << 1;
+    public static final int FEATURE_ITEM_COMPONENTS = 1 << 2;
+    public static final int FEATURE_MCREGION2_ITEMS = 1 << 3;
+    public static final int FEATURE_ENTITY_WIRE_V2 = 1 << 4;
+    public static final int FEATURE_ENTITY_DATA_V2 = 1 << 5;
+    public static final int FEATURE_MCREGION2_ENTITIES = 1 << 6;
+
     public static final String CHANNEL_HELLO = "MCOSE|MOD_HELLO";
     public static final String CHANNEL_HELLO_ACK = "MCOSE|MOD_HELLO_ACK";
     public static final String CHANNEL_REGISTRY_SYNC = "MCOSE|REG_SYNC";
@@ -26,7 +37,7 @@ public final class ModProtocol {
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             DataOutputStream out = new DataOutputStream(baos);
             out.writeInt(protocolVersion);
-            if (protocolVersion >= PROTOCOL_VERSION) {
+            if (supportsFeatureBits(protocolVersion)) {
                 out.writeInt(negotiatedFeatures);
             }
             out.flush();
@@ -37,18 +48,7 @@ public final class ModProtocol {
     }
 
     public static int readHelloVersion(byte[] payload) {
-        if (payload == null || payload.length < 4) {
-            return -1;
-        }
-
-        try {
-            DataInputStream in = new DataInputStream(new ByteArrayInputStream(payload));
-            int version = in.readInt();
-            in.close();
-            return version;
-        } catch (Throwable ignored) {
-            return -1;
-        }
+        return readHelloInfo(payload).version;
     }
 
     public static HelloInfo readHelloInfo(byte[] payload) {
@@ -60,7 +60,7 @@ public final class ModProtocol {
             DataInputStream in = new DataInputStream(new ByteArrayInputStream(payload));
             int version = in.readInt();
             int featureBits = 0;
-            if (version >= PROTOCOL_VERSION && in.available() >= 4) {
+            if (supportsFeatureBits(version) && in.available() >= 4) {
                 featureBits = in.readInt();
             }
             in.close();
@@ -70,16 +70,38 @@ public final class ModProtocol {
         }
     }
 
+    public static boolean supportsFeatureBits(int version) {
+        return version >= FEATURE_BITS_INTRODUCED_IN;
+    }
+
+    public static boolean isSupportedVersion(int version) {
+        return version == PROTOCOL_VERSION
+                || version == PROTOCOL_VERSION_LEGACY
+                || version == PROTOCOL_VERSION_ITEMS
+                || version == 3
+                || version == PROTOCOL_VERSION_EXPERIMENTAL;
+    }
+
     public static int readRegistryRequestVersion(byte[] payload) {
         return readHelloVersion(payload);
     }
 
     public static int resolveServerSupportedFeatures() {
-        int features = 0;
+        int features = FEATURE_ITEM_STACK_V2
+                | FEATURE_ITEM_COMPONENTS
+                | FEATURE_MCREGION2_ITEMS
+                | FEATURE_ENTITY_WIRE_V2
+                | FEATURE_ENTITY_DATA_V2
+                | FEATURE_MCREGION2_ENTITIES;
         if (net.minecraft.server.ZstdRuntime.isAvailable()) {
             features |= FEATURE_CHUNK_ZSTD;
         }
         return features;
+    }
+
+    public static boolean hasRequiredEntityFeatures(int featureBits) {
+        int required = FEATURE_ENTITY_WIRE_V2 | FEATURE_ENTITY_DATA_V2;
+        return (featureBits & required) == required;
     }
 
     public static byte[] createRegistrySyncPayload(RegistrySyncSnapshot snapshot) {
