@@ -161,6 +161,11 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         return (this.negotiatedModFeatures & ModProtocol.FEATURE_ENTITY_DATA_V2) != 0;
     }
 
+    public boolean supportsSkinPartSync() {
+        return this.modProtocolNegotiated
+            && (this.negotiatedModFeatures & ModProtocol.FEATURE_SKIN_PARTS_SYNC) != 0;
+    }
+
     public static long getParallelVoiceConsumedTotal() {
         return PARALLEL_VOICE_CONSUMED_TOTAL.get();
     }
@@ -2667,6 +2672,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
                 this.sendPacket(new Packet250CustomPayload(
                         ModProtocol.CHANNEL_HELLO_ACK,
                         ModProtocol.createHelloAckPayload(ackVersion, this.negotiatedModFeatures)));
+                this.sendSkinPartSnapshotToClient();
             }
             return;
         }
@@ -2681,6 +2687,11 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             }
             this.syncedRegistrySnapshot = RegistrySyncSnapshot.captureLocal();
             this.sendPacket(new Packet250CustomPayload(ModProtocol.CHANNEL_REGISTRY_SYNC, ModProtocol.createRegistrySyncPayload(this.syncedRegistrySnapshot)));
+            return;
+        }
+
+        if (ModProtocol.CHANNEL_SKIN_PARTS.equals(packet250custompayload.channel)) {
+            this.handleSkinPartsPacket(packet250custompayload);
             return;
         }
 
@@ -2715,6 +2726,57 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         
         // Handle other custom channels here if needed
         // (Voice chat, Herobrine events, etc. are handled by their own systems)
+    }
+
+    private void handleSkinPartsPacket(Packet250CustomPayload packet) {
+        if (!this.supportsSkinPartSync()) {
+            return;
+        }
+        if (this.player == null) {
+            return;
+        }
+
+        ModProtocol.SkinPartsInfo skinPartsInfo = ModProtocol.readSkinPartsPayload(packet == null ? null : packet.data);
+        int modelPartMask = skinPartsInfo.modelPartMask & 0x7F;
+        this.player.setSkinModelPartMask(modelPartMask);
+        this.broadcastSkinPartMask(this.player.name, modelPartMask);
+    }
+
+    private void sendSkinPartSnapshotToClient() {
+        if (!this.supportsSkinPartSync()) {
+            return;
+        }
+        if (this.minecraftServer == null || this.minecraftServer.serverConfigurationManager == null) {
+            return;
+        }
+
+        java.util.List<EntityPlayer> online = this.minecraftServer.serverConfigurationManager.getOnlinePlayersSnapshot();
+        for (int i = 0; i < online.size(); ++i) {
+            EntityPlayer onlinePlayer = online.get(i);
+            if (onlinePlayer == null) {
+                continue;
+            }
+            this.sendPacket(new Packet250CustomPayload(
+                    ModProtocol.CHANNEL_SKIN_PARTS,
+                    ModProtocol.createSkinPartsPayload(onlinePlayer.name, onlinePlayer.getSkinModelPartMask())));
+        }
+    }
+
+    private void broadcastSkinPartMask(String username, int modelPartMask) {
+        if (this.minecraftServer == null || this.minecraftServer.serverConfigurationManager == null) {
+            return;
+        }
+
+        java.util.List<EntityPlayer> online = this.minecraftServer.serverConfigurationManager.getOnlinePlayersSnapshot();
+        for (int i = 0; i < online.size(); ++i) {
+            EntityPlayer recipient = online.get(i);
+            if (recipient == null || recipient.netServerHandler == null || !recipient.netServerHandler.supportsSkinPartSync()) {
+                continue;
+            }
+            recipient.netServerHandler.sendPacket(new Packet250CustomPayload(
+                    ModProtocol.CHANNEL_SKIN_PARTS,
+                    ModProtocol.createSkinPartsPayload(username, modelPartMask)));
+        }
     }
     
     /**

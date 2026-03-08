@@ -53,6 +53,7 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
     public Protocol protocol;
     public ProcessPacket5 packet5;
     public boolean isInWorkbench = false; // uberbukkit pvn < 7
+    private int skinModelPartMask = 0x7F;
 
     public EntityPlayer(MinecraftServer minecraftserver, World world, String s, ItemInWorldManager iteminworldmanager, int pvn) {
         super(world);
@@ -94,6 +95,14 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
     public String displayName;
     public UUID playerUUID; //Project Poseidon
     public org.bukkit.Location compassTarget;
+
+    public int getSkinModelPartMask() {
+        return this.skinModelPartMask & 0x7F;
+    }
+
+    public void setSkinModelPartMask(int modelPartMask) {
+        this.skinModelPartMask = modelPartMask & 0x7F;
+    }
     
     /**
      * Get the Mojang UUID for this player.

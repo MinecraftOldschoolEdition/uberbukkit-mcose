@@ -24,11 +24,13 @@ public final class ModProtocol {
     public static final int FEATURE_ENTITY_WIRE_V2 = 1 << 4;
     public static final int FEATURE_ENTITY_DATA_V2 = 1 << 5;
     public static final int FEATURE_MCREGION2_ENTITIES = 1 << 6;
+    public static final int FEATURE_SKIN_PARTS_SYNC = 1 << 7;
 
     public static final String CHANNEL_HELLO = "MCOSE|MOD_HELLO";
     public static final String CHANNEL_HELLO_ACK = "MCOSE|MOD_HELLO_ACK";
     public static final String CHANNEL_REGISTRY_SYNC = "MCOSE|REG_SYNC";
     public static final String CHANNEL_REGISTRY_REQUEST = "MCOSE|REG_REQ";
+    public static final String CHANNEL_SKIN_PARTS = "MCOSE|SKINPARTS";
 
     private ModProtocol() {}
 
@@ -92,7 +94,8 @@ public final class ModProtocol {
                 | FEATURE_MCREGION2_ITEMS
                 | FEATURE_ENTITY_WIRE_V2
                 | FEATURE_ENTITY_DATA_V2
-                | FEATURE_MCREGION2_ENTITIES;
+                | FEATURE_MCREGION2_ENTITIES
+                | FEATURE_SKIN_PARTS_SYNC;
         if (net.minecraft.server.ZstdRuntime.isAvailable()) {
             features |= FEATURE_CHUNK_ZSTD;
         }
@@ -111,6 +114,35 @@ public final class ModProtocol {
         return snapshot.toBytes();
     }
 
+    public static byte[] createSkinPartsPayload(String username, int modelPartMask) {
+        try {
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            DataOutputStream out = new DataOutputStream(baos);
+            out.writeUTF(username == null ? "" : username);
+            out.writeByte(modelPartMask & 0x7F);
+            out.flush();
+            return baos.toByteArray();
+        } catch (Throwable t) {
+            return new byte[0];
+        }
+    }
+
+    public static SkinPartsInfo readSkinPartsPayload(byte[] payload) {
+        if (payload == null || payload.length == 0) {
+            return new SkinPartsInfo("", 0x7F);
+        }
+
+        try {
+            DataInputStream in = new DataInputStream(new ByteArrayInputStream(payload));
+            String username = in.readUTF();
+            int modelPartMask = in.readByte() & 0x7F;
+            in.close();
+            return new SkinPartsInfo(username, modelPartMask);
+        } catch (Throwable ignored) {
+            return new SkinPartsInfo("", 0x7F);
+        }
+    }
+
     public static final class HelloInfo {
         public final int version;
         public final int featureBits;
@@ -118,6 +150,16 @@ public final class ModProtocol {
         public HelloInfo(int version, int featureBits) {
             this.version = version;
             this.featureBits = featureBits;
+        }
+    }
+
+    public static final class SkinPartsInfo {
+        public final String username;
+        public final int modelPartMask;
+
+        public SkinPartsInfo(String username, int modelPartMask) {
+            this.username = username == null ? "" : username;
+            this.modelPartMask = modelPartMask & 0x7F;
         }
     }
 }

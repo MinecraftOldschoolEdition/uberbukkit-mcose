@@ -116,13 +116,12 @@ public final class McRegion2WorldUpgrader {
 
         int changedChunks = 0;
         File worldDir = regionDir.getParentFile();
-        Map<Long, byte[]> chunkBlockCache = new HashMap<Long, byte[]>();
-
         for (int i = 0; i < files.length; i++) {
             File file = files[i];
             if (file == null || !file.isFile() || !file.getName().endsWith(".mcr")) {
                 continue;
             }
+            Map<Long, byte[]> chunkBlockCache = new HashMap<Long, byte[]>();
             int[] regionCoords = parseRegionCoordinates(file.getName());
             if (regionCoords == null) {
                 continue;
@@ -227,18 +226,18 @@ public final class McRegion2WorldUpgrader {
                     }
 
                     int currentMeta = getNibble(data, index);
-                    if (isValidChestFacing(currentMeta)) {
-                        continue;
-                    }
-
                     int worldX = chunkX * 16 + localX;
                     int worldZ = chunkZ * 16 + localZ;
-                    int inferred = inferLegacyChestFacing(worldDir, worldX, y, worldZ, chunkBlockCache);
-                    if (!isValidChestFacing(inferred) || inferred == currentMeta) {
+                    ChestFacingInference inferred = inferLegacyChestFacing(worldDir, worldX, y, worldZ, chunkBlockCache);
+                    if (!isValidChestFacing(inferred.facing)) {
                         continue;
                     }
 
-                    setNibble(data, index, inferred);
+                    if (!shouldRewriteChestFacing(currentMeta, inferred) || inferred.facing == currentMeta) {
+                        continue;
+                    }
+
+                    setNibble(data, index, inferred.facing);
                     changed = true;
                 }
             }
@@ -252,7 +251,23 @@ public final class McRegion2WorldUpgrader {
         return changed;
     }
 
-    private static int inferLegacyChestFacing(File worldDir, int x, int y, int z, Map<Long, byte[]> chunkBlockCache) {
+    private static boolean shouldRewriteChestFacing(int currentMeta, ChestFacingInference inferred) {
+        if (!isValidChestFacing(currentMeta)) {
+            return true;
+        }
+
+        if (inferred.axis == 1 && (currentMeta == 4 || currentMeta == 5)) {
+            return true;
+        }
+
+        if (inferred.axis == 2 && (currentMeta == 2 || currentMeta == 3)) {
+            return true;
+        }
+
+        return inferred.constrained && currentMeta != inferred.facing;
+    }
+
+    private static ChestFacingInference inferLegacyChestFacing(File worldDir, int x, int y, int z, Map<Long, byte[]> chunkBlockCache) {
         int north = getBlockIdAt(worldDir, x, y, z - 1, chunkBlockCache);
         int south = getBlockIdAt(worldDir, x, y, z + 1, chunkBlockCache);
         int west = getBlockIdAt(worldDir, x - 1, y, z, chunkBlockCache);
@@ -265,19 +280,24 @@ public final class McRegion2WorldUpgrader {
 
         if (!westChest && !eastChest && !northChest && !southChest) {
             int facing = 3;
-            if (isSolidForLegacyChestOrientation(north) && !isSolidForLegacyChestOrientation(south)) {
+            boolean northSolid = isSolidForLegacyChestOrientation(north);
+            boolean southSolid = isSolidForLegacyChestOrientation(south);
+            boolean westSolid = isSolidForLegacyChestOrientation(west);
+            boolean eastSolid = isSolidForLegacyChestOrientation(east);
+            boolean constrained = northSolid != southSolid || westSolid != eastSolid;
+            if (northSolid && !southSolid) {
                 facing = 3;
             }
-            if (isSolidForLegacyChestOrientation(south) && !isSolidForLegacyChestOrientation(north)) {
+            if (southSolid && !northSolid) {
                 facing = 2;
             }
-            if (isSolidForLegacyChestOrientation(west) && !isSolidForLegacyChestOrientation(east)) {
+            if (westSolid && !eastSolid) {
                 facing = 5;
             }
-            if (isSolidForLegacyChestOrientation(east) && !isSolidForLegacyChestOrientation(west)) {
+            if (eastSolid && !westSolid) {
                 facing = 4;
             }
-            return facing;
+            return new ChestFacingInference(facing, 0, constrained);
         }
 
         if (westChest || eastChest) {
@@ -285,34 +305,34 @@ public final class McRegion2WorldUpgrader {
             int pairNorth = getBlockIdAt(worldDir, pairX, y, z - 1, chunkBlockCache);
             int pairSouth = getBlockIdAt(worldDir, pairX, y, z + 1, chunkBlockCache);
             int facing = 3;
-            if ((isSolidForLegacyChestOrientation(north) || isSolidForLegacyChestOrientation(pairNorth))
-                    && !isSolidForLegacyChestOrientation(south)
-                    && !isSolidForLegacyChestOrientation(pairSouth)) {
+            boolean northSolid = isSolidForLegacyChestOrientation(north);
+            boolean southSolid = isSolidForLegacyChestOrientation(south);
+            boolean pairNorthSolid = isSolidForLegacyChestOrientation(pairNorth);
+            boolean pairSouthSolid = isSolidForLegacyChestOrientation(pairSouth);
+            if ((northSolid || pairNorthSolid) && !southSolid && !pairSouthSolid) {
                 facing = 3;
             }
-            if ((isSolidForLegacyChestOrientation(south) || isSolidForLegacyChestOrientation(pairSouth))
-                    && !isSolidForLegacyChestOrientation(north)
-                    && !isSolidForLegacyChestOrientation(pairNorth)) {
+            if ((southSolid || pairSouthSolid) && !northSolid && !pairNorthSolid) {
                 facing = 2;
             }
-            return facing;
+            return new ChestFacingInference(facing, 1, true);
         }
 
         int pairZ = northChest ? z - 1 : z + 1;
         int pairWest = getBlockIdAt(worldDir, x - 1, y, pairZ, chunkBlockCache);
         int pairEast = getBlockIdAt(worldDir, x + 1, y, pairZ, chunkBlockCache);
         int facing = 5;
-        if ((isSolidForLegacyChestOrientation(west) || isSolidForLegacyChestOrientation(pairWest))
-                && !isSolidForLegacyChestOrientation(east)
-                && !isSolidForLegacyChestOrientation(pairEast)) {
+        boolean westSolid = isSolidForLegacyChestOrientation(west);
+        boolean eastSolid = isSolidForLegacyChestOrientation(east);
+        boolean pairWestSolid = isSolidForLegacyChestOrientation(pairWest);
+        boolean pairEastSolid = isSolidForLegacyChestOrientation(pairEast);
+        if ((westSolid || pairWestSolid) && !eastSolid && !pairEastSolid) {
             facing = 5;
         }
-        if ((isSolidForLegacyChestOrientation(east) || isSolidForLegacyChestOrientation(pairEast))
-                && !isSolidForLegacyChestOrientation(west)
-                && !isSolidForLegacyChestOrientation(pairWest)) {
+        if ((eastSolid || pairEastSolid) && !westSolid && !pairWestSolid) {
             facing = 4;
         }
-        return facing;
+        return new ChestFacingInference(facing, 2, true);
     }
 
     private static int getBlockIdAt(File worldDir, int x, int y, int z, Map<Long, byte[]> chunkBlockCache) {
@@ -380,6 +400,18 @@ public final class McRegion2WorldUpgrader {
 
     private static long chunkKey(int chunkX, int chunkZ) {
         return ((long)chunkX & 4294967295L) << 32 | (long)chunkZ & 4294967295L;
+    }
+
+    private static final class ChestFacingInference {
+        public final int facing;
+        public final int axis;
+        public final boolean constrained;
+
+        public ChestFacingInference(int facing, int axis, boolean constrained) {
+            this.facing = facing;
+            this.axis = axis;
+            this.constrained = constrained;
+        }
     }
 
     private static int getNibble(byte[] data, int index) {
