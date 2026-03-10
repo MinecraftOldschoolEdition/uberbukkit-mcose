@@ -89,7 +89,7 @@ public class PoseidonConfig extends Configuration {
         generateConfigOption("settings.authentication.session.max-retry-delay-ms", 1000);
         generateConfigOption("settings.authentication.session.max-retry-delay-ms-info", "Upper bound in milliseconds for exponential authentication retry backoff.");
         generateConfigOption("settings.authentication.session.parallel-no-ip-fallback", true);
-        generateConfigOption("settings.authentication.session.parallel-no-ip-fallback-info", "If enabled, authentication additionally sends a no-IP hasJoined request in parallel to reduce false negatives during Mojang API issues.");
+        generateConfigOption("settings.authentication.session.parallel-no-ip-fallback-info", "If enabled, authentication may perform a no-IP hasJoined fallback when the primary lookup is inconclusive or transiently failing.");
 
         generateConfigOption("settings.remove-join-leave-debug", true);
         generateConfigOption("settings.enable-tpc-nodelay", true);
@@ -132,6 +132,8 @@ public class PoseidonConfig extends Configuration {
         // Connection throttling - prevents rapid connections from same IP
         generateConfigOption("settings.connection-throttle-ms.value", 0);
         generateConfigOption("settings.connection-throttle-ms.info", "Minimum milliseconds between connections from the same IP. Set to 0 to disable (default). Only increase if you're experiencing connection spam attacks.");
+        generateConfigOption("settings.connection-throttle-ms.burst", 4);
+        generateConfigOption("settings.connection-throttle-ms.burst-info", "How many connections from one IP are allowed within the throttle window before newer attempts are rejected.");
 
         //Statistics
         generateConfigOption("settings.statistics.key", UUID.randomUUID().toString());

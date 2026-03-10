@@ -45,6 +45,11 @@ settings:
         enabled: true
         info: This setting causes the server to detect and kick malicious players who send too many packets in a short period of time. This is useful to prevent players from sending too many packets to the server to cause lag.
         threshold: 10000
+    connection-throttle-ms:
+        value: 0
+        info: Minimum milliseconds between connections from the same IP. Set to 0 to disable (default). Only increase if you're experiencing connection spam attacks.
+        burst: 4
+        burst-info: How many connections from one IP are allowed inside the throttle window before newer attempts are rejected.
     uuid-fetcher:
         allow-graceful-uuids:
             value: true
@@ -70,7 +75,7 @@ settings:
             max-retry-delay-ms: 1000
             max-retry-delay-ms-info: Upper bound in milliseconds for exponential authentication retry backoff.
             parallel-no-ip-fallback: true
-            parallel-no-ip-fallback-info: If enabled, authentication additionally sends a no-IP hasJoined request in parallel to reduce false negatives during Mojang API issues.
+            parallel-no-ip-fallback-info: If enabled, authentication may perform a no-IP hasJoined fallback when the primary lookup is inconclusive or transiently failing.
     support:
         modloader:
             enable: false

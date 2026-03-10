@@ -17,6 +17,18 @@ import java.util.logging.Logger;
  * One-way upgrader that rewrites item-bearing world NBT to McRegion2 stack format.
  */
 public final class McRegion2WorldUpgrader {
+    private static final String[] ITEM_STACK_REWRITE_KEYS = new String[] {
+            "mcose_stack_format",
+            "item",
+            "count",
+            "components",
+            "id",
+            "name",
+            "Count",
+            "Damage",
+            "tag"
+    };
+
     private McRegion2WorldUpgrader() {}
 
     public static void upgradeWorldToMcRegion2(File worldDir, Logger logger) {
@@ -61,8 +73,19 @@ public final class McRegion2WorldUpgrader {
             }
         }
 
-        changedChunks += rewriteRegionFolder(new File(worldDir, "region"), log);
-        changedChunks += rewriteRegionFolder(new File(new File(worldDir, "DIM-1"), "region"), log);
+        boolean bulkModeEnabled = false;
+        try {
+            RegionFileCache.setBulkConversionMode(true);
+            bulkModeEnabled = true;
+            changedChunks += rewriteRegionFolder(new File(worldDir, "region"), log);
+            changedChunks += rewriteRegionFolder(new File(new File(worldDir, "DIM-1"), "region"), log);
+        } finally {
+            if (bulkModeEnabled) {
+                RegionFileCache.setBulkConversionMode(false);
+            } else {
+                RegionFileCache.a();
+            }
+        }
 
         updateLevelVersion(worldDir, WorldSaveVersions.MCREGION_2);
 
@@ -153,13 +176,12 @@ public final class McRegion2WorldUpgrader {
                         int chunkX = regionX * 32 + x;
                         int chunkZ = regionZ * 32 + z;
 
-                        boolean changed = rewriteChestMetadataFromLegacyOrientation(worldDir, chunkX, chunkZ, chunkNbt, chunkBlockCache);
-                        if (rewriteChunkBlockStates(chunkNbt)) {
-                            changed = true;
-                        }
-                        if (rewriteNbtTree(chunkNbt)) {
-                            changed = true;
-                        }
+                        // Keep parity with client SaveConverterMcRegion: item/container conversion,
+                        // then chest-facing repair, then block-state rewrite.
+                        boolean itemChanged = rewriteNbtTree(chunkNbt);
+                        boolean chestFacingChanged = rewriteChestMetadataFromLegacyOrientation(worldDir, chunkX, chunkZ, chunkNbt, chunkBlockCache);
+                        boolean blockStateChanged = rewriteChunkBlockStates(chunkNbt);
+                        boolean changed = itemChanged || chestFacingChanged || blockStateChanged;
                         if (!changed) {
                             continue;
                         }
@@ -558,7 +580,8 @@ public final class McRegion2WorldUpgrader {
             return false;
         }
 
-        ModernItemStackCodec.write(stack, compound);
+        NBTTagCompound rewritten = stack.a(new NBTTagCompound());
+        overwriteItemStackDataPreservingWrapperFields(compound, rewritten);
         return true;
     }
 
@@ -567,9 +590,40 @@ public final class McRegion2WorldUpgrader {
             return false;
         }
 
-        boolean legacyShape = compound.hasKey("Count") && (compound.hasKey("id") || compound.hasKey("name"));
-        boolean modernShape = compound.hasKey("item") && (compound.hasKey("count") || compound.hasKey("Count"));
-        return legacyShape || modernShape;
+        byte idType = getTagType(compound, "id");
+        byte nameType = getTagType(compound, "name");
+        byte itemType = getTagType(compound, "item");
+        byte countType = getTagType(compound, "Count");
+        byte modernCountType = getTagType(compound, "count");
+        boolean countPresent = countType == 1 || countType == 3 || modernCountType == 1 || modernCountType == 3;
+        boolean idPresent = idType == 2 || nameType == 8 || itemType == 8;
+        return countPresent && idPresent;
+    }
+
+    private static byte getTagType(NBTTagCompound compound, String key) {
+        NBTBase tag = compound.b(key);
+        if (tag != null) {
+            return tag.a();
+        }
+        return 0;
+    }
+
+    private static void overwriteItemStackDataPreservingWrapperFields(NBTTagCompound target, NBTTagCompound rewritten) {
+        for (int i = 0; i < ITEM_STACK_REWRITE_KEYS.length; ++i) {
+            target.remove(ITEM_STACK_REWRITE_KEYS[i]);
+        }
+
+        java.util.Set<String> rewrittenKeys = rewritten.getKeys();
+        if (rewrittenKeys == null) {
+            return;
+        }
+
+        for (String key : rewrittenKeys) {
+            NBTBase value = rewritten.b(key);
+            if (value != null) {
+                target.a(key, value);
+            }
+        }
     }
 
     private static void updateLevelVersion(File worldDir, int version) {

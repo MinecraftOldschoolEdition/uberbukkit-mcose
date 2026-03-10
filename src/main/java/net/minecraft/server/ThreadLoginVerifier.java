@@ -87,7 +87,7 @@ public class ThreadLoginVerifier extends Thread {
         boolean parallelNoIpFallback = getConfigBoolean("settings.authentication.session.parallel-no-ip-fallback", DEFAULT_PARALLEL_NO_IP_FALLBACK);
 
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
-            List<SessionAPI.ModernSessionResponse> responses = queryModernSessionInParallel(playerName, serverId, clientIP, !isLocalhost && parallelNoIpFallback);
+            List<SessionAPI.ModernSessionResponse> responses = queryModernSessionWithFallback(playerName, serverId, clientIP, !isLocalhost && parallelNoIpFallback);
 
             boolean sawRetryableError = false;
             boolean sawNoContent = false;
@@ -150,23 +150,36 @@ public class ThreadLoginVerifier extends Thread {
         return "Failed to verify username!";
     }
 
-    private List<SessionAPI.ModernSessionResponse> queryModernSessionInParallel(String playerName, String serverId, String clientIP, boolean includeNoIpFallback) {
-        List<Future<SessionAPI.ModernSessionResponse>> futures = new ArrayList<Future<SessionAPI.ModernSessionResponse>>();
-        futures.add(SESSION_LOOKUP_POOL.submit(() -> SessionAPI.hasJoinedModern(playerName, serverId, clientIP)));
+    private List<SessionAPI.ModernSessionResponse> queryModernSessionWithFallback(String playerName, String serverId, String clientIP, boolean includeNoIpFallback) {
+        List<SessionAPI.ModernSessionResponse> responses = new ArrayList<SessionAPI.ModernSessionResponse>(2);
+        SessionAPI.ModernSessionResponse primary = lookupModernSession(playerName, serverId, clientIP);
+        responses.add(primary);
 
-        if (includeNoIpFallback) {
-            futures.add(SESSION_LOOKUP_POOL.submit(() -> SessionAPI.hasJoinedModern(playerName, serverId, "127.0.0.1")));
+        // Avoid doubling every request by default. Only do no-IP fallback when the primary
+        // result was inconclusive/transient, which significantly reduces Mojang auth rate-limit hits.
+        if (includeNoIpFallback && shouldTryNoIpFallback(primary)) {
+            responses.add(lookupModernSession(playerName, serverId, "127.0.0.1"));
         }
 
-        List<SessionAPI.ModernSessionResponse> responses = new ArrayList<SessionAPI.ModernSessionResponse>(futures.size());
-        for (Future<SessionAPI.ModernSessionResponse> future : futures) {
-            try {
-                responses.add(future.get());
-            } catch (Throwable throwable) {
-                responses.add(new SessionAPI.ModernSessionResponse(-1, "", "", ""));
-            }
-        }
         return responses;
+    }
+
+    private SessionAPI.ModernSessionResponse lookupModernSession(String playerName, String serverId, String clientIP) {
+        Future<SessionAPI.ModernSessionResponse> future = SESSION_LOOKUP_POOL.submit(() -> SessionAPI.hasJoinedModern(playerName, serverId, clientIP));
+        try {
+            return future.get();
+        } catch (Throwable throwable) {
+            return new SessionAPI.ModernSessionResponse(-1, "", "", "");
+        }
+    }
+
+    private boolean shouldTryNoIpFallback(SessionAPI.ModernSessionResponse response) {
+        if (response == null) {
+            return true;
+        }
+
+        int responseCode = response.getResponseCode();
+        return responseCode == 204 || SessionAPI.isRetryableStatusCode(responseCode);
     }
 
     private int calculateBackoffDelay(int attempt, int retryDelayMs, int maxRetryDelayMs) {

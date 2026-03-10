@@ -105,15 +105,19 @@ public class RegionFile {
         }
 
         if (flag) {
-            try {
-                this.writeAheadLog = new RegionFileWAL(this.b);
-                this.logWalBanner();
-                this.logWal(1, "enabled for " + this.b.getName() + " (mode=" + (WAL_STRICT_SYNC ? "strict" : "balanced") + ", batch=" + WAL_SYNC_BATCH + ")");
-                this.recoverFromWriteAheadLog();
-            } catch (IOException ioexception1) {
-                this.writeAheadLog = null;
-                this.logWal(1, "disabled for " + this.b.getName() + " (init failed: " + ioexception1.getMessage() + ")");
-                ioexception1.printStackTrace();
+            if (RegionFileCache.isBulkConversionMode()) {
+                this.logWal(1, "disabled for " + this.b.getName() + " (bulk conversion mode)");
+            } else {
+                try {
+                    this.writeAheadLog = new RegionFileWAL(this.b);
+                    this.logWalBanner();
+                    this.logWal(1, "enabled for " + this.b.getName() + " (mode=" + (WAL_STRICT_SYNC ? "strict" : "balanced") + ", batch=" + WAL_SYNC_BATCH + ")");
+                    this.recoverFromWriteAheadLog();
+                } catch (IOException ioexception1) {
+                    this.writeAheadLog = null;
+                    this.logWal(1, "disabled for " + this.b.getName() + " (init failed: " + ioexception1.getMessage() + ")");
+                    ioexception1.printStackTrace();
+                }
             }
         }
     }
