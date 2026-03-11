@@ -53,7 +53,8 @@ public class VoiceChatUDPServer {
     private static final long MIC_ATTEMPT_LOG_INTERVAL_MS = 1000L;
     private static final long MIC_DROP_LOG_INTERVAL_MS = 1500L;
     private static final long UNKNOWN_MIC_DROP_LOG_INTERVAL_MS = 3000L;
-    private static final long QUEUE_DROP_LOG_INTERVAL_MS = 2000L;
+    private static final long QUEUE_DROP_LOG_INTERVAL_MS = 15000L;
+    private static final long FORWARD_FAILURE_LOG_INTERVAL_MS = 15000L;
 
     private final MinecraftServer server;
     private final int port;
@@ -63,6 +64,9 @@ public class VoiceChatUDPServer {
     private volatile boolean running;
     private volatile long lastUnknownMicDropLogAt = 0L;
     private volatile long lastQueueDropLogAt = 0L;
+    private volatile long lastForwardFailureLogAt = 0L;
+    private final AtomicLong queuedOverflowDropsSinceLastLog = new AtomicLong();
+    private final AtomicLong forwardFailuresSinceLastLog = new AtomicLong();
 
     private final BlockingQueue<ReceivedDatagram> packetQueue = new LinkedBlockingQueue<ReceivedDatagram>();
 
@@ -599,7 +603,7 @@ public class VoiceChatUDPServer {
             socket.send(packet);
             return true;
         } catch (IOException e) {
-            log.warning("[VoiceChat][ServerTx] Failed forwarding voice packet to " + recipient.playerName + " seq=" + sequence + ": " + e.getMessage());
+            logForwardFailure(recipient.playerName, sequence, e);
             return false;
         }
     }
@@ -631,11 +635,29 @@ public class VoiceChatUDPServer {
     }
 
     private void logQueueDrop(long now, int queueSize) {
+        this.queuedOverflowDropsSinceLastLog.incrementAndGet();
         if (now - this.lastQueueDropLogAt < QUEUE_DROP_LOG_INTERVAL_MS) {
             return;
         }
         this.lastQueueDropLogAt = now;
-        log.warning("[VoiceChat][ServerRx] Dropping incoming UDP packet: queue-overflow size=" + queueSize);
+        long dropped = this.queuedOverflowDropsSinceLastLog.getAndSet(0L);
+        log.warning("[VoiceChat][ServerRx] UDP queue overflow: dropped=" + dropped
+            + ", queueDepth=" + queueSize + "/" + MAX_PACKET_QUEUE_SIZE);
+    }
+
+    private void logForwardFailure(String playerName, long sequence, IOException error) {
+        long now = System.currentTimeMillis();
+        this.forwardFailuresSinceLastLog.incrementAndGet();
+        if (now - this.lastForwardFailureLogAt < FORWARD_FAILURE_LOG_INTERVAL_MS) {
+            return;
+        }
+        this.lastForwardFailureLogAt = now;
+        long failures = this.forwardFailuresSinceLastLog.getAndSet(0L);
+        String recipient = playerName == null ? "<unknown>" : playerName;
+        String detail = error == null ? "unknown" : error.getMessage();
+        log.warning("[VoiceChat][ServerTx] Forwarding failures=" + failures
+            + " (latest recipient=" + recipient + ", seq=" + sequence
+            + ", detail=" + detail + ")");
     }
 
     private void sendConnectionCheck(InetAddress address, int port, long id, boolean response) {

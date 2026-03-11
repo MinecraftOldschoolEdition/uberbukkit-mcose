@@ -169,6 +169,7 @@ public class MinecraftServer implements Runnable, ICommandListener {
             log.info("EXPERIMENTAL MODLOADERMP SUPPORT ENABLED.");
             if (!isModloaderPresent()) {
                 log.severe("ModLoaderMP support is enabled, however, it isn't present. Please install it before enabling this setting");
+                this.logStartupFailureContext("ModLoaderMP support requested but ModLoader is missing", null);
                 return false;
             }
             try {
@@ -230,9 +231,13 @@ public class MinecraftServer implements Runnable, ICommandListener {
         String preflightWorldName = this.propertyManager.getString("level-name", "world");
         try {
             WorldLoaderServer preflightLoader = new WorldLoaderServer(new File("."));
-            if (preflightLoader.isConvertable(preflightWorldName)) {
+            boolean needsLegacyConversion = preflightLoader.isConvertable(preflightWorldName)
+                || preflightLoader.hasLegacyChunkData(preflightWorldName);
+            if (needsLegacyConversion) {
                 log.info("Converting map!");
-                preflightLoader.convert(preflightWorldName, new ConvertProgressUpdater(this));
+                if (!preflightLoader.convert(preflightWorldName, new ConvertProgressUpdater(this))) {
+                    throw new RuntimeException("Legacy world conversion did not complete for '" + preflightWorldName + "'");
+                }
             }
             McRegion2WorldUpgrader.upgradeWorldToMcRegion2(new File(preflightWorldName), log);
             if (this.propertyManager.getBoolean("allow-nether", true)) {
@@ -241,6 +246,7 @@ public class MinecraftServer implements Runnable, ICommandListener {
             }
         } catch (RuntimeException conversionFailure) {
             log.log(Level.SEVERE, "[McRegion2] Failed to upgrade world data during preflight startup.", conversionFailure);
+            this.logStartupFailureContext("World preflight conversion failed", conversionFailure);
             return false;
         }
 
@@ -260,6 +266,7 @@ public class MinecraftServer implements Runnable, ICommandListener {
             log.warning("**** FAILED TO BIND TO PORT!");
             log.log(Level.WARNING, "The exception was: " + ioexception.toString());
             log.warning("Perhaps a server is already running on that port?");
+            this.logStartupFailureContext("Network bind failed", ioexception);
             return false;
         }
 
@@ -815,19 +822,13 @@ public class MinecraftServer implements Runnable, ICommandListener {
                     }
                 }
             } else {
-                while (this.isRunning) {
-                    this.b();
-
-                    try {
-                        Thread.sleep(10L);
-                    } catch (InterruptedException interruptedexception) {
-                        interruptedexception.printStackTrace();
-                    }
-                }
+                this.logStartupFailureContext("Initialization returned false", null);
+                this.isRunning = false;
             }
         } catch (Throwable throwable) {
             throwable.printStackTrace();
             log.log(Level.SEVERE, "Unexpected exception", throwable);
+            this.logStartupFailureContext("Unexpected exception in server main loop", throwable);
 
             while (this.isRunning) {
                 this.b();
@@ -1176,6 +1177,7 @@ public class MinecraftServer implements Runnable, ICommandListener {
             (new ThreadServerApplication("Server thread", minecraftserver)).start();
         } catch (Exception exception) {
             log.log(Level.SEVERE, "Failed to start the minecraft server", exception);
+            logStaticStartupFailureContext("Failed to construct MinecraftServer instance", exception, options);
         }
     }
 
@@ -1369,6 +1371,14 @@ public class MinecraftServer implements Runnable, ICommandListener {
         VoiceChatUDPServer.VoiceUdpWindowStats udpStats = this.voiceChatUDPServer != null
             ? this.voiceChatUDPServer.consumeWindowStats()
             : VoiceChatUDPServer.VoiceUdpWindowStats.empty();
+        boolean degradedTransport = !this.voiceUdpHealthy;
+        boolean hasDropSignals = udpStats.getTotalDrops() > 0L
+            || tcpStats.getTotalDrops() > 0L
+            || udpStats.queueOverflowDrops > 0L
+            || tcpStats.queueOverflowDrops > 0L;
+        if (!degradedTransport && !hasDropSignals) {
+            return;
+        }
         int activeUdpClients = this.voiceChatUDPServer != null ? this.voiceChatUDPServer.getValidatedClientCount() : 0;
         String udpTransportState = this.voiceUdpHealthy ? "up" : "degraded(" + this.voiceUdpState + ")";
         String tcpDropReasonSummary = formatVoiceDropReasons(tcpStats.dropReasons);
@@ -1423,5 +1433,81 @@ public class MinecraftServer implements Runnable, ICommandListener {
 
     private static String formatOneDecimal(double value) {
         return String.format(Locale.ROOT, "%.1f", value);
+    }
+
+    private void logStartupFailureContext(String reason, Throwable cause) {
+        StringBuilder context = new StringBuilder();
+        context.append("[StartupFailure] reason=").append(reason == null ? "unknown" : reason);
+        context.append(" | cwd=").append(new File(".").getAbsolutePath());
+        context.append(" | java=").append(System.getProperty("java.version")).append(" (")
+            .append(System.getProperty("java.vendor")).append(")");
+        context.append(" | os=").append(System.getProperty("os.name")).append(" ")
+            .append(System.getProperty("os.arch"));
+        context.append(" | guiMode=").append(guiMode);
+        context.append(" | tick=").append(this.ticks);
+
+        if (this.propertyManager != null) {
+            context.append(" | server-ip=").append(this.propertyManager.getString("server-ip", ""));
+            context.append(" | server-port=").append(this.propertyManager.getInt("server-port", 25565));
+            context.append(" | online-mode=").append(this.propertyManager.getBoolean("online-mode", true));
+            context.append(" | level-name=").append(this.propertyManager.getString("level-name", "world"));
+            context.append(" | level-type=").append(this.propertyManager.getString("level-type", "DEFAULT"));
+            context.append(" | allow-nether=").append(this.propertyManager.getBoolean("allow-nether", true));
+            context.append(" | voice-chat=").append(this.propertyManager.getBoolean("voice-chat", true));
+            context.append(" | voice-port=").append(this.propertyManager.getInt("voice-chat-port", DEFAULT_VOICE_CHAT_PORT));
+            context.append(" | voice-require-udp-bind=").append(this.propertyManager.getBoolean("voice-require-udp-bind", false));
+        }
+
+        log.severe(context.toString());
+        if (cause != null) {
+            Throwable root = cause;
+            while (root.getCause() != null && root.getCause() != root) {
+                root = root.getCause();
+            }
+            if (root != cause) {
+                log.log(Level.SEVERE, "[StartupFailure] Root cause: " + root.toString(), root);
+            }
+        }
+    }
+
+    private static void logStaticStartupFailureContext(String reason, Throwable cause, OptionSet options) {
+        StringBuilder context = new StringBuilder();
+        context.append("[StartupFailure] reason=").append(reason == null ? "unknown" : reason);
+        context.append(" | cwd=").append(new File(".").getAbsolutePath());
+        context.append(" | java=").append(System.getProperty("java.version")).append(" (")
+            .append(System.getProperty("java.vendor")).append(")");
+        context.append(" | os=").append(System.getProperty("os.name")).append(" ")
+            .append(System.getProperty("os.arch"));
+        context.append(" | guiMode=").append(guiMode);
+
+        if (options != null) {
+            appendOption(context, options, "config");
+            appendOption(context, options, "server-ip");
+            appendOption(context, options, "server-port");
+            appendOption(context, options, "level-name");
+            appendOption(context, options, "online-mode");
+            appendOption(context, options, "max-players");
+        }
+
+        log.severe(context.toString());
+        if (cause != null) {
+            log.log(Level.SEVERE, "[StartupFailure] Exception detail", cause);
+        }
+    }
+
+    private static void appendOption(StringBuilder context, OptionSet options, String key) {
+        if (context == null || options == null || key == null) {
+            return;
+        }
+        try {
+            if (!options.has(key)) {
+                return;
+            }
+            Object value = options.valueOf(key);
+            if (value != null) {
+                context.append(" | ").append(key).append("=").append(String.valueOf(value));
+            }
+        } catch (Throwable ignored) {
+        }
     }
 }

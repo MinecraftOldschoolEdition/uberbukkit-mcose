@@ -387,6 +387,14 @@ public final class ItemRegistry {
             registerColorMeta("stone_brick_slab", item, 5);
         }
 
+        // Pumpkin variants in this fork:
+        // - 86:0 = carved_pumpkin
+        // - 86:1 = pumpkin (plain/uncarved)
+        if ("pumpkin".equals(path) && item.id == Block.PUMPKIN.id) {
+            registerColorMeta("carved_pumpkin", item, 0);
+            registerColorMeta("pumpkin", item, 1);
+        }
+
         if ("fencegate".equals(path)) {
             registerAliasIfFree(new ResourceLocation("minecraft", "fence_gate"), item);
         }

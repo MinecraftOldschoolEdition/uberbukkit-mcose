@@ -198,23 +198,81 @@ public class ServerConfigurationManager {
      * Check if the player's feet or head are inside solid blocks
      */
     private boolean isPlayerInsideSolidBlock(WorldServer world, EntityPlayer player) {
-        int x = MathHelper.floor(player.locX);
-        int y = MathHelper.floor(player.locY);
-        int z = MathHelper.floor(player.locZ);
-        
-        // Check block at feet level
-        int blockIdFeet = world.getTypeId(x, y, z);
-        if (blockIdFeet > 0 && Block.byId[blockIdFeet] != null && Block.byId[blockIdFeet].material.isSolid()) {
-            return true;
+        if (world == null || player == null) {
+            return false;
         }
-        
-        // Check block at head level (Y + 1)
-        int blockIdHead = world.getTypeId(x, y + 1, z);
-        if (blockIdHead > 0 && Block.byId[blockIdHead] != null && Block.byId[blockIdHead].material.isSolid()) {
-            return true;
+
+        AxisAlignedBB bb = player.boundingBox.shrink(0.0010D, 0.0010D, 0.0010D);
+        int minX = MathHelper.floor(bb.a);
+        int maxX = MathHelper.floor(bb.d - 1.0E-7D);
+        int minY = MathHelper.floor(bb.b);
+        int maxY = MathHelper.floor(bb.e - 1.0E-7D);
+        int minZ = MathHelper.floor(bb.c);
+        int maxZ = MathHelper.floor(bb.f - 1.0E-7D);
+
+        for (int x = minX; x <= maxX; ++x) {
+            for (int y = minY; y <= maxY; ++y) {
+                for (int z = minZ; z <= maxZ; ++z) {
+                    int blockId = world.getTypeId(x, y, z);
+                    if (blockId <= 0 || blockId >= Block.byId.length) {
+                        continue;
+                    }
+
+                    Block block = Block.byId[blockId];
+                    if (block == null || block.material == null || !block.material.isSolid() || block.material.isLiquid()) {
+                        continue;
+                    }
+
+                    AxisAlignedBB blockBox = block.e(world, x, y, z);
+                    if (blockBox == null || blockBox.a(bb)) {
+                        return true;
+                    }
+                }
+            }
         }
-        
+
         return false;
+    }
+
+    private void nudgePlayerUpUntilClear(WorldServer world, EntityPlayer player, int maxAttempts) {
+        if (world == null || player == null) {
+            return;
+        }
+
+        int attempts = 0;
+        while (attempts < maxAttempts && world.getEntities(player, player.boundingBox).size() != 0) {
+            player.setPosition(player.locX, player.locY + 1.0D, player.locZ);
+            attempts++;
+        }
+
+        attempts = 0;
+        while (attempts < maxAttempts && this.isPlayerInsideSolidBlock(world, player)) {
+            player.setPosition(player.locX, player.locY + 1.0D, player.locZ);
+            attempts++;
+        }
+    }
+
+    private void enforceSafeSpawnPosition(WorldServer world, EntityPlayer player) {
+        if (world == null || player == null) {
+            return;
+        }
+
+        this.nudgePlayerUpUntilClear(world, player, 24);
+
+        if (this.isPlayerInsideSolidBlock(world, player)) {
+            int x = MathHelper.floor(player.locX);
+            int z = MathHelper.floor(player.locZ);
+            ChunkCoordinates safe = world.findSafeSpawnNear(x, z, 24, this.shouldPreferShorelineSpawn(world));
+            if (safe != null) {
+                player.setPosition((double) safe.x + 0.5D, (double) safe.y + 0.01D, (double) safe.z + 0.5D);
+            }
+            this.nudgePlayerUpUntilClear(world, player, 12);
+        }
+
+        player.motX = 0.0D;
+        player.motY = 0.0D;
+        player.motZ = 0.0D;
+        player.fallDistance = 0.0F;
     }
 
     public void c(EntityPlayer entityplayer) {
@@ -223,21 +281,8 @@ public class ServerConfigurationManager {
         WorldServer worldserver = this.server.getWorldServer(entityplayer.dimension);
 
         worldserver.chunkProviderServer.getChunkAt((int) entityplayer.locX >> 4, (int) entityplayer.locZ >> 4);
-
-        if ((boolean) PoseidonConfig.getInstance().getConfigOption("world-settings.teleport-to-highest-safe-block")) {
-            // Check for entity collisions
-            while (worldserver.getEntities(entityplayer, entityplayer.boundingBox).size() != 0) {
-                entityplayer.setPosition(entityplayer.locX, entityplayer.locY + 1.0D, entityplayer.locZ);
-            }
-            
-            // Check for block collisions - ensure player isn't stuck inside solid blocks
-            int maxAttempts = 20;
-            int attempts = 0;
-            while (attempts < maxAttempts && isPlayerInsideSolidBlock(worldserver, entityplayer)) {
-                entityplayer.setPosition(entityplayer.locX, entityplayer.locY + 1.0D, entityplayer.locZ);
-                attempts++;
-            }
-        }
+        // Always enforce spawn safety for all game modes (survival/creative/hardcore).
+        this.enforceSafeSpawnPosition(worldserver, entityplayer);
 
         // CraftBukkit start
         Player player = this.cserver.getPlayer(entityplayer);
@@ -276,6 +321,8 @@ public class ServerConfigurationManager {
         }
         // Poseidon End
 
+        // Plugins can alter position during join events; re-validate before inserting into world.
+        this.enforceSafeSpawnPosition(worldserver, entityplayer);
         worldserver.addEntity(entityplayer);
         this.getPlayerManager(entityplayer.dimension).addPlayer(entityplayer);
         this.sendOperatorStatus(entityplayer);
@@ -481,10 +528,7 @@ public class ServerConfigurationManager {
         // CraftBukkit end
 
         worldserver.chunkProviderServer.getChunkAt((int) entityplayer1.locX >> 4, (int) entityplayer1.locZ >> 4);
-
-        while (worldserver.getEntities(entityplayer1, entityplayer1.boundingBox).size() != 0) {
-            entityplayer1.setPosition(entityplayer1.locX, entityplayer1.locY + 1.0D, entityplayer1.locZ);
-        }
+        this.enforceSafeSpawnPosition(worldserver, entityplayer1);
 
         if (this.isSkyTerrainWorld(worldserver)) {
             int safetyAttempts = 0;
@@ -512,6 +556,7 @@ public class ServerConfigurationManager {
                 ++safetyAttempts;
             }
         }
+        this.enforceSafeSpawnPosition(worldserver, entityplayer1);
 
         // CraftBukkit start
         byte actualDimension = this.getClientDimensionForWorld(worldserver);

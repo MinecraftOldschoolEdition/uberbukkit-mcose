@@ -198,6 +198,9 @@ public class CommunicationDispatcher {
             return;
         }
 
+        // Keep server/GUI chat logging behavior consistent with the legacy path.
+        log.info(formatted);
+
         List<EntityPlayer> recipients = server.serverConfigurationManager.getOnlinePlayersSnapshot();
         for (EntityPlayer recipient : recipients) {
             if (recipient == null || recipient.netServerHandler == null || recipient.netServerHandler.networkManager == null) {

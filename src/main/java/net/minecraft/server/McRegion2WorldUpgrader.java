@@ -28,6 +28,9 @@ public final class McRegion2WorldUpgrader {
             "Damage",
             "tag"
     };
+    private static final int CHEST_FACING_REPAIR_REV = 1;
+    private static final String CHEST_FACING_REPAIR_REV_KEY = "McRegion2ChestFacingRepairRev";
+    private static final String CHEST_FACING_REPAIR_MARKER_FILE = "mcregion2-chest-facing-repair.rev";
 
     private McRegion2WorldUpgrader() {}
 
@@ -37,38 +40,49 @@ public final class McRegion2WorldUpgrader {
         }
 
         int worldVersion = readWorldVersion(worldDir);
-        if (worldVersion >= WorldSaveVersions.MCREGION_2) {
+        int chestFacingRepairRev = readChestFacingRepairRevision(worldDir);
+        boolean needsFormatUpgrade = worldVersion < WorldSaveVersions.MCREGION_2;
+        boolean needsChestFacingRepair = chestFacingRepairRev < CHEST_FACING_REPAIR_REV;
+
+        if (!needsFormatUpgrade && !needsChestFacingRepair) {
             return;
         }
 
         Logger log = logger == null ? MinecraftServer.log : logger;
-        log.info("[McRegion2] Upgrading world '" + worldDir.getName() + "' from "
-                + WorldSaveVersions.nameOf(worldVersion) + " to McRegion 2...");
+        if (needsFormatUpgrade) {
+            log.info("[McRegion2] Upgrading world '" + worldDir.getName() + "' from "
+                    + WorldSaveVersions.nameOf(worldVersion) + " to McRegion 2...");
+        } else {
+            log.info("[McRegion2] Applying chest-facing parity repair revision " + CHEST_FACING_REPAIR_REV
+                    + " for world '" + worldDir.getName() + "'...");
+        }
 
         int changedDatFiles = 0;
         int changedChunks = 0;
 
-        changedDatFiles += rewriteDatIfPresent(new File(worldDir, "level.dat"));
-        changedDatFiles += rewriteDatIfPresent(new File(worldDir, "level.dat_old"));
+        if (needsFormatUpgrade) {
+            changedDatFiles += rewriteDatIfPresent(new File(worldDir, "level.dat"));
+            changedDatFiles += rewriteDatIfPresent(new File(worldDir, "level.dat_old"));
 
-        File playersDir = new File(worldDir, "players");
-        File[] playerFiles = playersDir.listFiles();
-        if (playerFiles != null) {
-            for (int i = 0; i < playerFiles.length; i++) {
-                File f = playerFiles[i];
-                if (f != null && f.isFile() && f.getName().endsWith(".dat")) {
-                    changedDatFiles += rewriteDatIfPresent(f);
+            File playersDir = new File(worldDir, "players");
+            File[] playerFiles = playersDir.listFiles();
+            if (playerFiles != null) {
+                for (int i = 0; i < playerFiles.length; i++) {
+                    File f = playerFiles[i];
+                    if (f != null && f.isFile() && f.getName().endsWith(".dat")) {
+                        changedDatFiles += rewriteDatIfPresent(f);
+                    }
                 }
             }
-        }
 
-        File dataDir = new File(worldDir, "data");
-        File[] dataFiles = dataDir.listFiles();
-        if (dataFiles != null) {
-            for (int i = 0; i < dataFiles.length; i++) {
-                File f = dataFiles[i];
-                if (f != null && f.isFile() && f.getName().endsWith(".dat")) {
-                    changedDatFiles += rewriteDatIfPresent(f);
+            File dataDir = new File(worldDir, "data");
+            File[] dataFiles = dataDir.listFiles();
+            if (dataFiles != null) {
+                for (int i = 0; i < dataFiles.length; i++) {
+                    File f = dataFiles[i];
+                    if (f != null && f.isFile() && f.getName().endsWith(".dat")) {
+                        changedDatFiles += rewriteDatIfPresent(f);
+                    }
                 }
             }
         }
@@ -87,7 +101,12 @@ public final class McRegion2WorldUpgrader {
             }
         }
 
-        updateLevelVersion(worldDir, WorldSaveVersions.MCREGION_2);
+        if (needsFormatUpgrade) {
+            updateLevelVersion(worldDir, WorldSaveVersions.MCREGION_2);
+        }
+        if (needsChestFacingRepair) {
+            markChestFacingRepairRevision(worldDir, CHEST_FACING_REPAIR_REV);
+        }
 
         log.info("[McRegion2] Upgrade complete for '" + worldDir.getName()
                 + "' (datFiles=" + changedDatFiles
@@ -106,6 +125,26 @@ public final class McRegion2WorldUpgrader {
             return root.k("Data").e("version");
         }
         return root.e("version");
+    }
+
+    private static int readChestFacingRepairRevision(File worldDir) {
+        int markerRevision = readChestFacingRepairRevisionMarker(worldDir);
+        if (markerRevision >= 0) {
+            return markerRevision;
+        }
+
+        NBTTagCompound root = readCompressedNbt(new File(worldDir, "level.dat"));
+        if (root == null) {
+            root = readCompressedNbt(new File(worldDir, "level.dat_old"));
+        }
+        if (root == null) {
+            return 0;
+        }
+
+        if (root.hasKey("Data")) {
+            return root.k("Data").e(CHEST_FACING_REPAIR_REV_KEY);
+        }
+        return root.e(CHEST_FACING_REPAIR_REV_KEY);
     }
 
     private static int rewriteDatIfPresent(File file) {
@@ -175,6 +214,7 @@ public final class McRegion2WorldUpgrader {
 
                         int chunkX = regionX * 32 + x;
                         int chunkZ = regionZ * 32 + z;
+                        ChestItemSnapshot chestBefore = snapshotChestItems(chunkNbt);
 
                         // Keep parity with client SaveConverterMcRegion: item/container conversion,
                         // then chest-facing repair, then block-state rewrite.
@@ -184,6 +224,12 @@ public final class McRegion2WorldUpgrader {
                         boolean changed = itemChanged || chestFacingChanged || blockStateChanged;
                         if (!changed) {
                             continue;
+                        }
+
+                        ChestItemSnapshot chestAfter = snapshotChestItems(chunkNbt);
+                        if (!chestBefore.matches(chestAfter)) {
+                            throw new RuntimeException("[McRegion2] Chest item entry mismatch after chunk rewrite at "
+                                    + chunkX + "," + chunkZ + " (" + chestBefore + " -> " + chestAfter + ")");
                         }
 
                         DataOutputStream out = regionFile.b(x, z);
@@ -225,12 +271,25 @@ public final class McRegion2WorldUpgrader {
         }
 
         NBTTagCompound level = chunkNbt.k("Level");
-        if (!level.hasKey("Blocks") || !level.hasKey("Data")) {
+        byte[] blocks;
+        byte[] data;
+        boolean stateBackedChunk = false;
+
+        if (level.hasKey("Blocks") && level.hasKey("Data")) {
+            blocks = level.j("Blocks");
+            data = level.j("Data");
+        } else if (BlockStateCodec.hasStateData(level)) {
+            BlockStateCodec.DecodedState decodedState = BlockStateCodec.readStateData(level);
+            if (decodedState == null) {
+                return false;
+            }
+            blocks = decodedState.blocks;
+            data = decodedState.metadata;
+            stateBackedChunk = true;
+        } else {
             return false;
         }
 
-        byte[] blocks = level.j("Blocks");
-        byte[] data = level.j("Data");
         if (blocks == null || data == null || blocks.length < 32768 || data.length < 16384) {
             return false;
         }
@@ -266,7 +325,17 @@ public final class McRegion2WorldUpgrader {
         }
 
         if (changed) {
-            level.a("Data", data);
+            if (stateBackedChunk) {
+                BlockStateCodec.writeStateData(level, blocks, data);
+                if (level.hasKey("Blocks")) {
+                    level.remove("Blocks");
+                }
+                if (level.hasKey("Data")) {
+                    level.remove("Data");
+                }
+            } else {
+                level.a("Data", data);
+            }
             chunkNbt.a("Level", level);
         }
 
@@ -405,12 +474,16 @@ public final class McRegion2WorldUpgrader {
         }
 
         NBTTagCompound level = root.k("Level");
-        if (!level.hasKey("Blocks")) {
-            chunkBlockCache.put(key, null);
-            return null;
+        byte[] blocks = null;
+        if (level.hasKey("Blocks")) {
+            blocks = level.j("Blocks");
+        } else if (BlockStateCodec.hasStateData(level)) {
+            BlockStateCodec.DecodedState decodedState = BlockStateCodec.readStateData(level);
+            if (decodedState != null) {
+                blocks = decodedState.blocks;
+            }
         }
 
-        byte[] blocks = level.j("Blocks");
         if (blocks == null || blocks.length < 32768) {
             chunkBlockCache.put(key, null);
             return null;
@@ -627,11 +700,65 @@ public final class McRegion2WorldUpgrader {
     }
 
     private static void updateLevelVersion(File worldDir, int version) {
-        updateLevelVersionFile(new File(worldDir, "level.dat"), version);
-        updateLevelVersionFile(new File(worldDir, "level.dat_old"), version);
+        updateLevelVersionFile(new File(worldDir, "level.dat"), version, -1);
+        updateLevelVersionFile(new File(worldDir, "level.dat_old"), version, -1);
     }
 
-    private static void updateLevelVersionFile(File file, int version) {
+    private static void markChestFacingRepairRevision(File worldDir, int revision) {
+        updateLevelVersionFile(new File(worldDir, "level.dat"), -1, revision);
+        updateLevelVersionFile(new File(worldDir, "level.dat_old"), -1, revision);
+        writeChestFacingRepairRevisionMarker(worldDir, revision);
+    }
+
+    private static int readChestFacingRepairRevisionMarker(File worldDir) {
+        if (worldDir == null || !worldDir.exists()) {
+            return -1;
+        }
+
+        File marker = new File(worldDir, CHEST_FACING_REPAIR_MARKER_FILE);
+        if (!marker.exists() || !marker.isFile()) {
+            return -1;
+        }
+
+        DataInputStream in = null;
+        try {
+            in = new DataInputStream(new FileInputStream(marker));
+            return in.readInt();
+        } catch (Throwable ignored) {
+            return -1;
+        } finally {
+            if (in != null) {
+                try {
+                    in.close();
+                } catch (IOException ignored) {
+                }
+            }
+        }
+    }
+
+    private static void writeChestFacingRepairRevisionMarker(File worldDir, int revision) {
+        if (worldDir == null || revision < 0) {
+            return;
+        }
+
+        File marker = new File(worldDir, CHEST_FACING_REPAIR_MARKER_FILE);
+        DataOutputStream out = null;
+        try {
+            out = new DataOutputStream(new FileOutputStream(marker));
+            out.writeInt(revision);
+            out.flush();
+        } catch (Throwable ignored) {
+        } finally {
+            if (out != null) {
+                try {
+                    out.close();
+                } catch (IOException ignored) {
+                }
+            }
+        }
+    }
+
+    private static void updateLevelVersionFile(File file, int version, int chestFacingRepairRevision) {
         if (file == null || !file.exists() || !file.isFile()) {
             return;
         }
@@ -643,13 +770,83 @@ public final class McRegion2WorldUpgrader {
 
         if (root.hasKey("Data")) {
             NBTTagCompound data = root.k("Data");
-            data.a("version", version);
+            if (version >= 0) {
+                data.a("version", version);
+            }
+            if (chestFacingRepairRevision >= 0) {
+                data.a(CHEST_FACING_REPAIR_REV_KEY, chestFacingRepairRevision);
+            }
             root.a("Data", data);
         } else {
-            root.a("version", version);
+            if (version >= 0) {
+                root.a("version", version);
+            }
+            if (chestFacingRepairRevision >= 0) {
+                root.a(CHEST_FACING_REPAIR_REV_KEY, chestFacingRepairRevision);
+            }
         }
 
         writeCompressedNbtAtomic(file, root);
+    }
+
+    private static ChestItemSnapshot snapshotChestItems(NBTTagCompound chunkNbt) {
+        if (chunkNbt == null || !chunkNbt.hasKey("Level")) {
+            return ChestItemSnapshot.EMPTY;
+        }
+
+        NBTTagCompound level = chunkNbt.k("Level");
+        if (!level.hasKey("TileEntities")) {
+            return ChestItemSnapshot.EMPTY;
+        }
+
+        NBTTagList tileEntities = level.l("TileEntities");
+        if (tileEntities == null) {
+            return ChestItemSnapshot.EMPTY;
+        }
+
+        int chestCount = 0;
+        int itemEntries = 0;
+        for (int i = 0; i < tileEntities.c(); ++i) {
+            NBTBase raw = tileEntities.a(i);
+            if (!(raw instanceof NBTTagCompound)) {
+                continue;
+            }
+
+            NBTTagCompound tileEntity = (NBTTagCompound) raw;
+            String id = tileEntity.getString("id");
+            if (!"Chest".equals(id) && !"minecraft:chest".equals(id) && !"minecraft:trapped_chest".equals(id)) {
+                continue;
+            }
+
+            chestCount++;
+            if (tileEntity.hasKey("Items")) {
+                NBTTagList items = tileEntity.l("Items");
+                if (items != null) {
+                    itemEntries += items.c();
+                }
+            }
+        }
+
+        return new ChestItemSnapshot(chestCount, itemEntries);
+    }
+
+    private static final class ChestItemSnapshot {
+        private static final ChestItemSnapshot EMPTY = new ChestItemSnapshot(0, 0);
+        private final int chestCount;
+        private final int itemEntries;
+
+        private ChestItemSnapshot(int chestCount, int itemEntries) {
+            this.chestCount = chestCount;
+            this.itemEntries = itemEntries;
+        }
+
+        private boolean matches(ChestItemSnapshot other) {
+            return other != null && this.chestCount == other.chestCount && this.itemEntries == other.itemEntries;
+        }
+
+        public String toString() {
+            return "chests=" + this.chestCount + ",items=" + this.itemEntries;
+        }
     }
 
     private static NBTTagCompound readCompressedNbt(File file) {
