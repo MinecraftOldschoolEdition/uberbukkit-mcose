@@ -136,9 +136,14 @@ public class BlockWallClock extends Block {
         }
 
         double phase = ((double) (dayTime - 6000L) / 24000.0D) * (Math.PI * 2.0D);
-        double daylightFactor = Math.cos(phase);
+        double sunExposure = Math.cos(phase);
+        // Keep a weak twilight signal so clocks begin powering around sunrise, not only after full day.
+        double twilightBias = 0.12D;
+        double daylightFactor = (sunExposure + twilightBias) / (1.0D + twilightBias);
         if (daylightFactor < 0.0D) {
             daylightFactor = 0.0D;
+        } else if (daylightFactor > 1.0D) {
+            daylightFactor = 1.0D;
         }
 
         int power = (int) Math.round(daylightFactor * 15.0D);

@@ -72,10 +72,14 @@ public final class CriticalBlockStateAccess {
     }
 
     public static int getWallClockMetadata(IBlockAccess access, int x, int y, int z) {
-        BlockStateKey state = state(access, x, y, z);
         int fallback = access.getData(x, y, z) & 15;
+        if (fallback >= 2 && fallback <= 5) {
+            return fallback;
+        }
+
+        BlockStateKey state = state(access, x, y, z);
         int meta = wallClockMetaFromFacing(state.getProperty("facing"));
-        return meta < 0 ? fallback : meta;
+        return meta >= 2 && meta <= 5 ? meta : 0;
     }
 
     private static BlockStateKey state(IBlockAccess access, int x, int y, int z) {
