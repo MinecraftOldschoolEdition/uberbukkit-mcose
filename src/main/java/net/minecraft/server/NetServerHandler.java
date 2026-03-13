@@ -149,8 +149,8 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         return (this.negotiatedModFeatures & ModProtocol.FEATURE_ITEM_COMPONENTS) != 0;
     }
 
-    public boolean supportsMcRegion2Items() {
-        return (this.negotiatedModFeatures & ModProtocol.FEATURE_MCREGION2_ITEMS) != 0;
+    public boolean supportsRegionCoreItems() {
+        return (this.negotiatedModFeatures & ModProtocol.FEATURE_REGIONCORE_ITEMS) != 0;
     }
 
     public boolean supportsEntityWireV2() {

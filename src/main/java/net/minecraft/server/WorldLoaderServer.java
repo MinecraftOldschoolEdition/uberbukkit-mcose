@@ -75,11 +75,11 @@ public class WorldLoaderServer extends WorldLoader {
             this.a(arraylist3, arraylist.size() + arraylist2.size() + arraylist1.size(), i, iprogressupdate);
         }
         try {
-            // Keep conversion parity with client McRegion2 upgrade logic so chest inventories/facing
+            // Keep conversion parity with client RegionCore upgrade logic so chest inventories/facing
             // and other legacy item-bearing NBT are rewritten in one deterministic pass.
-            McRegion2WorldUpgrader.upgradeWorldToMcRegion2(file1, MinecraftServer.log);
+            RegionCoreWorldUpgrader.upgradeWorldToRegionCore(file1, MinecraftServer.log);
         } catch (RuntimeException runtimeexception) {
-            throw new RuntimeException("Failed to run McRegion2 post-conversion upgrade for '" + s + "'", runtimeexception);
+            throw new RuntimeException("Failed to run RegionCore post-conversion upgrade for '" + s + "'", runtimeexception);
         }
 
         iprogressupdate.a(100);

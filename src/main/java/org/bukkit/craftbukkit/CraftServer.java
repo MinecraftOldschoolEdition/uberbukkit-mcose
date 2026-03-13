@@ -532,9 +532,9 @@ public final class CraftServer implements Server {
         }
 
         try {
-            McRegion2WorldUpgrader.upgradeWorldToMcRegion2(folder, getLogger());
+            RegionCoreWorldUpgrader.upgradeWorldToRegionCore(folder, getLogger());
         } catch (RuntimeException conversionFailure) {
-            throw new IllegalStateException("Failed to upgrade world '" + name + "' to McRegion 2", conversionFailure);
+            throw new IllegalStateException("Failed to upgrade world '" + name + "' to RegionCore", conversionFailure);
         }
 
         int dimension = 10 + console.worlds.size();

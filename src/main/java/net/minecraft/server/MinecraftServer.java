@@ -239,13 +239,13 @@ public class MinecraftServer implements Runnable, ICommandListener {
                     throw new RuntimeException("Legacy world conversion did not complete for '" + preflightWorldName + "'");
                 }
             }
-            McRegion2WorldUpgrader.upgradeWorldToMcRegion2(new File(preflightWorldName), log);
+            RegionCoreWorldUpgrader.upgradeWorldToRegionCore(new File(preflightWorldName), log);
             if (this.propertyManager.getBoolean("allow-nether", true)) {
                 String preflightNetherName = preflightWorldName + "_" + Environment.getEnvironment(-1).toString().toLowerCase();
-                McRegion2WorldUpgrader.upgradeWorldToMcRegion2(new File(preflightNetherName), log);
+                RegionCoreWorldUpgrader.upgradeWorldToRegionCore(new File(preflightNetherName), log);
             }
         } catch (RuntimeException conversionFailure) {
-            log.log(Level.SEVERE, "[McRegion2] Failed to upgrade world data during preflight startup.", conversionFailure);
+            log.log(Level.SEVERE, "[RegionCore] Failed to upgrade world data during preflight startup.", conversionFailure);
             this.logStartupFailureContext("World preflight conversion failed", conversionFailure);
             return false;
         }
@@ -369,7 +369,7 @@ public class MinecraftServer implements Runnable, ICommandListener {
     }
 
     private void a(Convertable convertable, String s, long i) {
-        // World storage has already been preflight-upgraded to McRegion2 before bind.
+        // World storage has already been preflight-upgraded to RegionCore before bind.
 
         // CraftBukkit start
         for (int j = 0; j < (this.propertyManager.getBoolean("allow-nether", true) ? 2 : 1); ++j) {

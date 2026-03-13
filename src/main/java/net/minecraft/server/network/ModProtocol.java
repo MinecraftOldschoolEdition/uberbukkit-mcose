@@ -20,10 +20,10 @@ public final class ModProtocol {
     public static final int FEATURE_CHUNK_ZSTD = 1 << 0;
     public static final int FEATURE_ITEM_STACK_V2 = 1 << 1;
     public static final int FEATURE_ITEM_COMPONENTS = 1 << 2;
-    public static final int FEATURE_MCREGION2_ITEMS = 1 << 3;
+    public static final int FEATURE_REGIONCORE_ITEMS = 1 << 3;
     public static final int FEATURE_ENTITY_WIRE_V2 = 1 << 4;
     public static final int FEATURE_ENTITY_DATA_V2 = 1 << 5;
-    public static final int FEATURE_MCREGION2_ENTITIES = 1 << 6;
+    public static final int FEATURE_REGIONCORE_ENTITIES = 1 << 6;
     public static final int FEATURE_SKIN_PARTS_SYNC = 1 << 7;
 
     public static final String CHANNEL_HELLO = "MCOSE|MOD_HELLO";
@@ -91,10 +91,10 @@ public final class ModProtocol {
     public static int resolveServerSupportedFeatures() {
         int features = FEATURE_ITEM_STACK_V2
                 | FEATURE_ITEM_COMPONENTS
-                | FEATURE_MCREGION2_ITEMS
+                | FEATURE_REGIONCORE_ITEMS
                 | FEATURE_ENTITY_WIRE_V2
                 | FEATURE_ENTITY_DATA_V2
-                | FEATURE_MCREGION2_ENTITIES
+                | FEATURE_REGIONCORE_ENTITIES
                 | FEATURE_SKIN_PARTS_SYNC;
         if (net.minecraft.server.ZstdRuntime.isAvailable()) {
             features |= FEATURE_CHUNK_ZSTD;

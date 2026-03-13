@@ -14,9 +14,9 @@ import java.util.Map;
 import java.util.logging.Logger;
 
 /**
- * One-way upgrader that rewrites item-bearing world NBT to McRegion2 stack format.
+ * One-way upgrader that rewrites item-bearing world NBT to RegionCore stack format.
  */
-public final class McRegion2WorldUpgrader {
+public final class RegionCoreWorldUpgrader {
     private static final String[] ITEM_STACK_REWRITE_KEYS = new String[] {
             "mcose_stack_format",
             "item",
@@ -29,12 +29,12 @@ public final class McRegion2WorldUpgrader {
             "tag"
     };
     private static final int CHEST_FACING_REPAIR_REV = 1;
-    private static final String CHEST_FACING_REPAIR_REV_KEY = "McRegion2ChestFacingRepairRev";
-    private static final String CHEST_FACING_REPAIR_MARKER_FILE = "mcregion2-chest-facing-repair.rev";
+    private static final String CHEST_FACING_REPAIR_REV_KEY = "RegionCoreChestFacingRepairRev";
+    private static final String CHEST_FACING_REPAIR_MARKER_FILE = "regioncore-chest-facing-repair.rev";
 
-    private McRegion2WorldUpgrader() {}
+    private RegionCoreWorldUpgrader() {}
 
-    public static void upgradeWorldToMcRegion2(File worldDir, Logger logger) {
+    public static void upgradeWorldToRegionCore(File worldDir, Logger logger) {
         if (worldDir == null || !worldDir.exists() || !worldDir.isDirectory()) {
             return;
         }
@@ -50,10 +50,10 @@ public final class McRegion2WorldUpgrader {
 
         Logger log = logger == null ? MinecraftServer.log : logger;
         if (needsFormatUpgrade) {
-            log.info("[McRegion2] Upgrading world '" + worldDir.getName() + "' from "
-                    + WorldSaveVersions.nameOf(worldVersion) + " to McRegion 2...");
+            log.info("[RegionCore] Upgrading world '" + worldDir.getName() + "' from "
+                    + WorldSaveVersions.nameOf(worldVersion) + " to RegionCore...");
         } else {
-            log.info("[McRegion2] Applying chest-facing parity repair revision " + CHEST_FACING_REPAIR_REV
+            log.info("[RegionCore] Applying chest-facing parity repair revision " + CHEST_FACING_REPAIR_REV
                     + " for world '" + worldDir.getName() + "'...");
         }
 
@@ -108,7 +108,7 @@ public final class McRegion2WorldUpgrader {
             markChestFacingRepairRevision(worldDir, CHEST_FACING_REPAIR_REV);
         }
 
-        log.info("[McRegion2] Upgrade complete for '" + worldDir.getName()
+        log.info("[RegionCore] Upgrade complete for '" + worldDir.getName()
                 + "' (datFiles=" + changedDatFiles
                 + ", chunks=" + changedChunks + ").");
     }
@@ -228,7 +228,7 @@ public final class McRegion2WorldUpgrader {
 
                         ChestItemSnapshot chestAfter = snapshotChestItems(chunkNbt);
                         if (!chestBefore.matches(chestAfter)) {
-                            throw new RuntimeException("[McRegion2] Chest item entry mismatch after chunk rewrite at "
+                            throw new RuntimeException("[RegionCore] Chest item entry mismatch after chunk rewrite at "
                                     + chunkX + "," + chunkZ + " (" + chestBefore + " -> " + chestAfter + ")");
                         }
 
@@ -242,7 +242,7 @@ public final class McRegion2WorldUpgrader {
                     }
                 }
             } catch (Throwable t) {
-                throw new RuntimeException("[McRegion2] Failed rewriting region file: " + file.getAbsolutePath(), t);
+                throw new RuntimeException("[RegionCore] Failed rewriting region file: " + file.getAbsolutePath(), t);
             } finally {
                 if (regionFile != null) {
                     try {
@@ -253,7 +253,7 @@ public final class McRegion2WorldUpgrader {
         }
 
         if (changedChunks > 0) {
-            logger.info("[McRegion2] Rewrote " + changedChunks + " chunks in " + regionDir.getAbsolutePath());
+            logger.info("[RegionCore] Rewrote " + changedChunks + " chunks in " + regionDir.getAbsolutePath());
         }
 
         RegionFileCache.a();
@@ -870,13 +870,13 @@ public final class McRegion2WorldUpgrader {
     }
 
     private static void writeCompressedNbtAtomic(File file, NBTTagCompound root) {
-        File tmp = new File(file.getParentFile(), file.getName() + ".mcregion2.tmp");
+        File tmp = new File(file.getParentFile(), file.getName() + ".regioncore.tmp");
         FileOutputStream out = null;
         try {
             out = new FileOutputStream(tmp);
             CompressedStreamTools.a(root, out);
         } catch (Throwable t) {
-            throw new RuntimeException("[McRegion2] Failed writing temp file: " + tmp.getAbsolutePath(), t);
+            throw new RuntimeException("[RegionCore] Failed writing temp file: " + tmp.getAbsolutePath(), t);
         } finally {
             if (out != null) {
                 try {
@@ -886,10 +886,10 @@ public final class McRegion2WorldUpgrader {
         }
 
         if (file.exists() && !file.delete()) {
-            throw new RuntimeException("[McRegion2] Failed replacing file: " + file.getAbsolutePath());
+            throw new RuntimeException("[RegionCore] Failed replacing file: " + file.getAbsolutePath());
         }
         if (!tmp.renameTo(file)) {
-            throw new RuntimeException("[McRegion2] Failed moving temp file into place: " + file.getAbsolutePath());
+            throw new RuntimeException("[RegionCore] Failed moving temp file into place: " + file.getAbsolutePath());
         }
     }
 }

@@ -20,7 +20,7 @@ public class RegionFile {
     private static final byte REGION_CODEC_GZIP = 1;
     private static final byte REGION_CODEC_ZLIB = 2;
     private static final byte REGION_CODEC_ZSTD = 3;
-    private static final String WAL_LOG_PREFIX = "[McRegion2 WAL]";
+    private static final String WAL_LOG_PREFIX = "[RegionCore WAL]";
     private static final int WAL_LOG_LEVEL = getWalLogLevel();
     private static final boolean WAL_STRICT_SYNC = isStrictWalMode();
     private static final int WAL_SYNC_BATCH = getWalSyncBatch();
@@ -429,7 +429,7 @@ public class RegionFile {
     }
 
     private static int getWalSyncBatch() {
-        String custom = System.getProperty("mcregion2.wal.syncBatch");
+        String custom = System.getProperty("regioncore.wal.syncBatch");
         if (custom != null) {
             try {
                 int parsed = Integer.parseInt(custom.trim());
@@ -457,7 +457,7 @@ public class RegionFile {
     }
 
     private static String getWalProperty(String suffix, String fallback) {
-        String value = System.getProperty("mcregion2.wal." + suffix);
+        String value = System.getProperty("regioncore.wal." + suffix);
         if (value != null) {
             return value;
         }

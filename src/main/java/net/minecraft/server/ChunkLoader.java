@@ -217,7 +217,7 @@ public class ChunkLoader implements IChunkLoader {
             chunk.b = decodedState.blocks;
             chunk.e = new NibbleArray(decodedState.metadata);
             if (decodedState.usedNearestFallback) {
-                System.out.println("[McRegion2] Loaded chunk [" + i + "," + j + "] with nearest-state legacy fallback projections.");
+                System.out.println("[RegionCore] Loaded chunk [" + i + "," + j + "] with nearest-state legacy fallback projections.");
             }
         } else {
             chunk.b = nbttagcompound.j("Blocks");

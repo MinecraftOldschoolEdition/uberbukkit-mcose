@@ -22,7 +22,7 @@ public final class WorldSaveVersions {
         return version == MCREGION_1;
     }
 
-    public static boolean requiresMcRegion2Conversion(int version) {
+    public static boolean requiresRegionCoreConversion(int version) {
         return version < MCREGION_2;
     }
 
@@ -32,7 +32,7 @@ public final class WorldSaveVersions {
 
     public static String nameOf(int version) {
         if (version == MCREGION_2) {
-            return "McRegion 2";
+            return "RegionCore";
         }
         if (version == MCREGION_1) {
             return "McRegion 1";

@@ -104,7 +104,7 @@ public final class BlockStateCodec {
             for (Integer count : fallbackCounts.values()) {
                 totalFallbacks += count.intValue();
             }
-            System.err.println("[McRegion2] Nearest legacy state fallback summary: " + totalFallbacks + " blocks across " + fallbackCounts.size() + " state keys");
+            System.err.println("[RegionCore] Nearest legacy state fallback summary: " + totalFallbacks + " blocks across " + fallbackCounts.size() + " state keys");
             int logged = 0;
             for (Map.Entry<String, Integer> entry : fallbackCounts.entrySet()) {
                 if (logged >= MAX_FALLBACK_LOG_STATES) {
@@ -112,11 +112,11 @@ public final class BlockStateCodec {
                 }
                 String stateName = entry.getKey();
                 String coords = firstFallbackCoords.get(stateName);
-                System.err.println("[McRegion2]   " + stateName + " x" + entry.getValue() + " firstAt " + coords);
+                System.err.println("[RegionCore]   " + stateName + " x" + entry.getValue() + " firstAt " + coords);
                 logged++;
             }
             if (fallbackCounts.size() > MAX_FALLBACK_LOG_STATES) {
-                System.err.println("[McRegion2]   ... " + (fallbackCounts.size() - MAX_FALLBACK_LOG_STATES) + " additional state keys omitted");
+                System.err.println("[RegionCore]   ... " + (fallbackCounts.size() - MAX_FALLBACK_LOG_STATES) + " additional state keys omitted");
             }
         }
 

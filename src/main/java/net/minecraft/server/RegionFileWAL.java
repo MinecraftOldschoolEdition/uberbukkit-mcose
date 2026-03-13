@@ -13,7 +13,7 @@ final class RegionFileWAL {
     private static final int HEADER_BYTES = 20;
     private static final int MAX_CHUNK_BYTES = 4096 * 255 - 5;
     private static final int MAX_WAL_PAYLOAD_BYTES = MAX_CHUNK_BYTES + 1;
-    private static final String WAL_LOG_PREFIX = "[McRegion2 WAL]";
+    private static final String WAL_LOG_PREFIX = "[RegionCore WAL]";
     private static final int WAL_LOG_LEVEL = getWalLogLevel();
     private final File walPath;
     private final RandomAccessFile walFile;
@@ -155,7 +155,7 @@ final class RegionFileWAL {
     }
 
     private static String getWalProperty(String suffix, String fallback) {
-        String value = System.getProperty("mcregion2.wal." + suffix);
+        String value = System.getProperty("regioncore.wal." + suffix);
         if (value != null) {
             return value;
         }
