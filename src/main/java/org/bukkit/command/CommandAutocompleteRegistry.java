@@ -919,6 +919,16 @@ public final class CommandAutocompleteRegistry {
             { ARG_PROFILE_ACTION }
         }, true);
 
+        registerSpecInternal(BUILTIN_OWNER, "relight", new String[0], new String[][] {
+            {},
+            { ARG_INTEGER },
+            { ARG_PLAYER },
+            { ARG_PLAYER, ARG_INTEGER },
+            { ARG_INTEGER, ARG_INTEGER },
+            { ARG_INTEGER, ARG_INTEGER, ARG_INTEGER },
+            { ARG_INTEGER, ARG_INTEGER, ARG_INTEGER, ARG_INTEGER }
+        }, true);
+
         registerSpecInternal(BUILTIN_OWNER, "debug", new String[0], new String[][] {
             { ARG_DEBUG_ACTION },
             { ARG_DEBUG_ACTION, ARG_TICK_RATE }

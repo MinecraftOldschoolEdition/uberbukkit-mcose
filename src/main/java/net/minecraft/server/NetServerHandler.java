@@ -2155,17 +2155,17 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         // Allow from true creative OR trusted modded clients (pvn >= 12) for pick-block support
         boolean allow = (this.player.gameMode == 1) || (this.networkManager != null && this.networkManager.pvn >= 12);
         if (!allow) return;
+        ItemStack stack = sanitizeCreativeStack(packet.itemStack);
         if (packet.slot == -1) {
-            if (packet.itemStack != null) {
-                int max = Math.min(64, packet.itemStack.getMaxStackSize());
-                if (packet.itemStack.count < 1) packet.itemStack.count = 1;
-                if (packet.itemStack.count > max) packet.itemStack.count = max;
-                this.player.a(packet.itemStack, true);
+            if (stack != null) {
+                int max = Math.min(64, stack.getMaxStackSize());
+                if (stack.count < 1) stack.count = 1;
+                if (stack.count > max) stack.count = max;
+                this.player.a(stack, true);
             }
             return;
         }
         int slot = packet.slot;
-        ItemStack stack = packet.itemStack;
         if (stack != null) {
             int max = Math.min(64, stack.getMaxStackSize());
             if (stack.count < 1) stack.count = 1;
@@ -2180,6 +2180,26 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         }
         ItemStack confirm = (slot >= 36 && slot < 45) ? this.player.inventory.items[slot - 36] : this.player.inventory.items[slot];
         this.player.netServerHandler.sendPacket(new Packet103SetSlot(0, slot, confirm));
+    }
+
+    private ItemStack sanitizeCreativeStack(ItemStack stack) {
+        if (stack == null) {
+            return null;
+        }
+
+        if (stack.getItem() != null) {
+            return stack;
+        }
+
+        // Compatibility shim: legacy clients/palettes may still send fence gate as 150.
+        if (stack.id == 150 && Block.FENCE_GATE != null && Item.byId[Block.FENCE_GATE.id] != null) {
+            stack.id = Block.FENCE_GATE.id;
+            if (stack.getItem() != null) {
+                return stack;
+            }
+        }
+
+        return null;
     }
 
     public void a(Packet0KeepAlive packet0KeepAlive) {
