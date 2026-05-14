@@ -386,12 +386,8 @@ public class VoiceChatUDPServer {
         int delivered = 0;
 
         for (EntityPlayer recipientPlayer : recipients) {
-            VoiceClient recipient = getClientForPlayer(recipientPlayer);
-            if (recipient == null) {
-                continue;
-            }
-
             float packetDistance = -1.0F;
+            float tcpMaxDistance = 0.0F;
             if (whispering) {
                 if (recipientPlayer.dimension != senderPlayer.dimension) {
                     continue;
@@ -401,9 +397,10 @@ public class VoiceChatUDPServer {
                     continue;
                 }
                 packetDistance = (float) Math.sqrt(distanceSq);
+                tcpMaxDistance = (float) whisperDistance;
             }
 
-            if (sendPlayerSound(recipient, senderPlayer.getMojangUUID(), sequence, audioData, whispering, packetDistance)) {
+            if (deliverPlayerSound(recipientPlayer, senderPlayer, sequence, audioData, whispering, packetDistance, tcpMaxDistance)) {
                 delivered++;
             }
         }
@@ -418,12 +415,13 @@ public class VoiceChatUDPServer {
         double maxDistanceSq = maxDistance * maxDistance;
         int delivered = 0;
 
-        for (VoiceClient recipient : clients.values()) {
-            if (recipient.playerId.equals(senderPlayer.getMojangUUID())) {
+        List<EntityPlayer> onlinePlayers = server.serverConfigurationManager.getOnlinePlayersSnapshot();
+        for (int i = 0; i < onlinePlayers.size(); i++) {
+            EntityPlayer recipientPlayer = onlinePlayers.get(i);
+            if (recipientPlayer == null || recipientPlayer == senderPlayer) {
                 continue;
             }
 
-            EntityPlayer recipientPlayer = findPlayerByUUID(recipient.playerId);
             if (recipientPlayer == null || recipientPlayer.dimension != senderPlayer.dimension) {
                 continue;
             }
@@ -433,13 +431,14 @@ public class VoiceChatUDPServer {
                 continue;
             }
 
-            if (sendPlayerSound(
-                recipient,
-                senderPlayer.getMojangUUID(),
+            if (deliverPlayerSound(
+                recipientPlayer,
+                senderPlayer,
                 sequence,
                 audioData,
                 whispering,
-                (float) Math.sqrt(distanceSq)
+                (float) Math.sqrt(distanceSq),
+                (float) maxDistance
             )) {
                 delivered++;
             }
@@ -447,11 +446,37 @@ public class VoiceChatUDPServer {
         return delivered;
     }
 
+    private boolean deliverPlayerSound(EntityPlayer recipientPlayer, EntityPlayer senderPlayer, long sequence, byte[] audioData, boolean whispering, float packetDistance, float tcpMaxDistance) {
+        VoiceClient recipient = getClientForPlayer(recipientPlayer);
+        if (recipient != null) {
+            return sendPlayerSound(
+                recipient,
+                senderPlayer.getMojangUUID(),
+                sequence,
+                audioData,
+                whispering,
+                packetDistance
+            );
+        }
+        return sendTcpPlayerSound(recipientPlayer, senderPlayer, audioData, tcpMaxDistance);
+    }
+
     private VoiceClient getClientForPlayer(EntityPlayer player) {
         if (player == null || player.getMojangUUID() == null) {
             return null;
         }
         return playerToClient.get(player.getMojangUUID());
+    }
+
+    private boolean sendTcpPlayerSound(EntityPlayer recipientPlayer, EntityPlayer senderPlayer, byte[] audioData, float maxDistance) {
+        if (recipientPlayer == null || senderPlayer == null || recipientPlayer.netServerHandler == null || audioData == null) {
+            return false;
+        }
+        if (audioData.length > Packet64Voice.MAX_PAYLOAD_SIZE) {
+            return false;
+        }
+        recipientPlayer.netServerHandler.sendPacket(new Packet64Voice(senderPlayer.id, maxDistance, senderPlayer.name, audioData));
+        return true;
     }
 
     private void handleKeepAlive(byte[] data, InetAddress address, int port) {
