@@ -644,9 +644,24 @@ public abstract class EntityHuman extends EntityLiving {
     }
 
     public void c(Entity entity) {
-        if (!entity.a(this)) {
-            ItemStack itemstack = this.G();
+        ItemStack itemstack = this.G();
+        if (itemstack != null && entity instanceof EntityAnimal && ItemLead.isLeadItemStack(itemstack)) {
+            Item item = itemstack.getItem();
+            if (item instanceof ItemLead && ((ItemLead) item).attachToAnimal(itemstack, (EntityAnimal) entity, this)) {
+                this.a(StatisticList.E[itemstack.id], 1);
+                if (itemstack.count == 0) {
+                    itemstack.a(this);
+                    this.H();
+                }
+                return;
+            }
 
+            if (((EntityAnimal) entity).isLeashedTo(this)) {
+                return;
+            }
+        }
+
+        if (!entity.a(this)) {
             if (itemstack != null && entity instanceof EntityLiving) {
                 itemstack.a((EntityLiving) entity);
                 // CraftBukkit - bypass infinite items; <= 0 -> == 0

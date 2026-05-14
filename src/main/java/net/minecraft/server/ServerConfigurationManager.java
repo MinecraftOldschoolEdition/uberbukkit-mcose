@@ -22,6 +22,7 @@ import java.util.logging.Logger;
 public class ServerConfigurationManager {
 
     public static Logger a = Logger.getLogger("Minecraft");
+    private static final String MCOSE_LAN_OWNER_HANDOFF_FILE = "mcose_lan_owner.dat";
     public List players = new ArrayList();
     public MinecraftServer server; // CraftBukkit - private -> public
     // private PlayerManager[] d = new PlayerManager[2]; // CraftBukkit - removed
@@ -110,9 +111,11 @@ public class ServerConfigurationManager {
     public void b(EntityPlayer entityplayer) {
         // Check if player data file exists before loading (to detect new players)
         boolean isNewPlayer = !this.playerHasData(entityplayer.name);
-        boolean isOperator = this.isOp(entityplayer.name);
+        boolean isOperator = this.isListedOp(entityplayer.name);
         
         this.playerFileData.b(entityplayer);
+        this.applyLocalLanOwnerSnapshot(entityplayer);
+        this.syncLoadedPlayerWorld(entityplayer);
         
         // Apply default gamemode from server.properties for new players only
         if (isNewPlayer && this.server.defaultGameMode != 0) {
@@ -180,6 +183,67 @@ public class ServerConfigurationManager {
 
         // UberBukkit - Record player join in server-wide statistics
         ServerStatistics.getInstance().recordPlayerJoin(entityplayer.name);
+    }
+
+    private void applyLocalLanOwnerSnapshot(EntityPlayer entityplayer) {
+        if (entityplayer == null || this.server == null) {
+            return;
+        }
+
+        File handoffFile = this.server.a(MCOSE_LAN_OWNER_HANDOFF_FILE);
+        if (handoffFile == null || !handoffFile.isFile()) {
+            return;
+        }
+
+        FileInputStream input = null;
+        try {
+            input = new FileInputStream(handoffFile);
+            NBTTagCompound ownerTag = CompressedStreamTools.a((InputStream) input);
+            String ownerName = ownerTag.hasKey("MCOSEOwnerName") ? ownerTag.getString("MCOSEOwnerName") : "";
+            if (ownerName.length() > 0 && !ownerName.equalsIgnoreCase(entityplayer.name)) {
+                return;
+            }
+
+            entityplayer.e(ownerTag);
+            a.info("[MCOSE LAN] Applied exact singleplayer owner snapshot for " + entityplayer.name
+                + " at (" + entityplayer.locX + ", " + entityplayer.locY + ", " + entityplayer.locZ
+                + ") dimension " + entityplayer.dimension);
+
+            input.close();
+            input = null;
+            if (!handoffFile.delete()) {
+                File appliedFile = new File(handoffFile.getParentFile(), MCOSE_LAN_OWNER_HANDOFF_FILE + ".applied");
+                if (appliedFile.exists()) {
+                    appliedFile.delete();
+                }
+                handoffFile.renameTo(appliedFile);
+            }
+        } catch (Exception exception) {
+            a.warning("[MCOSE LAN] Failed to apply exact singleplayer owner snapshot for " + entityplayer.name + ": " + exception.getMessage());
+        } finally {
+            if (input != null) {
+                try {
+                    input.close();
+                } catch (IOException ignored) {
+                }
+            }
+        }
+    }
+
+    private void syncLoadedPlayerWorld(EntityPlayer entityplayer) {
+        if (entityplayer == null || this.server == null) {
+            return;
+        }
+
+        WorldServer targetWorld = this.server.getWorldServer(entityplayer.dimension);
+        if (targetWorld == null) {
+            entityplayer.dimension = 0;
+            targetWorld = this.server.getWorldServer(0);
+        }
+
+        if (targetWorld != null && entityplayer.world != targetWorld) {
+            entityplayer.spawnIn(targetWorld);
+        }
     }
     
     /**
@@ -907,7 +971,11 @@ public class ServerConfigurationManager {
     }
 
     public boolean isOp(String s) {
-        return this.h.contains(s.trim().toLowerCase());
+        return this.isListedOp(s) || this.server.allowCommandsForAllPlayers;
+    }
+
+    private boolean isListedOp(String s) {
+        return s != null && this.h.contains(s.trim().toLowerCase());
     }
 
     private void sendOperatorStatus(EntityPlayer entityplayer) {

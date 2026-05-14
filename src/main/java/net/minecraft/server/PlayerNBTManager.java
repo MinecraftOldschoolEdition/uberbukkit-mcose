@@ -18,10 +18,16 @@ public class PlayerNBTManager implements PlayerFileData, IDataManager {
     private final File c;
     private final File d;
     private final long e = System.currentTimeMillis();
+    private final boolean ownsSessionLock;
     private UUID uuid = null; // CraftBukkit
 
     public PlayerNBTManager(File file1, String s, boolean flag) {
-        this.b = new File(file1, s);
+        this(new File(file1, s), flag, true);
+    }
+
+    protected PlayerNBTManager(File worldDirectory, boolean flag, boolean ownsSessionLock) {
+        this.b = worldDirectory;
+        this.ownsSessionLock = ownsSessionLock;
         this.b.mkdirs();
         this.c = new File(this.b, "players");
         this.d = new File(this.b, "data");
@@ -30,7 +36,9 @@ public class PlayerNBTManager implements PlayerFileData, IDataManager {
             this.c.mkdirs();
         }
 
-        this.f();
+        if (this.ownsSessionLock) {
+            this.f();
+        }
     }
 
     private void f() {
@@ -54,6 +62,10 @@ public class PlayerNBTManager implements PlayerFileData, IDataManager {
     }
 
     public void b() {
+        if (!this.ownsSessionLock) {
+            return;
+        }
+
         File lockFile = new File(this.b, "session.lock");
         IOException lastIoException = null;
         final int maxAttempts = 3;

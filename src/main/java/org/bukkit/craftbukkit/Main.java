@@ -68,6 +68,10 @@ public class Main {
 
                 acceptsAll(asList("w", "world", "level-name"), "World directory").withRequiredArg().ofType(String.class).describedAs("World dir");
 
+                acceptsAll(asList("world-container"), "Parent directory containing world directories").withRequiredArg().ofType(File.class).defaultsTo(new File(".")).describedAs("World container");
+
+                acceptsAll(asList("singleplayer-layout"), "Use vanilla singleplayer dimension layout for the selected world");
+
                 acceptsAll(asList("p", "port", "server-port"), "Port to listen on").withRequiredArg().ofType(Integer.class).describedAs("Port");
 
                 acceptsAll(asList("o", "online-mode"), "Whether to use online authentication").withRequiredArg().ofType(Boolean.class).describedAs("Authentication");

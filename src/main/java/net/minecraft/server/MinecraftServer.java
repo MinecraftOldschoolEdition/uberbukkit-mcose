@@ -100,6 +100,9 @@ public class MinecraftServer implements Runnable, ICommandListener {
     public static int currentTick;
     public String configuredLevelType; // Added for server.properties level-type
     public int defaultGameMode = 0; // 0=survival, 1=creative, 2=hardcore
+    public boolean allowCommandsForAllPlayers = false;
+    private File worldContainer = new File(".");
+    private boolean singleplayerLayout = false;
     // CraftBukkit end
 
     //Poseidon Start
@@ -136,6 +139,35 @@ public class MinecraftServer implements Runnable, ICommandListener {
         }
         Runtime.getRuntime().addShutdownHook(new ServerShutdownThread(this));
         // CraftBukkit end
+    }
+
+    private File resolveWorldContainer() {
+        File container = null;
+        try {
+            if (this.options != null) {
+                Object value = this.options.valueOf("world-container");
+                if (value instanceof File) {
+                    container = (File) value;
+                } else if (value != null) {
+                    container = new File(String.valueOf(value));
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+
+        if (container == null) {
+            container = new File(".");
+        }
+
+        try {
+            return container.getCanonicalFile();
+        } catch (IOException ignored) {
+            return container.getAbsoluteFile();
+        }
+    }
+
+    private boolean resolveSingleplayerLayout() {
+        return this.options != null && this.options.has("singleplayer-layout");
     }
 
     private boolean init() throws UnknownHostException { // CraftBukkit - added throws UnknownHostException
@@ -186,6 +218,12 @@ public class MinecraftServer implements Runnable, ICommandListener {
 
         log.info("Loading properties");
         this.propertyManager = new PropertyManager(this.options); // CraftBukkit - CLI argument support
+        this.worldContainer = this.resolveWorldContainer();
+        this.singleplayerLayout = this.resolveSingleplayerLayout();
+        log.info("World container: " + this.worldContainer.getAbsolutePath());
+        if (this.singleplayerLayout) {
+            log.info("[MCOSE LAN] Singleplayer storage layout enabled; dimensions load from the selected world folder.");
+        }
         String s = this.propertyManager.getString("server-ip", "");
 
         this.onlineMode = this.propertyManager.getBoolean("online-mode", true);
@@ -227,10 +265,19 @@ public class MinecraftServer implements Runnable, ICommandListener {
                 log.info("Default game mode: Survival");
             }
         }
+
+        boolean legacyAllowCommands = this.propertyManager.properties.containsKey("allow-commands")
+                && this.propertyManager.getBoolean("allow-commands", false);
+        this.allowCommandsForAllPlayers = this.propertyManager.getBoolean("allow-commands-for-all-players", legacyAllowCommands);
+        if (this.allowCommandsForAllPlayers) {
+            log.info("Allow commands: enabled for all players");
+        } else {
+            log.info("Allow commands: host/operators only");
+        }
         
         String preflightWorldName = this.propertyManager.getString("level-name", "world");
         try {
-            WorldLoaderServer preflightLoader = new WorldLoaderServer(new File("."));
+            WorldLoaderServer preflightLoader = new WorldLoaderServer(this.worldContainer);
             boolean needsLegacyConversion = preflightLoader.isConvertable(preflightWorldName)
                 || preflightLoader.hasLegacyChunkData(preflightWorldName);
             if (needsLegacyConversion) {
@@ -239,15 +286,13 @@ public class MinecraftServer implements Runnable, ICommandListener {
                     throw new RuntimeException("Legacy world conversion did not complete for '" + preflightWorldName + "'");
                 }
             }
-            RegionCoreWorldUpgrader.upgradeWorldToRegionCore(new File(preflightWorldName), log);
-            if (this.propertyManager.getBoolean("allow-nether", true)) {
+            RegionCoreWorldUpgrader.upgradeWorldToRegionCore(new File(this.worldContainer, preflightWorldName), log);
+            if (this.propertyManager.getBoolean("allow-nether", true) && !this.singleplayerLayout) {
                 String preflightNetherName = preflightWorldName + "_" + Environment.getEnvironment(-1).toString().toLowerCase();
-                RegionCoreWorldUpgrader.upgradeWorldToRegionCore(new File(preflightNetherName), log);
+                RegionCoreWorldUpgrader.upgradeWorldToRegionCore(new File(this.worldContainer, preflightNetherName), log);
             }
         } catch (RuntimeException conversionFailure) {
-            log.log(Level.SEVERE, "[RegionCore] Failed to upgrade world data during preflight startup.", conversionFailure);
-            this.logStartupFailureContext("World preflight conversion failed", conversionFailure);
-            return false;
+            log.log(Level.WARNING, "[RegionCore] Failed to fully upgrade world data during preflight startup; continuing with existing world data.", conversionFailure);
         }
 
         InetAddress inetaddress = null;
@@ -293,7 +338,7 @@ public class MinecraftServer implements Runnable, ICommandListener {
         }
 
         log.info("Preparing level \"" + s1 + "\"");
-        this.a(new WorldLoaderServer(new File(".")), s1, k);
+        this.a(new WorldLoaderServer(this.worldContainer), s1, k);
         // Bootstrap registries in deterministic order.
         try {
             net.minecraft.server.registry.RegistryBootstrap.initialize();
@@ -382,7 +427,7 @@ public class MinecraftServer implements Runnable, ICommandListener {
 
             if (j == 0) {
                 System.out.println("[MINECRAFT_SERVER_DEBUG] Preparing Overworld. configuredLevelType: " + this.configuredLevelType + ", level-name: " + s + ", seed: " + i);
-                IDataManager dataManager = new ServerNBTManager(new File("."), s, true);
+                IDataManager dataManager = new ServerNBTManager(this.worldContainer, s, true);
                 WorldData worldData = dataManager.c();
                 long seedToUse = i;
 
@@ -455,10 +500,10 @@ public class MinecraftServer implements Runnable, ICommandListener {
             } else {
                 String dim = "DIM-1";
 
-                File newWorld = new File(new File(name), dim);
-                File oldWorld = new File(new File(s), dim);
+                File newWorld = new File(new File(this.worldContainer, name), dim);
+                File oldWorld = new File(new File(this.worldContainer, s), dim);
 
-                if ((!newWorld.isDirectory()) && (oldWorld.isDirectory())) {
+                if (!this.singleplayerLayout && (!newWorld.isDirectory()) && (oldWorld.isDirectory())) {
                     log.info("---- Migration of old " + worldType + " folder required ----");
                     log.info("Unfortunately due to the way that Minecraft implemented multiworld support in 1.6, Bukkit requires that you move your " + worldType + " folder to a new location in order to operate correctly.");
                     log.info("We will move this folder for you, but it will mean that you need to move it back should you wish to stop using Bukkit in the future.");
@@ -483,7 +528,9 @@ public class MinecraftServer implements Runnable, ICommandListener {
 
                 log.info("[MinecraftServer] Preparing Nether world '" + name + "' with seed from overworld: " + i);
                 // Ensure Nether world data mirrors overworld terrain type for generator selection
-                ServerNBTManager dataManagerNether = new ServerNBTManager(new File("."), name, true);
+                ServerNBTManager dataManagerNether = this.singleplayerLayout
+                    ? new ServerNBTManager(new File(this.worldContainer, s), true, false, false)
+                    : new ServerNBTManager(this.worldContainer, name, true);
                 WorldData dataNether = dataManagerNether.c();
                 if (dataNether == null) {
                     dataNether = new WorldData(i, name);
@@ -1439,6 +1486,8 @@ public class MinecraftServer implements Runnable, ICommandListener {
         StringBuilder context = new StringBuilder();
         context.append("[StartupFailure] reason=").append(reason == null ? "unknown" : reason);
         context.append(" | cwd=").append(new File(".").getAbsolutePath());
+        context.append(" | world-container=").append(this.worldContainer == null ? "null" : this.worldContainer.getAbsolutePath());
+        context.append(" | singleplayer-layout=").append(this.singleplayerLayout);
         context.append(" | java=").append(System.getProperty("java.version")).append(" (")
             .append(System.getProperty("java.vendor")).append(")");
         context.append(" | os=").append(System.getProperty("os.name")).append(" ")
@@ -1485,6 +1534,8 @@ public class MinecraftServer implements Runnable, ICommandListener {
             appendOption(context, options, "server-ip");
             appendOption(context, options, "server-port");
             appendOption(context, options, "level-name");
+            appendOption(context, options, "world-container");
+            appendOption(context, options, "singleplayer-layout");
             appendOption(context, options, "online-mode");
             appendOption(context, options, "max-players");
         }

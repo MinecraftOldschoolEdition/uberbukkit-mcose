@@ -5,8 +5,15 @@ import java.util.List;
 
 public class ServerNBTManager extends PlayerNBTManager {
 
+    private boolean saveWorldInfo = true;
+
     public ServerNBTManager(File file1, String s, boolean flag) {
         super(file1, s, flag);
+    }
+
+    public ServerNBTManager(File worldDirectory, boolean flag, boolean ownsSessionLock, boolean saveWorldInfo) {
+        super(worldDirectory, flag, ownsSessionLock);
+        this.saveWorldInfo = saveWorldInfo;
     }
 
     public IChunkLoader a(WorldProvider worldprovider) {
@@ -23,11 +30,17 @@ public class ServerNBTManager extends PlayerNBTManager {
     }
 
     public void a(WorldData worlddata, List list) {
+        if (!this.saveWorldInfo) {
+            return;
+        }
         worlddata.a(WorldSaveVersions.currentWriteVersion());
         super.a(worlddata, list);
     }
 
     public void a(WorldData worlddata) {
+        if (!this.saveWorldInfo) {
+            return;
+        }
         worlddata.a(WorldSaveVersions.currentWriteVersion());
         super.a(worlddata);
     }

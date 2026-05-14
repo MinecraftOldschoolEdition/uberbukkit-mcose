@@ -91,7 +91,7 @@ public class EntityWolf extends EntityAnimal {
     }
 
     protected boolean h_() {
-        return !this.isTamed();
+        return !this.isTamed() && super.h_();
     }
 
     protected String g() {

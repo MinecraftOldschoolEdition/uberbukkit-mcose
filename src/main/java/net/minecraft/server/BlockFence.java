@@ -100,4 +100,15 @@ public class BlockFence extends Block {
     public boolean b() {
         return false;
     }
+
+    public boolean interact(World world, int i, int j, int k, EntityHuman entityhuman) {
+        if (entityhuman != null) {
+            ItemStack itemstack = entityhuman.inventory.getItemInHand();
+            if (ItemLead.isLeadItemStack(itemstack) && ItemLead.hasLeashedAnimalsToAttach(entityhuman, world, i, j, k)) {
+                return false;
+            }
+        }
+
+        return ItemLead.releaseAnimalsFromFence(world, i, j, k);
+    }
 }
