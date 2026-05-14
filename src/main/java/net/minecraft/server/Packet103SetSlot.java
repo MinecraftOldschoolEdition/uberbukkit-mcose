@@ -46,23 +46,7 @@ public class Packet103SetSlot extends Packet {
             
             // Read NBT data if present (MCOSE protocol extension)
             if (this.pvn >= 14) {
-                short nbtLength = datainputstream.readShort();
-                if (nbtLength > 0) {
-                    byte[] nbtBytes = new byte[nbtLength];
-                    datainputstream.readFully(nbtBytes);
-                    try {
-                        ByteArrayInputStream bais = new ByteArrayInputStream(nbtBytes);
-                        GZIPInputStream gzis = new GZIPInputStream(bais);
-                        DataInputStream nbtIn = new DataInputStream(gzis);
-                        NBTBase nbtBase = NBTBase.b(nbtIn);
-                        nbtIn.close();
-                        if (nbtBase instanceof NBTTagCompound) {
-                            this.c.tag = (NBTTagCompound) nbtBase;
-                        }
-                    } catch (Exception e) {
-                        // Ignore NBT read errors
-                    }
-                }
+                this.c.tag = PacketLimits.readCompressedNBT(datainputstream, PacketLimits.MAX_ITEM_NBT_BYTES, "item NBT");
             }
         } else {
             this.c = null;
@@ -88,14 +72,7 @@ public class Packet103SetSlot extends Packet {
             if (this.pvn >= 14) {
                 if (this.c.tag != null) {
                     try {
-                        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                        GZIPOutputStream gzos = new GZIPOutputStream(baos);
-                        DataOutputStream nbtOut = new DataOutputStream(gzos);
-                        NBTBase.a(this.c.tag, nbtOut);
-                        nbtOut.close();
-                        byte[] nbtBytes = baos.toByteArray();
-                        dataoutputstream.writeShort(nbtBytes.length);
-                        dataoutputstream.write(nbtBytes);
+                        PacketLimits.writeCompressedNBT(dataoutputstream, this.c.tag, PacketLimits.MAX_ITEM_NBT_BYTES, "item NBT");
                     } catch (Exception e) {
                         dataoutputstream.writeShort(-1);
                     }

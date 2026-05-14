@@ -15,7 +15,7 @@ public class CompressedStreamTools {
         NBTTagCompound nbttagcompound;
 
         try {
-            nbttagcompound = a((DataInput) datainputstream);
+            nbttagcompound = a((DataInput) datainputstream, NBTReadLimiter.world());
         } finally {
             datainputstream.close();
         }
@@ -34,7 +34,11 @@ public class CompressedStreamTools {
     }
 
     public static NBTTagCompound a(DataInput datainput) throws IOException {
-        NBTBase nbtbase = NBTBase.b(datainput);
+        return a(datainput, NBTReadLimiter.world());
+    }
+
+    public static NBTTagCompound a(DataInput datainput, NBTReadLimiter limiter) throws IOException {
+        NBTBase nbtbase = NBTBase.b(datainput, limiter);
 
         if (nbtbase instanceof NBTTagCompound) {
             return (NBTTagCompound) nbtbase;

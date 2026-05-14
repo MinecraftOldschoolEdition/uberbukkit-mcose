@@ -39,14 +39,17 @@ public class Packet203TabComplete extends Packet {
     @Override
     public void a(DataInputStream in) throws IOException {
         // Read text (for request)
-        this.text = in.readUTF();
+        this.text = PacketLimits.readUtf(in, PacketLimits.MAX_COMMAND_TEXT_CHARS, "tab-complete text");
         
         // Read completions count
         int count = in.readInt();
-        if (count > 0 && count < 1000) { // Sanity limit
+        if (count < 0 || count > PacketLimits.MAX_TAB_COMPLETIONS) {
+            throw new IOException("Invalid tab-complete count: " + count);
+        }
+        if (count > 0) {
             this.completions = new String[count];
             for (int i = 0; i < count; i++) {
-                this.completions[i] = in.readUTF();
+                this.completions[i] = PacketLimits.readUtf(in, PacketLimits.MAX_COMPLETION_CHARS, "tab-complete completion");
             }
         } else if (count == 0) {
             this.completions = new String[0];
@@ -56,13 +59,14 @@ public class Packet203TabComplete extends Packet {
     @Override
     public void a(DataOutputStream out) throws IOException {
         // Write text (empty string if null)
-        out.writeUTF(this.text != null ? this.text : "");
+        PacketLimits.writeUtf(out, this.text, PacketLimits.MAX_COMMAND_TEXT_CHARS, "tab-complete text");
         
         // Write completions
         if (this.completions != null) {
-            out.writeInt(this.completions.length);
-            for (String s : this.completions) {
-                out.writeUTF(s != null ? s : "");
+            int count = Math.min(this.completions.length, PacketLimits.MAX_TAB_COMPLETIONS);
+            out.writeInt(count);
+            for (int i = 0; i < count; ++i) {
+                PacketLimits.writeUtf(out, this.completions[i], PacketLimits.MAX_COMPLETION_CHARS, "tab-complete completion");
             }
         } else {
             out.writeInt(0);
@@ -85,4 +89,3 @@ public class Packet203TabComplete extends Packet {
         return size;
     }
 }
-

@@ -13,7 +13,11 @@ public abstract class NBTBase {
 
     abstract void a(DataOutput dataoutput) throws IOException;
 
-    abstract void a(DataInput datainput) throws IOException;
+    void a(DataInput datainput) throws IOException {
+        this.a(datainput, NBTReadLimiter.packet());
+    }
+
+    abstract void a(DataInput datainput, NBTReadLimiter limiter) throws IOException;
 
     public abstract byte a();
 
@@ -27,16 +31,33 @@ public abstract class NBTBase {
     }
 
     public static NBTBase b(DataInput datainput) throws IOException {
-        byte b0 = datainput.readByte();
+        return b(datainput, NBTReadLimiter.packet());
+    }
 
-        if (b0 == 0) {
-            return new NBTTagEnd();
-        } else {
-            NBTBase nbtbase = a(b0);
+    public static NBTBase b(DataInput datainput, NBTReadLimiter limiter) throws IOException {
+        if (limiter == null) {
+            limiter = NBTReadLimiter.packet();
+        }
 
-            nbtbase.a = datainput.readUTF();
-            nbtbase.a(datainput);
-            return nbtbase;
+        limiter.enterTag();
+        try {
+            limiter.account(1L);
+            byte b0 = datainput.readByte();
+
+            if (b0 == 0) {
+                return new NBTTagEnd();
+            } else {
+                NBTBase nbtbase = a(b0);
+                if (nbtbase == null) {
+                    throw new IOException("Invalid NBT tag id: " + b0);
+                }
+
+                nbtbase.a = limiter.readUTF(datainput, "TAG_Name");
+                nbtbase.a(datainput, limiter);
+                return nbtbase;
+            }
+        } finally {
+            limiter.exitTag();
         }
     }
 

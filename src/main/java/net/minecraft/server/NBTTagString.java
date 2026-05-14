@@ -22,8 +22,8 @@ public class NBTTagString extends NBTBase {
         dataoutput.writeUTF(this.a);
     }
 
-    void a(DataInput datainput) throws IOException {
-        this.a = datainput.readUTF();
+    void a(DataInput datainput, NBTReadLimiter limiter) throws IOException {
+        this.a = limiter.readUTF(datainput, "TAG_String");
     }
 
     public byte a() {

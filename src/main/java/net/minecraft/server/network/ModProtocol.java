@@ -1,5 +1,6 @@
 package net.minecraft.server.network;
 
+import net.minecraft.server.PacketLimits;
 import net.minecraft.server.registry.RegistrySyncSnapshot;
 
 import java.io.ByteArrayInputStream;
@@ -118,7 +119,7 @@ public final class ModProtocol {
         try {
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             DataOutputStream out = new DataOutputStream(baos);
-            out.writeUTF(username == null ? "" : username);
+            PacketLimits.writeUtf(out, username, PacketLimits.MAX_USERNAME_CHARS, "skin-parts username");
             out.writeByte(modelPartMask & 0x7F);
             out.flush();
             return baos.toByteArray();
@@ -134,7 +135,7 @@ public final class ModProtocol {
 
         try {
             DataInputStream in = new DataInputStream(new ByteArrayInputStream(payload));
-            String username = in.readUTF();
+            String username = PacketLimits.readUtf(in, PacketLimits.MAX_USERNAME_CHARS, "skin-parts username");
             int modelPartMask = in.readByte() & 0x7F;
             in.close();
             return new SkinPartsInfo(username, modelPartMask);

@@ -29,16 +29,28 @@ public class NBTTagList extends NBTBase {
         }
     }
 
-    void a(DataInput datainput) throws IOException {
+    void a(DataInput datainput, NBTReadLimiter limiter) throws IOException {
+        limiter.account(5L);
         this.b = datainput.readByte();
         int i = datainput.readInt();
+        if (i < 0) {
+            throw new IOException("Negative TAG_List length: " + i);
+        }
+        if (i > 0 && NBTBase.a(this.b) == null) {
+            throw new IOException("Invalid TAG_List element type: " + this.b);
+        }
 
         this.a = new ArrayList();
 
         for (int j = 0; j < i; ++j) {
             NBTBase nbtbase = NBTBase.a(this.b);
 
-            nbtbase.a(datainput);
+            limiter.enterTag();
+            try {
+                nbtbase.a(datainput, limiter);
+            } finally {
+                limiter.exitTag();
+            }
             this.a.add(nbtbase);
         }
     }

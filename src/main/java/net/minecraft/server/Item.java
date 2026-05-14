@@ -117,7 +117,8 @@ public class Item {
     public static Item MELON_SLICE = (new ItemFood(106, 2, false)).c(64).a(13, 6).a("melon");
     public static Item PUMPKIN_SEED = (new ItemSeeds(107, Block.PUMPKIN_STEM.id)).a(13, 3).a("pumpkin_seed");
     public static Item MELON_SEED = (new ItemSeeds(108, Block.MELON_STEM.id)).a(14, 3).a("melon_seed");
-    public static Item LEAD = (new ItemLead(109)).a(15, 6).a("lead");
+    public static Item LEAD = (new ItemLead(109)).a(15, 12).a("lead");
+    public static Item NAME_TAG = (new ItemNameTag(110)).a(14, 12).a("nameTag");
     public static Item GOLD_RECORD = (new ItemRecord(2000, "13")).a(0, 15).a("record");
     public static Item GREEN_RECORD = (new ItemRecord(2001, "cat")).a(1, 15).a("record");
     public static Item RECORD_BLOCKS = (new ItemRecord(2002, "blocks")).a(2, 15).a("record");

@@ -22,23 +22,14 @@ public class Packet250CustomPayload extends Packet {
 
     @Override
     public void a(DataInputStream datainputstream) throws IOException {
-        this.channel = datainputstream.readUTF();
-        int length = datainputstream.readShort();
-        if (length > 0 && length < 32767) {
-            this.data = new byte[length];
-            datainputstream.readFully(this.data);
-        }
+        this.channel = PacketLimits.readUtf(datainputstream, PacketLimits.MAX_CUSTOM_CHANNEL_CHARS, "custom payload channel");
+        this.data = PacketLimits.readUnsignedShortByteArray(datainputstream, PacketLimits.MAX_CUSTOM_PAYLOAD_BYTES, "custom payload");
     }
 
     @Override
     public void a(DataOutputStream dataoutputstream) throws IOException {
-        dataoutputstream.writeUTF(this.channel);
-        if (this.data != null) {
-            dataoutputstream.writeShort(this.data.length);
-            dataoutputstream.write(this.data);
-        } else {
-            dataoutputstream.writeShort(0);
-        }
+        PacketLimits.writeUtf(dataoutputstream, this.channel, PacketLimits.MAX_CUSTOM_CHANNEL_CHARS, "custom payload channel");
+        PacketLimits.writeUnsignedShortByteArray(dataoutputstream, this.data, PacketLimits.MAX_CUSTOM_PAYLOAD_BYTES, "custom payload");
     }
 
     @Override
@@ -48,7 +39,6 @@ public class Packet250CustomPayload extends Packet {
 
     @Override
     public int a() {
-        return 2 + this.channel.length() * 2 + 2 + (this.data != null ? this.data.length : 0);
+        return 2 + (this.channel != null ? this.channel.length() * 2 : 0) + 2 + (this.data != null ? this.data.length : 0);
     }
 }
-

@@ -24,7 +24,7 @@ public class Packet3Chat extends Packet {
         if (this.pvn >= 11) {
             this.message = a(datainputstream, MAX_CHAT_LENGTH);
         } else {
-            this.message = datainputstream.readUTF();
+            this.message = PacketLimits.readUtf(datainputstream, MAX_CHAT_LENGTH, "chat message");
         }
     }
 
@@ -33,7 +33,7 @@ public class Packet3Chat extends Packet {
         if (this.pvn >= 11) {
             a(this.message, dataoutputstream);
         } else {
-            dataoutputstream.writeUTF(this.message);
+            PacketLimits.writeUtf(dataoutputstream, this.message, MAX_CHAT_LENGTH, "chat message");
         }
     }
 

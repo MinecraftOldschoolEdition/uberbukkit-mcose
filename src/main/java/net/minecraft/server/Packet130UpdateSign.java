@@ -35,7 +35,7 @@ public class Packet130UpdateSign extends Packet {
             if (this.pvn >= 11) {
                 this.lines[i] = a(datainputstream, 15);
             } else {
-                this.lines[i] = datainputstream.readUTF();
+                this.lines[i] = PacketLimits.readUtf(datainputstream, 15, "sign line");
             }
         }
         
@@ -53,7 +53,7 @@ public class Packet130UpdateSign extends Packet {
             if (this.pvn >= 11) {
                 a(this.lines[i], dataoutputstream);
             } else {
-                dataoutputstream.writeUTF(this.lines[i]);
+                PacketLimits.writeUtf(dataoutputstream, this.lines[i], 15, "sign line");
             }
         }
         

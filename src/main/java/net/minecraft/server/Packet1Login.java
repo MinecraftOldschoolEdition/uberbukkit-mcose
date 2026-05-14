@@ -27,8 +27,8 @@ public class Packet1Login extends Packet {
         if (this.pvn >= 11) {
             this.name = a(datainputstream, 16);
         } else {
-            this.name = datainputstream.readUTF();
-            datainputstream.readUTF();
+            this.name = PacketLimits.readUtf(datainputstream, 16, "login username");
+            PacketLimits.readUtf(datainputstream, PacketLimits.MAX_HANDSHAKE_CHARS, "login unused string");
         }
 
         if (this.pvn >= 3) {
@@ -44,8 +44,8 @@ public class Packet1Login extends Packet {
         if (this.pvn >= 11) {
             a(this.name, dataoutputstream);
         } else {
-            dataoutputstream.writeUTF(this.name);
-            dataoutputstream.writeUTF("");
+            PacketLimits.writeUtf(dataoutputstream, this.name, 16, "login username");
+            PacketLimits.writeUtf(dataoutputstream, "", PacketLimits.MAX_HANDSHAKE_CHARS, "login unused string");
         }
 
         if (this.pvn >= 3) {

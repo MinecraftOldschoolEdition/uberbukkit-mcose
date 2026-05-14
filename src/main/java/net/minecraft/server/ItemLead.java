@@ -13,6 +13,14 @@ public class ItemLead extends Item {
         super(i);
     }
 
+    public boolean a(ItemStack itemstack, EntityLiving entityliving, EntityLiving entityliving1) {
+        if (!(entityliving instanceof EntityAnimal) || !(entityliving1 instanceof EntityHuman)) {
+            return false;
+        }
+
+        return this.attachToAnimal(itemstack, (EntityAnimal) entityliving, (EntityHuman) entityliving1);
+    }
+
     public boolean a(ItemStack itemstack, EntityHuman entityhuman, World world, int i, int j, int k, int l) {
         if (entityhuman == null || world == null || !this.isFenceBlock(world, i, j, k)) {
             return false;
@@ -27,6 +35,7 @@ public class ItemLead extends Item {
         }
 
         entityanimal.setLeashedToPlayer(entityhuman);
+        syncLeashDataToClients(entityanimal);
         if (entityhuman.gameMode != 1) {
             --itemstack.count;
         }
@@ -47,6 +56,7 @@ public class ItemLead extends Item {
             EntityAnimal entityanimal = (EntityAnimal) entry;
             if (entityanimal.isLeashedTo(entityhuman)) {
                 entityanimal.setLeashedToFence(i, j, k);
+                syncLeashDataToClients(entityanimal);
                 attachedAny = true;
             }
         }
@@ -88,6 +98,7 @@ public class ItemLead extends Item {
             EntityAnimal entityanimal = (EntityAnimal) entry;
             if (entityanimal.isLeashedToFence(i, j, k)) {
                 entityanimal.clearLeashed(false);
+                syncLeashDataToClients(entityanimal);
                 releasedAny = true;
                 ++releasedCount;
             }
@@ -102,6 +113,14 @@ public class ItemLead extends Item {
         }
 
         return releasedAny;
+    }
+
+    private static void syncLeashDataToClients(EntityAnimal entityanimal) {
+        if (entityanimal == null || entityanimal.world == null || entityanimal.world.isStatic || !(entityanimal.world instanceof WorldServer)) {
+            return;
+        }
+
+        ((WorldServer) entityanimal.world).tracker.sendPacketToEntity(entityanimal, new Packet40EntityMetadata(entityanimal));
     }
 
     public static boolean isLeadItemStack(ItemStack itemstack) {

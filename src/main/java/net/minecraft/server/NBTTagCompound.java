@@ -27,12 +27,12 @@ public class NBTTagCompound extends NBTBase {
         dataoutput.writeByte(0);
     }
 
-    void a(DataInput datainput) throws IOException {
+    void a(DataInput datainput, NBTReadLimiter limiter) throws IOException {
         this.a.clear();
 
         NBTBase nbtbase;
 
-        while ((nbtbase = NBTBase.b(datainput)).a() != 0) {
+        while ((nbtbase = NBTBase.b(datainput, limiter)).a() != 0) {
             this.a.put(nbtbase.b(), nbtbase);
         }
     }

@@ -21,13 +21,13 @@ public class Packet252SharedKey extends Packet {
     }
 
     public void a(DataInputStream datainputstream) throws IOException {
-        this.sharedSecret = b(datainputstream);
-        this.verifyToken = b(datainputstream);
+        this.sharedSecret = b(datainputstream, "shared secret");
+        this.verifyToken = b(datainputstream, "verify token");
     }
 
     public void a(DataOutputStream dataoutputstream) throws IOException {
-        a(this.sharedSecret, dataoutputstream);
-        a(this.verifyToken, dataoutputstream);
+        a(this.sharedSecret, dataoutputstream, "shared secret");
+        a(this.verifyToken, dataoutputstream, "verify token");
     }
 
     public void a(NetHandler nethandler) {
@@ -38,20 +38,12 @@ public class Packet252SharedKey extends Packet {
         return 2 + this.sharedSecret.length + 2 + this.verifyToken.length;
     }
 
-    private static byte[] b(DataInputStream datainputstream) throws IOException {
-        short length = datainputstream.readShort();
-        if (length < 0) {
-            throw new IOException("Invalid array length");
-        }
-        byte[] array = new byte[length];
-        datainputstream.readFully(array);
-        return array;
+    private static byte[] b(DataInputStream datainputstream, String fieldName) throws IOException {
+        return PacketLimits.readUnsignedShortByteArray(datainputstream, PacketLimits.MAX_AUTH_BYTE_ARRAY_BYTES, fieldName);
     }
 
-    private static void a(byte[] array, DataOutputStream dataoutputstream) throws IOException {
-        dataoutputstream.writeShort(array.length);
-        dataoutputstream.write(array);
+    private static void a(byte[] array, DataOutputStream dataoutputstream, String fieldName) throws IOException {
+        PacketLimits.writeUnsignedShortByteArray(dataoutputstream, array, PacketLimits.MAX_AUTH_BYTE_ARRAY_BYTES, fieldName);
     }
 }
-
 

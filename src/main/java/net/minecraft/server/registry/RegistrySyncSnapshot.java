@@ -2,6 +2,7 @@ package net.minecraft.server.registry;
 
 import net.minecraft.server.Block;
 import net.minecraft.server.Item;
+import net.minecraft.server.PacketLimits;
 import net.minecraft.server.util.ResourceLocation;
 
 import java.io.ByteArrayInputStream;
@@ -98,15 +99,18 @@ public final class RegistrySyncSnapshot {
     private static void writeMap(DataOutputStream out, Map<String, Integer> values) throws Exception {
         out.writeInt(values.size());
         for (Map.Entry<String, Integer> entry : values.entrySet()) {
-            out.writeUTF(entry.getKey());
+            PacketLimits.writeUtf(out, entry.getKey(), 128, "registry key");
             out.writeInt(entry.getValue().intValue());
         }
     }
 
     private static void readMap(DataInputStream in, Map<String, Integer> values) throws Exception {
         int size = in.readInt();
+        if (size < 0 || size > 4096) {
+            throw new IllegalArgumentException("Invalid registry map size: " + size);
+        }
         for (int i = 0; i < size; i++) {
-            String key = in.readUTF();
+            String key = PacketLimits.readUtf(in, 128, "registry key");
             int value = in.readInt();
             values.put(key, Integer.valueOf(value));
         }

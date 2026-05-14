@@ -16,6 +16,8 @@ import java.util.logging.Logger;
 public class Main {
     public static boolean useJline = true;
     public static boolean useGui = false;
+    private static final List<String> NO_GUI_FLAGS = Arrays.asList("--nogui", "--no-gui", "-nogui", "-no-gui", "nogui");
+    private static final List<String> GUI_FLAGS = Arrays.asList("--gui", "-gui", "gui");
 
     public static void main(String[] args) {
         // Check for GUI/no-GUI mode first (before option parsing)
@@ -24,20 +26,18 @@ public class Main {
         List<String> argList = new java.util.ArrayList<>(Arrays.asList(args));
         
         // Check for --nogui or --no-gui flag (forces console mode)
-        if (argList.contains("--nogui") || argList.contains("--no-gui") || 
-            argList.contains("-nogui") || argList.contains("-no-gui") || argList.contains("nogui")) {
+        if (containsAny(argList, NO_GUI_FLAGS)) {
             forceNoGui = true;
             // Remove nogui flags from args before passing to server
-            argList.removeIf(a -> a.equals("--nogui") || a.equals("--no-gui") || 
-                                  a.equals("-nogui") || a.equals("-no-gui") || a.equals("nogui"));
+            argList.removeAll(NO_GUI_FLAGS);
             args = argList.toArray(new String[0]);
         }
         
         // Check for --gui or -gui flag
-        if (!forceNoGui && (argList.contains("--gui") || argList.contains("-gui") || argList.contains("gui"))) {
+        if (!forceNoGui && containsAny(argList, GUI_FLAGS)) {
             launchGui = true;
             // Remove gui flag from args before passing to server
-            argList.removeIf(a -> a.equals("--gui") || a.equals("-gui") || a.equals("gui"));
+            argList.removeAll(GUI_FLAGS);
             args = argList.toArray(new String[0]);
         }
         
@@ -137,5 +137,14 @@ public class Main {
 
     private static List<String> asList(String... params) {
         return Arrays.asList(params);
+    }
+
+    private static boolean containsAny(List<String> values, List<String> candidates) {
+        for (String candidate : candidates) {
+            if (values.contains(candidate)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

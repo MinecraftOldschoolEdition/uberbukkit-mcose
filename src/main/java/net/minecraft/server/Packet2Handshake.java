@@ -1,5 +1,6 @@
 package net.minecraft.server;
 
+import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -20,18 +21,23 @@ public class Packet2Handshake extends Packet {
     public void a(DataInputStream datainputstream) throws IOException {
         // uberbukkit -- read the packet in a custom way to allow joining with vastly different PVNs
 
-        // both readUTF() and the minecraft method read short first
-        int UTFlen = datainputstream.readShort();
-        // if pvn is 11 or higher (aka client uses the minecraft method for transferring strings),
-        // `available` will be 2x `UTFlen`
-        int available = datainputstream.available();
+        int declaredLength = datainputstream.readUnsignedShort();
+        if (declaredLength > PacketLimits.MAX_HANDSHAKE_CHARS) {
+            throw new IOException("Handshake string is too long (" + declaredLength + " > " + PacketLimits.MAX_HANDSHAKE_CHARS + ")");
+        }
 
-        this.pvn11 = available > UTFlen;
+        byte[] firstHalf = new byte[declaredLength];
+        datainputstream.readFully(firstHalf);
 
-        byte[] buf = new byte[available];
-        datainputstream.readFully(buf, 0, available);
-
-        this.a = new String(buf, "UTF-8").replace(Character.toString((char) 0), "");
+        this.pvn11 = looksLikeWideHandshake(firstHalf);
+        if (this.pvn11) {
+            byte[] wide = new byte[declaredLength * 2];
+            System.arraycopy(firstHalf, 0, wide, 0, firstHalf.length);
+            datainputstream.readFully(wide, declaredLength, declaredLength);
+            this.a = decodeWideString(wide);
+        } else {
+            this.a = decodeModifiedUtf(declaredLength, firstHalf);
+        }
     }
 
     public void a(DataOutputStream dataoutputstream) throws IOException {
@@ -49,5 +55,46 @@ public class Packet2Handshake extends Packet {
 
     public int a() {
         return 4 + this.a.length() + 4;
+    }
+
+    private static boolean looksLikeWideHandshake(byte[] firstHalf) {
+        if (firstHalf.length < 2) {
+            return false;
+        }
+
+        int pairs = firstHalf.length / 2;
+        int zeroHighBytes = 0;
+        int printableLowBytes = 0;
+        for (int i = 0; i < pairs; ++i) {
+            int high = firstHalf[i * 2] & 255;
+            int low = firstHalf[i * 2 + 1] & 255;
+            if (high == 0) {
+                ++zeroHighBytes;
+            }
+            if (low >= 32 && low < 127) {
+                ++printableLowBytes;
+            }
+        }
+
+        return zeroHighBytes == pairs && printableLowBytes > 0;
+    }
+
+    private static String decodeWideString(byte[] bytes) {
+        StringBuilder builder = new StringBuilder(bytes.length / 2);
+        for (int i = 0; i + 1 < bytes.length; i += 2) {
+            char value = (char) (((bytes[i] & 255) << 8) | (bytes[i + 1] & 255));
+            if (value != 0) {
+                builder.append(value);
+            }
+        }
+        return builder.toString();
+    }
+
+    private static String decodeModifiedUtf(int length, byte[] bytes) throws IOException {
+        byte[] encoded = new byte[length + 2];
+        encoded[0] = (byte) (length >>> 8);
+        encoded[1] = (byte) length;
+        System.arraycopy(bytes, 0, encoded, 2, bytes.length);
+        return new DataInputStream(new ByteArrayInputStream(encoded)).readUTF();
     }
 }

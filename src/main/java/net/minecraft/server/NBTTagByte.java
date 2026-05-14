@@ -19,7 +19,8 @@ public class NBTTagByte extends NBTBase {
         dataoutput.writeByte(this.a);
     }
 
-    void a(DataInput datainput) throws IOException {
+    void a(DataInput datainput, NBTReadLimiter limiter) throws IOException {
+        limiter.account(1L);
         this.a = datainput.readByte();
     }
 

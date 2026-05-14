@@ -51,22 +51,9 @@ public class Packet107CreativeSetSlot extends Packet {
             
             // Read NBT data if present (MCOSE protocol extension, pvn >= 14)
             if (this.pvn >= 14) {
-                short nbtLength = datainputstream.readShort();
-                if (nbtLength > 0) {
-                    byte[] nbtBytes = new byte[nbtLength];
-                    datainputstream.readFully(nbtBytes);
-                    try {
-                        ByteArrayInputStream bais = new ByteArrayInputStream(nbtBytes);
-                        GZIPInputStream gzis = new GZIPInputStream(bais);
-                        DataInputStream nbtIn = new DataInputStream(gzis);
-                        NBTBase nbtBase = NBTBase.b(nbtIn);
-                        nbtIn.close();
-                        if (this.itemStack != null && nbtBase instanceof NBTTagCompound) {
-                            this.itemStack.tag = (NBTTagCompound) nbtBase;
-                        }
-                    } catch (Exception e) {
-                        // Ignore NBT read errors
-                    }
+                NBTTagCompound tag = PacketLimits.readCompressedNBT(datainputstream, PacketLimits.MAX_ITEM_NBT_BYTES, "item NBT");
+                if (this.itemStack != null) {
+                    this.itemStack.tag = tag;
                 }
             }
         } else {
@@ -89,14 +76,7 @@ public class Packet107CreativeSetSlot extends Packet {
             if (this.pvn >= 14) {
                 if (this.itemStack.tag != null) {
                     try {
-                        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                        GZIPOutputStream gzos = new GZIPOutputStream(baos);
-                        DataOutputStream nbtOut = new DataOutputStream(gzos);
-                        NBTBase.a(this.itemStack.tag, nbtOut);
-                        nbtOut.close();
-                        byte[] nbtBytes = baos.toByteArray();
-                        dataoutputstream.writeShort(nbtBytes.length);
-                        dataoutputstream.write(nbtBytes);
+                        PacketLimits.writeCompressedNBT(dataoutputstream, this.itemStack.tag, PacketLimits.MAX_ITEM_NBT_BYTES, "item NBT");
                     } catch (Exception e) {
                         dataoutputstream.writeShort(-1);
                     }
@@ -115,4 +95,3 @@ public class Packet107CreativeSetSlot extends Packet {
         return 4;
     }
 }
-

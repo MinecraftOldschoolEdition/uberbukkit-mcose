@@ -113,8 +113,32 @@ public class AlphaWorldGenDungeons extends WorldGenerator {
 	}
 
 	private ItemStack pickCheckLootItem(Random var1) {
-		int var2 = var1.nextInt(11);
-		return var2 == 0 ? new ItemStack(Item.SADDLE) : (var2 == 1 ? new ItemStack(Item.IRON_INGOT, var1.nextInt(4) + 1) : (var2 == 2 ? new ItemStack(Item.BREAD) : (var2 == 3 ? new ItemStack(Item.WHEAT, var1.nextInt(4) + 1) : (var2 == 4 ? new ItemStack(Item.SULPHUR, var1.nextInt(4) + 1) : (var2 == 5 ? new ItemStack(Item.STRING, var1.nextInt(4) + 1) : (var2 == 6 ? new ItemStack(Item.BUCKET) : (var2 == 7 && var1.nextInt(100) == 0 ? new ItemStack(Item.GOLDEN_APPLE) : (var2 == 8 && var1.nextInt(2) == 0 ? new ItemStack(Item.REDSTONE, var1.nextInt(4) + 1) : (var2 == 9 && var1.nextInt(10) == 0 ? new ItemStack(Item.byId[Item.GOLD_RECORD.id + var1.nextInt(2)]) : null)))))))));
+		int var2 = var1.nextInt(12);
+		if(var2 == 0) {
+			return new ItemStack(Item.SADDLE);
+		} else if(var2 == 1) {
+			return new ItemStack(Item.IRON_INGOT, var1.nextInt(4) + 1);
+		} else if(var2 == 2) {
+			return new ItemStack(Item.BREAD);
+		} else if(var2 == 3) {
+			return new ItemStack(Item.WHEAT, var1.nextInt(4) + 1);
+		} else if(var2 == 4) {
+			return new ItemStack(Item.SULPHUR, var1.nextInt(4) + 1);
+		} else if(var2 == 5) {
+			return new ItemStack(Item.STRING, var1.nextInt(4) + 1);
+		} else if(var2 == 6) {
+			return new ItemStack(Item.BUCKET);
+		} else if(var2 == 7 && var1.nextInt(100) == 0) {
+			return new ItemStack(Item.GOLDEN_APPLE);
+		} else if(var2 == 8 && var1.nextInt(2) == 0) {
+			return new ItemStack(Item.REDSTONE, var1.nextInt(4) + 1);
+		} else if(var2 == 9 && var1.nextInt(10) == 0) {
+			return new ItemStack(Item.byId[Item.GOLD_RECORD.id + var1.nextInt(2)]);
+		} else if(var2 == 10) {
+			return new ItemStack(Item.NAME_TAG);
+		} else {
+			return null;
+		}
 	}
 
 	private String pickMobSpawner(Random var1) {

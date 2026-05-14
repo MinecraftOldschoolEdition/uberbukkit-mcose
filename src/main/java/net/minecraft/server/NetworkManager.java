@@ -65,6 +65,11 @@ public class NetworkManager {
     private final boolean spamDetection;
 
     private final int threshold;
+    private final boolean packetRateLimitEnabled;
+    private final int packetRateLimit;
+    private long packetRateWindowStartedAt = System.currentTimeMillis();
+    private int packetsReceivedThisWindow = 0;
+    private float averageReceivedPacketsPerSecond = 0.0F;
 
     // uberbukkit
     public int pvn = 0;
@@ -79,6 +84,8 @@ public class NetworkManager {
         this.firePacketEvents = PoseidonConfig.getInstance().getBoolean("settings.packet-events.enabled", false);
         this.spamDetection = PoseidonConfig.getInstance().getBoolean("settings.packet-spam-detection.enabled", true);
         this.threshold = PoseidonConfig.getInstance().getInt("settings.packet-spam-detection.threshold", 1000);
+        this.packetRateLimitEnabled = PoseidonConfig.getInstance().getBoolean("settings.packet-rate-limit.enabled", true);
+        this.packetRateLimit = Math.max(1, PoseidonConfig.getInstance().getInt("settings.packet-rate-limit.packets-per-second", 500));
         this.movementCoalesceThreshold = Math.max(1, PoseidonConfig.getInstance().getInt("settings.entity-tracking.action-priority.enter-low-queue", 96));
         this.movementDropHardCap = Math.max(64, LOW_PRIORITY_MOVEMENT_HARD_CAP);
 
@@ -477,6 +484,10 @@ public class NetworkManager {
             Packet packet = Packet.a(this.input, this.p.c(), this.pvn); // uberbukkit - allows packets to be read accordingly to client version
 
             if (packet != null) {
+                if (!recordInboundPacketRate()) {
+                    return false;
+                }
+
                 int[] aint = d;
                 int i = packet.b();
 
@@ -516,6 +527,52 @@ public class NetworkManager {
     private void a(Exception exception) {
         exception.printStackTrace();
         this.a("disconnect.genericReason", new Object[] { "Internal exception: " + exception.toString() });
+    }
+
+    private boolean recordInboundPacketRate() {
+        if (!this.packetRateLimitEnabled || this.t) {
+            return true;
+        }
+
+        long now = System.currentTimeMillis();
+        long elapsed = now - this.packetRateWindowStartedAt;
+        if (elapsed >= 1000L) {
+            updateInboundPacketAverage(elapsed);
+            this.packetRateWindowStartedAt = now;
+            this.packetsReceivedThisWindow = 0;
+        }
+
+        ++this.packetsReceivedThisWindow;
+        if (this.averageReceivedPacketsPerSecond > (float) this.packetRateLimit || this.packetsReceivedThisWindow > this.packetRateLimit * 2) {
+            float observedRate = Math.max(this.averageReceivedPacketsPerSecond, (float) this.packetsReceivedThisWindow);
+            return disconnectForPacketRate(observedRate);
+        }
+
+        return true;
+    }
+
+    private void updateInboundPacketAverage(long elapsedMs) {
+        float currentRate = elapsedMs <= 0L ? (float) this.packetsReceivedThisWindow : (float) this.packetsReceivedThisWindow * 1000.0F / (float) elapsedMs;
+        if (this.averageReceivedPacketsPerSecond <= 0.0F) {
+            this.averageReceivedPacketsPerSecond = currentRate;
+        } else {
+            this.averageReceivedPacketsPerSecond = this.averageReceivedPacketsPerSecond * 0.75F + currentRate * 0.25F;
+        }
+    }
+
+    private boolean disconnectForPacketRate(float observedRate) {
+        String playerUsername = "Unknown";
+        if (this.p instanceof NetServerHandler) {
+            NetServerHandler handler = (NetServerHandler) this.p;
+            if (handler.player != null) {
+                playerUsername = handler.player.name;
+            }
+            handler.disconnect(ChatColor.RED + "[Poseidon] You have been kicked for packet spamming.");
+        } else {
+            this.a("disconnect.spam", new Object[0]);
+        }
+        System.out.println("[Poseidon] Player " + playerUsername + " has been kicked for packet rate spam. The observed rate was " + observedRate + " packets/sec and the limit was " + this.packetRateLimit + ".");
+        return false;
     }
 
     public void a(String s, Object... aobject) {

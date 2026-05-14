@@ -19,7 +19,8 @@ public class NBTTagDouble extends NBTBase {
         dataoutput.writeDouble(this.a);
     }
 
-    void a(DataInput datainput) throws IOException {
+    void a(DataInput datainput, NBTReadLimiter limiter) throws IOException {
+        limiter.account(8L);
         this.a = datainput.readDouble();
     }
 

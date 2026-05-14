@@ -30,7 +30,10 @@ public class Packet104WindowItems extends Packet {
 
     public void a(DataInputStream datainputstream) throws IOException {
         this.a = datainputstream.readByte();
-        short short1 = datainputstream.readShort();
+        int short1 = datainputstream.readUnsignedShort();
+        if (short1 > 1024) {
+            throw new IOException("Too many window items: " + short1);
+        }
 
         this.b = new ItemStack[short1];
 
@@ -45,23 +48,7 @@ public class Packet104WindowItems extends Packet {
                 
                 // Read NBT data if present (MCOSE protocol extension)
                 if (this.pvn >= 14) {
-                    short nbtLength = datainputstream.readShort();
-                    if (nbtLength > 0) {
-                        byte[] nbtBytes = new byte[nbtLength];
-                        datainputstream.readFully(nbtBytes);
-                        try {
-                            ByteArrayInputStream bais = new ByteArrayInputStream(nbtBytes);
-                            GZIPInputStream gzis = new GZIPInputStream(bais);
-                            DataInputStream nbtIn = new DataInputStream(gzis);
-                            NBTBase nbtBase = NBTBase.b(nbtIn);
-                            nbtIn.close();
-                            if (nbtBase instanceof NBTTagCompound) {
-                                this.b[i].tag = (NBTTagCompound) nbtBase;
-                            }
-                        } catch (Exception e) {
-                            // Ignore NBT read errors
-                        }
-                    }
+                    this.b[i].tag = PacketLimits.readCompressedNBT(datainputstream, PacketLimits.MAX_ITEM_NBT_BYTES, "item NBT");
                 }
             }
         }
@@ -83,14 +70,7 @@ public class Packet104WindowItems extends Packet {
                 if (this.pvn >= 14) {
                     if (this.b[i].tag != null) {
                         try {
-                            ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                            GZIPOutputStream gzos = new GZIPOutputStream(baos);
-                            DataOutputStream nbtOut = new DataOutputStream(gzos);
-                            NBTBase.a(this.b[i].tag, nbtOut);
-                            nbtOut.close();
-                            byte[] nbtBytes = baos.toByteArray();
-                            dataoutputstream.writeShort(nbtBytes.length);
-                            dataoutputstream.write(nbtBytes);
+                            PacketLimits.writeCompressedNBT(dataoutputstream, this.b[i].tag, PacketLimits.MAX_ITEM_NBT_BYTES, "item NBT");
                         } catch (Exception e) {
                             dataoutputstream.writeShort(-1);
                         }

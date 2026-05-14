@@ -23,6 +23,7 @@ public class ServerConfigurationManager {
 
     public static Logger a = Logger.getLogger("Minecraft");
     private static final String MCOSE_LAN_OWNER_HANDOFF_FILE = "mcose_lan_owner.dat";
+    private static final String MCOSE_LAN_OWNER_RESULT_FILE = "mcose_lan_owner_result.dat";
     public List players = new ArrayList();
     public MinecraftServer server; // CraftBukkit - private -> public
     // private PlayerManager[] d = new PlayerManager[2]; // CraftBukkit - removed
@@ -39,6 +40,7 @@ public class ServerConfigurationManager {
     private File m;
     public PlayerFileData playerFileData; // CraftBukkit - private - >public
     public boolean o; // Craftbukkit - private -> public
+    private String localLanOwnerName = "";
 
     // CraftBukkit start
     private CraftServer cserver;
@@ -205,6 +207,8 @@ public class ServerConfigurationManager {
             }
 
             entityplayer.e(ownerTag);
+            this.localLanOwnerName = entityplayer.name;
+            this.saveLocalLanOwnerSnapshot(entityplayer);
             a.info("[MCOSE LAN] Applied exact singleplayer owner snapshot for " + entityplayer.name
                 + " at (" + entityplayer.locX + ", " + entityplayer.locY + ", " + entityplayer.locZ
                 + ") dimension " + entityplayer.dimension);
@@ -226,6 +230,55 @@ public class ServerConfigurationManager {
                     input.close();
                 } catch (IOException ignored) {
                 }
+            }
+        }
+    }
+
+    public void savePlayerData(EntityHuman entityhuman) {
+        if (entityhuman == null) {
+            return;
+        }
+
+        if (this.isLocalLanOwner(entityhuman)) {
+            this.saveLocalLanOwnerSnapshot(entityhuman);
+            return;
+        }
+
+        this.playerFileData.a(entityhuman);
+    }
+
+    private boolean isLocalLanOwner(EntityHuman entityhuman) {
+        return entityhuman != null
+            && this.localLanOwnerName != null
+            && this.localLanOwnerName.length() > 0
+            && entityhuman.name != null
+            && this.localLanOwnerName.equalsIgnoreCase(entityhuman.name);
+    }
+
+    private void saveLocalLanOwnerSnapshot(EntityHuman entityhuman) {
+        File resultFile = this.server.a(MCOSE_LAN_OWNER_RESULT_FILE);
+        if (resultFile == null) {
+            return;
+        }
+
+        File parent = resultFile.getParentFile();
+        File tmpFile = parent == null ? new File(MCOSE_LAN_OWNER_RESULT_FILE + ".tmp") : new File(parent, MCOSE_LAN_OWNER_RESULT_FILE + ".tmp");
+        try {
+            NBTTagCompound playerTag = new NBTTagCompound();
+            entityhuman.d(playerTag);
+            playerTag.setString("MCOSEOwnerName", entityhuman.name);
+            CompressedStreamTools.a(playerTag, (OutputStream) (new FileOutputStream(tmpFile)));
+            if (resultFile.exists()) {
+                resultFile.delete();
+            }
+            if (!tmpFile.renameTo(resultFile)) {
+                throw new IOException("Could not promote " + tmpFile.getName());
+            }
+        } catch (Exception exception) {
+            a.warning("[MCOSE LAN] Failed to save local owner snapshot for " + entityhuman.name + ": " + exception.getMessage());
+        } finally {
+            if (tmpFile.exists()) {
+                tmpFile.delete();
             }
         }
     }
@@ -437,7 +490,7 @@ public class ServerConfigurationManager {
         //        PlayerTracker.getInstance().removePlayer(entityplayer.name);
         //Project POSEIDON End
 
-        this.playerFileData.a(entityplayer);
+        this.savePlayerData(entityplayer);
         this.server.getWorldServer(entityplayer.dimension).kill(entityplayer);
         this.players.remove(entityplayer);
         this.getPlayerManager(entityplayer.dimension).removePlayer(entityplayer);
@@ -1090,7 +1143,7 @@ public class ServerConfigurationManager {
 
     public void savePlayers() {
         for (int i = 0; i < this.players.size(); ++i) {
-            this.playerFileData.a((EntityHuman) this.players.get(i));
+            this.savePlayerData((EntityHuman) this.players.get(i));
         }
     }
 

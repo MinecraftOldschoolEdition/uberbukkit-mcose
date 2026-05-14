@@ -645,18 +645,23 @@ public abstract class EntityHuman extends EntityLiving {
 
     public void c(Entity entity) {
         ItemStack itemstack = this.G();
-        if (itemstack != null && entity instanceof EntityAnimal && ItemLead.isLeadItemStack(itemstack)) {
-            Item item = itemstack.getItem();
-            if (item instanceof ItemLead && ((ItemLead) item).attachToAnimal(itemstack, (EntityAnimal) entity, this)) {
-                this.a(StatisticList.E[itemstack.id], 1);
+        if (itemstack != null && entity instanceof EntityLiving && ItemLead.isLeadItemStack(itemstack)) {
+            itemstack.a((EntityLiving) entity, this);
+            if (itemstack.count == 0) {
+                itemstack.a(this);
+                this.H();
+            }
+            if (entity instanceof EntityAnimal && ((EntityAnimal) entity).isLeashedTo(this)) {
+                return;
+            }
+        }
+
+        if (itemstack != null && entity instanceof EntityLiving && ItemNameTag.isNameTagItemStack(itemstack)) {
+            if (ItemNameTag.applyToEntity(itemstack, this, (EntityLiving) entity)) {
                 if (itemstack.count == 0) {
                     itemstack.a(this);
                     this.H();
                 }
-                return;
-            }
-
-            if (((EntityAnimal) entity).isLeashedTo(this)) {
                 return;
             }
         }

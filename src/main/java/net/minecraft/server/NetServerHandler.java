@@ -357,6 +357,8 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     private int lastTick = MinecraftServer.currentTick;
     private int lastDropTick = MinecraftServer.currentTick;
     private int dropCount = 0;
+    private int movementPacketTick = MinecraftServer.currentTick;
+    private int movementPacketsThisTick = 0;
     private static final int PLACE_DISTANCE_SQUARED = 6 * 6;
     private static final long RIGHT_CLICK_DUPLICATE_SUPPRESS_MS = 35L;
 
@@ -497,11 +499,56 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         this.player.a(packet27.c(), packet27.e(), packet27.g(), packet27.h(), packet27.d(), packet27.f());
     }
 
+    private boolean isValidMovementPacket(Packet10Flying packet10flying) {
+        if (packet10flying.h) {
+            if (!isFinite(packet10flying.x) || !isFinite(packet10flying.y) || !isFinite(packet10flying.z) || !isFinite(packet10flying.stance)) {
+                return false;
+            }
+            if (Math.abs(packet10flying.x) > 3.2E7D || Math.abs(packet10flying.z) > 3.2E7D) {
+                return false;
+            }
+            if (Math.abs(packet10flying.y) > 2.0E7D || Math.abs(packet10flying.stance) > 2.0E7D) {
+                return false;
+            }
+        }
+
+        return !packet10flying.hasLook || isFinite(packet10flying.yaw) && isFinite(packet10flying.pitch);
+    }
+
+    private static boolean isFinite(double value) {
+        return !Double.isNaN(value) && !Double.isInfinite(value);
+    }
+
+    private static boolean isFinite(float value) {
+        return !Float.isNaN(value) && !Float.isInfinite(value);
+    }
+
+    private int recordMovementPacketThisTick() {
+        int currentTick = MinecraftServer.currentTick;
+        if (this.movementPacketTick != currentTick) {
+            this.movementPacketTick = currentTick;
+            this.movementPacketsThisTick = 0;
+        }
+        return ++this.movementPacketsThisTick;
+    }
+
+    private void disconnectInvalidMovementPacket() {
+        String playerName = this.player != null ? this.player.name : "<unknown>";
+        a.warning(playerName + " sent an invalid movement packet and was disconnected.");
+        this.disconnect("Invalid movement packet");
+    }
+
     public void a(Packet10Flying packet10flying) {
         // poseidon
         PacketReceivedEvent pevent = new PacketReceivedEvent(server.getPlayer(player), packet10flying);
         server.getPluginManager().callEvent(pevent);
         if (pevent.isCancelled()) return;
+
+        if (!isValidMovementPacket(packet10flying)) {
+            disconnectInvalidMovementPacket();
+            return;
+        }
+        int movementPacketsThisTick = recordMovementPacketThisTick();
 
         WorldServer worldserver = this.minecraftServer.getWorldServer(this.player.dimension);
 
@@ -577,13 +624,6 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
                     return;
                 }
             }
-        }
-
-        if (Double.isNaN(packet10flying.x) || Double.isNaN(packet10flying.y) || Double.isNaN(packet10flying.z) || Double.isNaN(packet10flying.stance) && player.isOnline() && !disconnected) {
-            player.teleport(player.getWorld().getSpawnLocation());
-            System.err.println(player.getName() + " was caught trying to crash the server with an invalid position.");
-            player.kickPlayer("Nope!");
-            return;
         }
 
         if (this.checkMovement && !this.player.dead) {
@@ -709,7 +749,9 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             double d8 = d4 * d4 + d6 * d6 + d7 * d7;
 
             if ((boolean) PoseidonConfig.getInstance().getConfigOption("world.settings.speed-hack-check.enabled", true)) {
-                if (d8 - d14 > (double) PoseidonConfig.getInstance().getConfigOption("world.settings.speed-hack-check.distance", 100.0D) && this.checkMovement) { // CraftBukkit - Added this.checkMovement condition to solve this check being triggered by teleports
+                    double movementBurstMultiplier = Math.max(1.0D, (double) (movementPacketsThisTick - 5));
+                    double speedCheckDistance = (double) PoseidonConfig.getInstance().getConfigOption("world.settings.speed-hack-check.distance", 100.0D) * movementBurstMultiplier;
+                    if (d8 - d14 > speedCheckDistance && this.checkMovement) { // CraftBukkit - Added this.checkMovement condition to solve this check being triggered by teleports
                     a.warning(this.player.name + " moved too quickly! " + d4 + "," + d6 + "," + d7 + " (" + d4 + ", " + d6 + ", " + d7 + ")");
                     if ((boolean) PoseidonConfig.getInstance().getConfigOption("world.settings.speed-hack-check.teleport", true)) {
                         this.a(this.x, this.y, this.z, this.player.yaw, this.player.pitch);
@@ -2706,7 +2748,12 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
                 return;
             }
             this.syncedRegistrySnapshot = RegistrySyncSnapshot.captureLocal();
-            this.sendPacket(new Packet250CustomPayload(ModProtocol.CHANNEL_REGISTRY_SYNC, ModProtocol.createRegistrySyncPayload(this.syncedRegistrySnapshot)));
+            byte[] registryPayload = ModProtocol.createRegistrySyncPayload(this.syncedRegistrySnapshot);
+            if (registryPayload.length > PacketLimits.MAX_CUSTOM_PAYLOAD_BYTES) {
+                a.warning("[MCOSE] Registry sync payload too large for Packet250: " + registryPayload.length + " bytes");
+                return;
+            }
+            this.sendPacket(new Packet250CustomPayload(ModProtocol.CHANNEL_REGISTRY_SYNC, registryPayload));
             return;
         }
 
@@ -2735,6 +2782,11 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         
         if ("MC|BSign".equals(packet250custompayload.channel)) {
             handleBookSign(packet250custompayload);
+            return;
+        }
+
+        if ("MC|NTag".equals(packet250custompayload.channel)) {
+            handleNameTagRename(packet250custompayload);
             return;
         }
         
@@ -2825,7 +2877,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             // Read version string from packet
             java.io.DataInputStream dis = new java.io.DataInputStream(
                 new java.io.ByteArrayInputStream(packet.data));
-            this.clientVersion = dis.readUTF();
+            this.clientVersion = PacketLimits.readUtf(dis, PacketLimits.MAX_VERSION_CHARS, "client version");
             
             a.info("[MCOSE] " + this.player.name + " connected with client version " + this.clientVersion);
             
@@ -2852,6 +2904,10 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             org.bukkit.command.SimpleCommandMap commandMap = (org.bukkit.command.SimpleCommandMap) this.server.getCommandMap();
             byte[] payload = CommandAutocompleteRegistry.getInstance().buildTreePayload(commandMap, this.getPlayer());
             if (payload == null || payload.length == 0) {
+                return;
+            }
+            if (payload.length > PacketLimits.MAX_CUSTOM_PAYLOAD_BYTES) {
+                a.warning("[CommandAutocomplete] Command tree payload too large: " + payload.length + " bytes");
                 return;
             }
 
@@ -2881,7 +2937,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
 
             int requestId = in.readInt();
             int cursorPos = in.readInt();
-            String text = in.readUTF();
+            String text = PacketLimits.readUtf(in, PacketLimits.MAX_COMMAND_TEXT_CHARS, "command autocomplete text");
             if (text == null) {
                 text = "";
             }
@@ -2893,19 +2949,16 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             org.bukkit.command.SimpleCommandMap commandMap = (org.bukkit.command.SimpleCommandMap) this.server.getCommandMap();
             java.util.List<String> suggestions = CommandAutocompleteRegistry.getInstance().suggest(commandMap, this.getPlayer(), text, cursorPos);
 
-            java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
-            java.io.DataOutputStream out = new java.io.DataOutputStream(baos);
-            out.writeInt(CommandAutocompleteRegistry.PROTOCOL_VERSION);
-            out.writeInt(requestId);
-            out.writeInt(cursorPos);
-            out.writeUTF(text);
-            out.writeInt(suggestions.size());
-            for (int i = 0; i < suggestions.size(); i++) {
-                String value = suggestions.get(i);
-                out.writeUTF(value == null ? "" : value);
+            int count = Math.min(suggestions.size(), PacketLimits.MAX_TAB_COMPLETIONS);
+            byte[] response = buildCommandAutocompleteResponse(requestId, cursorPos, text, suggestions, count);
+            while (response.length > PacketLimits.MAX_CUSTOM_PAYLOAD_BYTES && count > 0) {
+                count /= 2;
+                response = buildCommandAutocompleteResponse(requestId, cursorPos, text, suggestions, count);
             }
 
-            this.sendPacket(new Packet250CustomPayload(CommandAutocompleteRegistry.CHANNEL_RESPONSE, baos.toByteArray()));
+            if (response.length <= PacketLimits.MAX_CUSTOM_PAYLOAD_BYTES) {
+                this.sendPacket(new Packet250CustomPayload(CommandAutocompleteRegistry.CHANNEL_RESPONSE, response));
+            }
         } catch (Throwable t) {
             a.warning("[CommandAutocomplete] Failed to handle request: " + t.getMessage());
         } finally {
@@ -2951,6 +3004,42 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     public boolean isMcoseClient() {
         return this.clientVersion != null && !"vanilla".equals(this.clientVersion);
     }
+
+    /**
+     * Handle name tag rename packet (MC|NTag).
+     * Updates the name stored on the name tag in the player's hand.
+     */
+    private void handleNameTagRename(Packet250CustomPayload packet) {
+        try {
+            if (packet.data == null || packet.data.length == 0) {
+                return;
+            }
+
+            ItemStack heldItem = this.player.inventory.getItemInHand();
+            if (heldItem == null || heldItem.id != Item.NAME_TAG.id) {
+                return;
+            }
+
+            java.io.DataInputStream dis = new java.io.DataInputStream(
+                new java.io.ByteArrayInputStream(packet.data));
+            NBTBase nbt = NBTBase.b(dis, NBTReadLimiter.packet());
+
+            if (nbt instanceof NBTTagCompound) {
+                NBTTagCompound nameTagData = (NBTTagCompound) nbt;
+                if (nameTagData.hasKey("Name")) {
+                    String name = nameTagData.getString("Name");
+                    if (name.length() > PacketLimits.MAX_NAME_TAG_CHARS) {
+                        return;
+                    }
+                    ItemNameTag.setStoredName(heldItem, name);
+                    this.player.inventory.update();
+                    this.player.updateInventory(this.player.activeContainer);
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("[NetServerHandler] Error handling name tag rename: " + e.getMessage());
+        }
+    }
     
     /**
      * Handle book edit packet (MC|BEdit).
@@ -2970,7 +3059,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             // Read NBT data from packet
             java.io.DataInputStream dis = new java.io.DataInputStream(
                 new java.io.ByteArrayInputStream(packet.data));
-            NBTBase nbt = NBTBase.b(dis);
+            NBTBase nbt = NBTBase.b(dis, NBTReadLimiter.packet());
             
             if (nbt instanceof NBTTagCompound) {
                 NBTTagCompound bookData = (NBTTagCompound) nbt;
@@ -2979,8 +3068,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
                 if (bookData.hasKey("pages")) {
                     NBTTagList pages = bookData.l("pages");
                     
-                    // Limit page count and content length
-                    if (pages.c() <= 50) {
+                    if (isValidBookPages(pages)) {
                         // Set or create the tag on the item
                         if (heldItem.tag == null) {
                             heldItem.tag = new NBTTagCompound();
@@ -3018,7 +3106,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             // Read NBT data from packet
             java.io.DataInputStream dis = new java.io.DataInputStream(
                 new java.io.ByteArrayInputStream(packet.data));
-            NBTBase nbt = NBTBase.b(dis);
+            NBTBase nbt = NBTBase.b(dis, NBTReadLimiter.packet());
             
             if (nbt instanceof NBTTagCompound) {
                 NBTTagCompound bookData = (NBTTagCompound) nbt;
@@ -3029,9 +3117,8 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
                     String author = bookData.getString("author");
                     NBTTagList pages = bookData.l("pages");
                     
-                    // Validate title length
-                    if (title.length() > 16) {
-                        title = title.substring(0, 16);
+                    if (title.length() > PacketLimits.MAX_BOOK_TITLE_CHARS) {
+                        title = title.substring(0, PacketLimits.MAX_BOOK_TITLE_CHARS);
                     }
                     
                     // Validate author (should match player name)
@@ -3039,8 +3126,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
                         author = this.player.name;
                     }
                     
-                    // Limit page count
-                    if (pages.c() <= 50) {
+                    if (isValidBookPages(pages)) {
                         // Convert to written book
                         heldItem.id = Item.WRITTEN_BOOK.id;
                         
@@ -3155,8 +3241,54 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         org.bukkit.command.SimpleCommandMap commandMap = (org.bukkit.command.SimpleCommandMap) this.server.getCommandMap();
         java.util.List<String> completions = CommandAutocompleteRegistry.getInstance()
             .suggest(commandMap, this.getPlayer(), packet203tabcomplete.text, packet203tabcomplete.text.length());
-        String[] responseArray = completions.toArray(new String[0]);
+        int count = Math.min(completions.size(), PacketLimits.MAX_TAB_COMPLETIONS);
+        String[] responseArray = new String[count];
+        for (int i = 0; i < count; ++i) {
+            responseArray[i] = boundedCompletion(completions.get(i));
+        }
         this.sendPacket(new Packet203TabComplete(responseArray));
+    }
+
+    private byte[] buildCommandAutocompleteResponse(int requestId, int cursorPos, String text, java.util.List<String> suggestions, int count) throws java.io.IOException {
+        java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+        java.io.DataOutputStream out = new java.io.DataOutputStream(baos);
+        out.writeInt(CommandAutocompleteRegistry.PROTOCOL_VERSION);
+        out.writeInt(requestId);
+        out.writeInt(cursorPos);
+        PacketLimits.writeUtf(out, text, PacketLimits.MAX_COMMAND_TEXT_CHARS, "command autocomplete text");
+        out.writeInt(count);
+        for (int i = 0; i < count; i++) {
+            PacketLimits.writeUtf(out, boundedCompletion(suggestions.get(i)), PacketLimits.MAX_COMPLETION_CHARS, "command autocomplete suggestion");
+        }
+        out.flush();
+        return baos.toByteArray();
+    }
+
+    private static String boundedCompletion(String value) {
+        if (value == null) {
+            return "";
+        }
+        if (value.length() > PacketLimits.MAX_COMPLETION_CHARS) {
+            return value.substring(0, PacketLimits.MAX_COMPLETION_CHARS);
+        }
+        return value;
+    }
+
+    private static boolean isValidBookPages(NBTTagList pages) {
+        if (pages == null || pages.c() > PacketLimits.MAX_BOOK_PAGES) {
+            return false;
+        }
+        for (int i = 0; i < pages.c(); ++i) {
+            NBTBase page = pages.a(i);
+            if (!(page instanceof NBTTagString)) {
+                return false;
+            }
+            String text = ((NBTTagString) page).a;
+            if (text == null || text.length() > PacketLimits.MAX_BOOK_PAGE_CHARS) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static final class QueuedTcpVoicePacket {

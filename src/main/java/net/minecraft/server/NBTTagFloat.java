@@ -19,7 +19,8 @@ public class NBTTagFloat extends NBTBase {
         dataoutput.writeFloat(this.a);
     }
 
-    void a(DataInput datainput) throws IOException {
+    void a(DataInput datainput, NBTReadLimiter limiter) throws IOException {
+        limiter.account(4L);
         this.a = datainput.readFloat();
     }
 

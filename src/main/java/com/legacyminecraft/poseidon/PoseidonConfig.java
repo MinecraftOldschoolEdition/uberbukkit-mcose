@@ -128,6 +128,9 @@ public class PoseidonConfig extends Configuration {
         generateConfigOption("settings.packet-spam-detection.enabled", true);
         generateConfigOption("settings.packet-spam-detection.info", "This setting causes the server to detect and kick malicious players who send too many packets in a short period of time. This is useful to prevent players from sending too many packets to the server to cause lag.");
         generateConfigOption("settings.packet-spam-detection.threshold", 10000);
+        generateConfigOption("settings.packet-rate-limit.enabled", true);
+        generateConfigOption("settings.packet-rate-limit.info", "This setting kicks connections whose smoothed inbound packet rate stays above the configured packets-per-second limit.");
+        generateConfigOption("settings.packet-rate-limit.packets-per-second", 500);
         
         // Connection throttling - prevents rapid connections from same IP
         generateConfigOption("settings.connection-throttle-ms.value", 0);

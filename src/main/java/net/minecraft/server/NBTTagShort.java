@@ -19,7 +19,8 @@ public class NBTTagShort extends NBTBase {
         dataoutput.writeShort(this.a);
     }
 
-    void a(DataInput datainput) throws IOException {
+    void a(DataInput datainput, NBTReadLimiter limiter) throws IOException {
+        limiter.account(2L);
         this.a = datainput.readShort();
     }
 

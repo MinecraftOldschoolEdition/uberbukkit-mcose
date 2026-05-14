@@ -37,7 +37,7 @@ public class Packet20NamedEntitySpawn extends Packet {
         if (this.pvn >= 11) {
             this.b = a(datainputstream, 16);
         } else {
-            this.b = datainputstream.readUTF();
+            this.b = PacketLimits.readUtf(datainputstream, 16, "entity username");
         }
 
         this.c = datainputstream.readInt();
@@ -54,7 +54,7 @@ public class Packet20NamedEntitySpawn extends Packet {
         if (this.pvn >= 11) {
             a(this.b, dataoutputstream);
         } else {
-            dataoutputstream.writeUTF(this.b);
+            PacketLimits.writeUtf(dataoutputstream, this.b, 16, "entity username");
         }
 
         dataoutputstream.writeInt(this.c);

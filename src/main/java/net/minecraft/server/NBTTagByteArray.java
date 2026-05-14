@@ -20,8 +20,13 @@ public class NBTTagByteArray extends NBTBase {
         dataoutput.write(this.a);
     }
 
-    void a(DataInput datainput) throws IOException {
+    void a(DataInput datainput, NBTReadLimiter limiter) throws IOException {
+        limiter.account(4L);
         int i = datainput.readInt();
+        if (i < 0) {
+            throw new IOException("Negative TAG_Byte_Array length: " + i);
+        }
+        limiter.account((long) i);
 
         this.a = new byte[i];
         datainput.readFully(this.a);

@@ -250,7 +250,12 @@ public final class ItemStack {
     }
 
     public void a(EntityLiving entityliving, EntityHuman entityhuman) {
-        boolean flag = Item.byId[this.id].a(this, entityliving, (EntityLiving) entityhuman);
+        Item item = this.getItem();
+        if (item == null) {
+            return;
+        }
+
+        boolean flag = item.a(this, entityliving, (EntityLiving) entityhuman);
 
         if (flag) {
             entityhuman.a(StatisticList.E[this.id], 1);

@@ -20,23 +20,7 @@ public final class PacketHelper {
 
         // Read NBT data if present
         NBTTagCompound legacyTag = null;
-        short nbtLength = in.readShort();
-        if (nbtLength > 0) {
-            byte[] nbtBytes = new byte[nbtLength];
-            in.readFully(nbtBytes);
-            try {
-                ByteArrayInputStream bais = new ByteArrayInputStream(nbtBytes);
-                GZIPInputStream gzis = new GZIPInputStream(bais);
-                DataInputStream nbtIn = new DataInputStream(gzis);
-                NBTBase nbtBase = NBTBase.b(nbtIn);
-                nbtIn.close();
-                if (nbtBase instanceof NBTTagCompound) {
-                    legacyTag = (NBTTagCompound) nbtBase;
-                }
-            } catch (Exception e) {
-                System.err.println("[PacketHelper] Error reading item NBT: " + e.getMessage());
-            }
-        }
+        legacyTag = PacketLimits.readCompressedNBT(in, PacketLimits.MAX_ITEM_NBT_BYTES, "item NBT");
 
         return LegacyItemStackCodec.decode(id, count, damage, legacyTag);
     }
@@ -60,14 +44,7 @@ public final class PacketHelper {
         // Write NBT data if present
         if (encoded.tag != null) {
             try {
-                ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                GZIPOutputStream gzos = new GZIPOutputStream(baos);
-                DataOutputStream nbtOut = new DataOutputStream(gzos);
-                NBTBase.a(encoded.tag, nbtOut);
-                nbtOut.close();
-                byte[] nbtBytes = baos.toByteArray();
-                out.writeShort(nbtBytes.length);
-                out.write(nbtBytes);
+                PacketLimits.writeCompressedNBT(out, encoded.tag, PacketLimits.MAX_ITEM_NBT_BYTES, "item NBT");
             } catch (Exception e) {
                 System.err.println("[PacketHelper] Error writing item NBT: " + e.getMessage());
                 out.writeShort(-1);

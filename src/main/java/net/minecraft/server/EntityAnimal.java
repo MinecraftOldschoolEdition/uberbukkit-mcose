@@ -1,6 +1,12 @@
 package net.minecraft.server;
 
+import net.minecraft.server.registry.PlayerCapabilityRegistryApi;
+
 public abstract class EntityAnimal extends EntityCreature implements IAnimal {
+    private static final double LEASH_PULL_DISTANCE_SQ = 9.0D;
+    private static final double LEASH_BREAK_DISTANCE_SQ = 4096.0D;
+    private static final double FLYING_LEASH_BREAK_DISTANCE_SQ = 16384.0D;
+
     private static final EntityDataAccessor<Integer> DATA_LEASH_STATE_ID = new EntityDataAccessor<Integer>(19, EntityDataSerializers.INT);
     private static final EntityDataAccessor<String> DATA_LEASH_HOLDER_ID = new EntityDataAccessor<String>(20, EntityDataSerializers.STRING);
     private static final EntityDataAccessor<Integer> DATA_LEASH_FENCE_X_ID = new EntityDataAccessor<Integer>(21, EntityDataSerializers.INT);
@@ -74,37 +80,27 @@ public abstract class EntityAnimal extends EntityCreature implements IAnimal {
 
     public void a(NBTTagCompound nbttagcompound) {
         super.a(nbttagcompound);
-        this.leashHolderName = null;
-        this.leashToFence = false;
-        this.leashFenceX = 0;
-        this.leashFenceY = 0;
-        this.leashFenceZ = 0;
+        this.clearLeashStateFields();
 
         if (nbttagcompound.hasKey("entity_data")) {
             NBTTagCompound entityData = nbttagcompound.k("entity_data");
             if (entityData.m("leash_to_fence")) {
-                this.leashToFence = true;
-                this.leashFenceX = entityData.e("leash_fence_x");
-                this.leashFenceY = entityData.e("leash_fence_y");
-                this.leashFenceZ = entityData.e("leash_fence_z");
+                this.setLeashFenceState(entityData.e("leash_fence_x"), entityData.e("leash_fence_y"), entityData.e("leash_fence_z"));
                 this.syncLeashData();
                 return;
             }
 
             if (entityData.hasKey("leash_holder")) {
-                this.leashHolderName = entityData.getString("leash_holder");
+                this.setLeashHolderState(entityData.getString("leash_holder"));
                 this.syncLeashData();
                 return;
             }
         }
 
         if (nbttagcompound.hasKey("LeashToFence") && nbttagcompound.m("LeashToFence")) {
-            this.leashToFence = true;
-            this.leashFenceX = nbttagcompound.e("LeashFenceX");
-            this.leashFenceY = nbttagcompound.e("LeashFenceY");
-            this.leashFenceZ = nbttagcompound.e("LeashFenceZ");
+            this.setLeashFenceState(nbttagcompound.e("LeashFenceX"), nbttagcompound.e("LeashFenceY"), nbttagcompound.e("LeashFenceZ"));
         } else if (nbttagcompound.hasKey("LeashHolder")) {
-            this.leashHolderName = nbttagcompound.getString("LeashHolder");
+            this.setLeashHolderState(nbttagcompound.getString("LeashHolder"));
         }
 
         this.syncLeashData();
@@ -137,21 +133,30 @@ public abstract class EntityAnimal extends EntityCreature implements IAnimal {
         double deltaY = leashHolder.locY + (double) leashHolder.t() - this.locY;
         double deltaZ = leashHolder.locZ - this.locZ;
         double distanceSq = deltaX * deltaX + deltaY * deltaY + deltaZ * deltaZ;
+        double horizontalDistanceSq = deltaX * deltaX + deltaZ * deltaZ;
+        boolean holderFlying = this.isLeashHolderFlying(leashHolder);
 
-        if (distanceSq > 196.0D) {
+        if ((holderFlying ? horizontalDistanceSq : distanceSq) > (holderFlying ? FLYING_LEASH_BREAK_DISTANCE_SQ : LEASH_BREAK_DISTANCE_SQ)) {
             this.clearLeashed(true);
             return;
         }
 
-        if (distanceSq > 9.0D) {
+        if (distanceSq > LEASH_PULL_DISTANCE_SQ) {
             float distance = MathHelper.a(distanceSq);
             if (distance > 0.0F) {
-                this.motX += deltaX / (double) distance * 0.08D;
-                this.motY += deltaY / (double) distance * 0.06D;
-                this.motZ += deltaZ / (double) distance * 0.08D;
+                double horizontalPull = holderFlying ? 0.11D : 0.08D;
+                double verticalPull = holderFlying ? 0.16D : 0.06D;
+                this.motX += deltaX / (double) distance * horizontalPull;
+                this.motY += deltaY / (double) distance * verticalPull;
+                this.motZ += deltaZ / (double) distance * horizontalPull;
+                if (holderFlying && deltaY > 1.0D) {
+                    this.motY += Math.min(0.18D, deltaY * 0.02D);
+                }
             }
 
-            this.setPathEntity(this.world.findPath(this, leashHolder, 16.0F));
+            if (!holderFlying) {
+                this.setPathEntity(this.world.findPath(this, leashHolder, 16.0F));
+            }
         }
     }
 
@@ -176,12 +181,12 @@ public abstract class EntityAnimal extends EntityCreature implements IAnimal {
         double deltaZ = anchorZ - this.locZ;
         double distanceSq = deltaX * deltaX + deltaY * deltaY + deltaZ * deltaZ;
 
-        if (distanceSq > 196.0D) {
+        if (distanceSq > LEASH_BREAK_DISTANCE_SQ) {
             this.clearLeashed(true);
             return;
         }
 
-        if (distanceSq > 9.0D) {
+        if (distanceSq > LEASH_PULL_DISTANCE_SQ) {
             float distance = MathHelper.a(distanceSq);
             if (distance > 0.0F) {
                 this.motX += deltaX / (double) distance * 0.08D;
@@ -191,6 +196,10 @@ public abstract class EntityAnimal extends EntityCreature implements IAnimal {
 
             this.setPathEntity(this.world.a(this, this.leashFenceX, this.leashFenceY, this.leashFenceZ, 16.0F));
         }
+    }
+
+    private boolean isLeashHolderFlying(Entity leashHolder) {
+        return leashHolder instanceof EntityPlayer && PlayerCapabilityRegistryApi.isFlying((EntityPlayer) leashHolder);
     }
 
     public boolean isLeashed() {
@@ -234,22 +243,14 @@ public abstract class EntityAnimal extends EntityCreature implements IAnimal {
             return;
         }
 
-        this.leashToFence = false;
-        this.leashFenceX = 0;
-        this.leashFenceY = 0;
-        this.leashFenceZ = 0;
-        this.leashHolderName = entityhuman.name;
+        this.setLeashHolderState(entityhuman.name);
         this.ay = 0;
         this.resetLeashFallDistance();
         this.syncLeashData();
     }
 
     public void setLeashedToFence(int x, int y, int z) {
-        this.leashHolderName = null;
-        this.leashToFence = true;
-        this.leashFenceX = x;
-        this.leashFenceY = y;
-        this.leashFenceZ = z;
+        this.setLeashFenceState(x, y, z);
         this.ay = 0;
         this.resetLeashFallDistance();
         this.syncLeashData();
@@ -266,16 +267,33 @@ public abstract class EntityAnimal extends EntityCreature implements IAnimal {
             this.a(new ItemStack(Item.LEAD, 1), 0.0F);
         }
 
-        this.leashHolderName = null;
-        this.leashToFence = false;
-        this.leashFenceX = 0;
-        this.leashFenceY = 0;
-        this.leashFenceZ = 0;
+        this.clearLeashStateFields();
         this.syncLeashData();
     }
 
     public void resetLeashFallDistance() {
         this.fallDistance = 0.0F;
+    }
+
+    private void clearLeashStateFields() {
+        this.leashHolderName = null;
+        this.leashToFence = false;
+        this.leashFenceX = 0;
+        this.leashFenceY = 0;
+        this.leashFenceZ = 0;
+    }
+
+    private void setLeashHolderState(String holderName) {
+        this.clearLeashStateFields();
+        this.leashHolderName = holderName;
+    }
+
+    private void setLeashFenceState(int x, int y, int z) {
+        this.leashHolderName = null;
+        this.leashToFence = true;
+        this.leashFenceX = x;
+        this.leashFenceY = y;
+        this.leashFenceZ = z;
     }
 
     private void syncLeashData() {

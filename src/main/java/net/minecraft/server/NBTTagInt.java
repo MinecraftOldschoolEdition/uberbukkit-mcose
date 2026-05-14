@@ -19,7 +19,8 @@ public class NBTTagInt extends NBTBase {
         dataoutput.writeInt(this.a);
     }
 
-    void a(DataInput datainput) throws IOException {
+    void a(DataInput datainput, NBTReadLimiter limiter) throws IOException {
+        limiter.account(4L);
         this.a = datainput.readInt();
     }
 

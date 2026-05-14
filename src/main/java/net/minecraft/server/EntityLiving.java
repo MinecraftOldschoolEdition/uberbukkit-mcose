@@ -794,7 +794,8 @@ public abstract class EntityLiving extends Entity {
     }
 
     protected boolean h_() {
-        return true;
+        String customName = this.getCustomName();
+        return customName == null || customName.length() == 0;
     }
 
     protected void U() {

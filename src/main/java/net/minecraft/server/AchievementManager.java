@@ -249,10 +249,7 @@ public final class AchievementManager {
                 return;
             }
 
-            PlayerFileData playerFileData = player.b.serverConfigurationManager.playerFileData;
-            if (playerFileData != null) {
-                playerFileData.a(player);
-            }
+            player.b.serverConfigurationManager.savePlayerData(player);
         } catch (Throwable t) {
             log.warning("[AchievementManager] Failed to persist achievements for " + player.name + ": " + t.getMessage());
         }

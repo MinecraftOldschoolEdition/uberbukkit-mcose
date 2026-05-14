@@ -128,7 +128,7 @@ public class FriendsVerificationHandler {
      */
     private boolean handleFriendQuery(EntityPlayer requester, byte[] data) throws IOException {
         DataInputStream in = new DataInputStream(new ByteArrayInputStream(data));
-        String friendUuid = in.readUTF();
+        String friendUuid = PacketLimits.readUtf(in, PacketLimits.MAX_UUID_CHARS, "friend UUID");
         
         friendUuid = normalizeUuid(friendUuid);
         
@@ -156,10 +156,10 @@ public class FriendsVerificationHandler {
      */
     private boolean handleClaimRequest(EntityPlayer requester, byte[] data) throws IOException {
         DataInputStream in = new DataInputStream(new ByteArrayInputStream(data));
-        String friendUuid = in.readUTF();
-        String signature = in.readUTF();
+        String friendUuid = PacketLimits.readUtf(in, PacketLimits.MAX_UUID_CHARS, "friend UUID");
+        String signature = PacketLimits.readUtf(in, PacketLimits.MAX_SIGNATURE_CHARS, "friend signature");
         long addedAt = in.readLong();
-        String publicKey = in.readUTF();
+        String publicKey = PacketLimits.readUtf(in, PacketLimits.MAX_PUBLIC_KEY_CHARS, "friend public key");
         
         String requesterUuid = normalizeUuid(getPlayerUuid(requester));
         friendUuid = normalizeUuid(friendUuid);
@@ -192,7 +192,7 @@ public class FriendsVerificationHandler {
      */
     private boolean handleVerifyRequest(EntityPlayer requester, byte[] data) throws IOException {
         DataInputStream in = new DataInputStream(new ByteArrayInputStream(data));
-        String friendUuid = in.readUTF();
+        String friendUuid = PacketLimits.readUtf(in, PacketLimits.MAX_UUID_CHARS, "friend UUID");
         
         // Check if there's additional claim data
         String signature = "";
@@ -200,9 +200,9 @@ public class FriendsVerificationHandler {
         String publicKey = "";
         
         try {
-            signature = in.readUTF();
+            signature = PacketLimits.readUtf(in, PacketLimits.MAX_SIGNATURE_CHARS, "friend signature");
             addedAt = in.readLong();
-            publicKey = in.readUTF();
+            publicKey = PacketLimits.readUtf(in, PacketLimits.MAX_PUBLIC_KEY_CHARS, "friend public key");
         } catch (Exception e) {
             // Old protocol without claim data
         }
@@ -237,7 +237,7 @@ public class FriendsVerificationHandler {
      */
     private boolean handleCheckRequest(EntityPlayer requester, byte[] data) throws IOException {
         DataInputStream in = new DataInputStream(new ByteArrayInputStream(data));
-        String friendUuid = in.readUTF();
+        String friendUuid = PacketLimits.readUtf(in, PacketLimits.MAX_UUID_CHARS, "friend UUID");
         
         friendUuid = normalizeUuid(friendUuid);
         String requesterUuid = normalizeUuid(getPlayerUuid(requester));
@@ -259,8 +259,8 @@ public class FriendsVerificationHandler {
      */
     private boolean handleUnauthenticatedCheck(NetworkManager networkManager, byte[] data) throws IOException {
         DataInputStream in = new DataInputStream(new ByteArrayInputStream(data));
-        String requesterUuid = in.readUTF();
-        String friendUuid = in.readUTF();
+        String requesterUuid = PacketLimits.readUtf(in, PacketLimits.MAX_UUID_CHARS, "requester UUID");
+        String friendUuid = PacketLimits.readUtf(in, PacketLimits.MAX_UUID_CHARS, "friend UUID");
         
         requesterUuid = normalizeUuid(requesterUuid);
         friendUuid = normalizeUuid(friendUuid);

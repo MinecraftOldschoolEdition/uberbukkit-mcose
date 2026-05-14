@@ -8,7 +8,7 @@ public class NBTTagEnd extends NBTBase {
     public NBTTagEnd() {
     }
 
-    void a(DataInput datainput) {
+    void a(DataInput datainput, NBTReadLimiter limiter) {
     }
 
     void a(DataOutput dataoutput) {
