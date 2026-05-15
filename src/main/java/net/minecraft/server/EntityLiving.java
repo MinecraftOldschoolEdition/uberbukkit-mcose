@@ -20,6 +20,7 @@ import java.util.List;
 
 public abstract class EntityLiving extends Entity {
 
+    private final CombatTracker combatTracker = new CombatTracker(this);
     public int maxNoDamageTicks = 20;
     public float I;
     public float J;
@@ -119,6 +120,7 @@ public abstract class EntityLiving extends Entity {
     public void R() {
         this.Z = this.aa;
         super.R();
+        this.combatTracker.recheckStatus();
         if (this.random.nextInt(1000) < this.a++) {
             this.a = -this.e();
             this.Q();
@@ -375,19 +377,26 @@ public abstract class EntityLiving extends Entity {
                     noDamageWindow = Math.min(noDamageWindow, 10);
                 }
 
+                int actualDamage;
                 if ((float) this.noDamageTicks > (float) noDamageWindow / 2.0F) {
                     if (i <= this.lastDamage) {
                         return false;
                     }
 
-                    this.c(i - this.lastDamage);
+                    actualDamage = i - this.lastDamage;
+                    int healthBefore = this.health;
+                    this.c(actualDamage);
+                    this.recordCombatDamage(entity, healthBefore, actualDamage);
                     this.lastDamage = i;
                     flag = false;
                 } else {
                     this.lastDamage = i;
                     this.ac = this.health;
                     this.noDamageTicks = noDamageWindow;
+                    actualDamage = i;
+                    int healthBefore = this.health;
                     this.c(i);
+                    this.recordCombatDamage(entity, healthBefore, actualDamage);
                     this.hurtTicks = this.ae = 10;
                 }
 
@@ -429,6 +438,19 @@ public abstract class EntityLiving extends Entity {
 
     protected void c(int i) {
         this.health -= i;
+    }
+
+    public CombatTracker getCombatTracker() {
+        return this.combatTracker;
+    }
+
+    private void recordCombatDamage(Entity source, int healthBefore, int attemptedDamage) {
+        int appliedDamage = healthBefore - this.health;
+        if (appliedDamage > 0) {
+            this.combatTracker.recordDamage(DeathDamageSource.forDamage(this, source), appliedDamage);
+        } else if (attemptedDamage > 0 && !(this instanceof EntityHuman)) {
+            this.combatTracker.recordDamage(DeathDamageSource.forDamage(this, source), attemptedDamage);
+        }
     }
 
     protected float k() {

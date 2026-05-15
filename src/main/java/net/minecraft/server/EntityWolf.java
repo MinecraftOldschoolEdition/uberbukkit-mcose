@@ -1,5 +1,7 @@
 package net.minecraft.server;
 
+import net.minecraft.server.registry.ItemRegistry;
+import net.minecraft.server.util.ResourceLocation;
 import org.bukkit.craftbukkit.entity.CraftEntity;
 import org.bukkit.craftbukkit.event.CraftEventFactory;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
@@ -9,6 +11,7 @@ import org.bukkit.event.entity.EntityTargetEvent;
 
 import java.util.Iterator;
 import java.util.List;
+import java.util.UUID;
 
 // CraftBukkit start
 // CraftBukkit end
@@ -17,6 +20,8 @@ public class EntityWolf extends EntityAnimal {
     private static final EntityDataAccessor<Byte> DATA_WOLF_FLAGS_ID = new EntityDataAccessor<Byte>(16, EntityDataSerializers.BYTE);
     private static final EntityDataAccessor<String> DATA_WOLF_OWNER_ID = new EntityDataAccessor<String>(17, EntityDataSerializers.STRING);
     private static final EntityDataAccessor<Integer> DATA_WOLF_HEALTH_ID = new EntityDataAccessor<Integer>(18, EntityDataSerializers.INT);
+    private static final EntityDataAccessor<Byte> DATA_WOLF_COLLAR_COLOR_ID = new EntityDataAccessor<Byte>(24, EntityDataSerializers.BYTE);
+    private static final EntityDataAccessor<String> DATA_WOLF_OWNER_UUID_ID = new EntityDataAccessor<String>(25, EntityDataSerializers.STRING);
 
     private boolean a = false;
     private float b;
@@ -40,6 +45,8 @@ public class EntityWolf extends EntityAnimal {
         this.getSynchedEntityData().define(DATA_WOLF_FLAGS_ID, Byte.valueOf((byte)0));
         this.getSynchedEntityData().define(DATA_WOLF_OWNER_ID, "");
         this.getSynchedEntityData().define(DATA_WOLF_HEALTH_ID, Integer.valueOf(10));
+        this.getSynchedEntityData().define(DATA_WOLF_COLLAR_COLOR_ID, Byte.valueOf((byte)14));
+        this.getSynchedEntityData().define(DATA_WOLF_OWNER_UUID_ID, "");
     }
 
     protected void b() {
@@ -47,6 +54,8 @@ public class EntityWolf extends EntityAnimal {
         this.datawatcher.a(16, Byte.valueOf(this.getWolfFlags()));
         this.datawatcher.a(17, this.getWolfOwnerValue());
         this.datawatcher.a(18, Integer.valueOf(this.getSyncedWolfHealth()));
+        this.datawatcher.a(24, Byte.valueOf(this.getSyncedCollarColor()));
+        this.datawatcher.a(25, this.getWolfOwnerUUIDValue());
     }
 
     public void onSyncedDataUpdated(EntityDataAccessor<?> accessor) {
@@ -60,6 +69,12 @@ public class EntityWolf extends EntityAnimal {
         } else if (accessor == DATA_WOLF_HEALTH_ID) {
             Integer value = this.getSynchedEntityData().get(DATA_WOLF_HEALTH_ID);
             this.datawatcher.watch(18, Integer.valueOf(value == null ? this.health : value.intValue()));
+        } else if (accessor == DATA_WOLF_COLLAR_COLOR_ID) {
+            Byte value = this.getSynchedEntityData().get(DATA_WOLF_COLLAR_COLOR_ID);
+            this.datawatcher.watch(24, value == null ? Byte.valueOf((byte)14) : value);
+        } else if (accessor == DATA_WOLF_OWNER_UUID_ID) {
+            String value = this.getSynchedEntityData().get(DATA_WOLF_OWNER_UUID_ID);
+            this.datawatcher.watch(25, value == null ? "" : value);
         }
     }
 
@@ -71,11 +86,9 @@ public class EntityWolf extends EntityAnimal {
         super.b(nbttagcompound);
         nbttagcompound.a("Angry", this.isAngry());
         nbttagcompound.a("Sitting", this.isSitting());
-        if (this.getOwnerName() == null) {
-            nbttagcompound.setString("Owner", "");
-        } else {
-            nbttagcompound.setString("Owner", this.getOwnerName());
-        }
+        nbttagcompound.setString("Owner", this.getOwnerName() == null ? "" : this.getOwnerName());
+        nbttagcompound.setString("OwnerUUID", this.getOwnerUUID() == null ? "" : this.getOwnerUUID());
+        nbttagcompound.a("CollarColor", (byte)this.getCollarColor());
     }
 
     public void a(NBTTagCompound nbttagcompound) {
@@ -83,11 +96,21 @@ public class EntityWolf extends EntityAnimal {
         this.setAngry(nbttagcompound.m("Angry"));
         this.setSitting(nbttagcompound.m("Sitting"));
         String s = nbttagcompound.getString("Owner");
+        String ownerUuid = nbttagcompound.getString("OwnerUUID");
+        if (ownerUuid == null) {
+            ownerUuid = "";
+        }
+        if (ownerUuid.length() == 0 && isUuidLike(s)) {
+            ownerUuid = s;
+            s = "";
+        }
 
-        if (s.length() > 0) {
+        if (s.length() > 0 || ownerUuid.length() > 0) {
             this.setOwnerName(s);
+            this.setOwnerUUID(ownerUuid);
             this.setTamed(true);
         }
+        this.setCollarColor(nbttagcompound.hasKey("CollarColor") ? nbttagcompound.c("CollarColor") : 14);
     }
 
     protected boolean h_() {
@@ -126,7 +149,7 @@ public class EntityWolf extends EntityAnimal {
 
         super.c_();
         if (!this.e && !this.C() && this.isTamed() && this.vehicle == null) {
-            EntityHuman entityhuman = this.world.a(this.getOwnerName());
+            EntityHuman entityhuman = this.getOwnerEntity();
 
             if (entityhuman != null) {
                 float f = entityhuman.f(this);
@@ -338,7 +361,7 @@ public class EntityWolf extends EntityAnimal {
                     }
                 }
             } else if (entity != this && entity != null) {
-                if (this.isTamed() && entity instanceof EntityHuman && ((EntityHuman) entity).name.equalsIgnoreCase(this.getOwnerName())) {
+                if (this.isTamed() && entity instanceof EntityHuman && this.isOwnedBy((EntityHuman) entity)) {
                     return true;
                 }
 
@@ -407,6 +430,7 @@ public class EntityWolf extends EntityAnimal {
                         this.health = 20;
                         this.setSyncedWolfHealth(this.health);
                         this.setOwnerName(entityhuman.name);
+                        this.setOwnerUUID(getPlayerOwnerUUID(entityhuman));
                         this.a(true);
                         this.world.a(this, (byte) 7);
                     } else {
@@ -432,7 +456,28 @@ public class EntityWolf extends EntityAnimal {
                 }
             }
 
-            if (entityhuman.name.equalsIgnoreCase(this.getOwnerName())) {
+            if (this.isOwnedBy(entityhuman)) {
+                int i = getCollarColorFromDye(itemstack);
+                if (i >= 0) {
+                    if (i != this.getCollarColor()) {
+                        --itemstack.count;
+                        if (itemstack.count <= 0) {
+                            entityhuman.inventory.setItem(entityhuman.inventory.itemInHandIndex, (ItemStack) null);
+                        }
+
+                        if (!this.world.isStatic) {
+                            this.setCollarColor(i);
+                            if (this.world instanceof WorldServer) {
+                                ((WorldServer)this.world).tracker.sendPacketToEntity(this, new Packet40EntityMetadata(this));
+                            }
+                        }
+
+                        return true;
+                    }
+
+                    return true;
+                }
+
                 if (!this.world.isStatic) {
                     this.setSitting(!this.isSitting());
                     this.aC = false;
@@ -444,6 +489,70 @@ public class EntityWolf extends EntityAnimal {
         }
 
         return false;
+    }
+
+    private static int getCollarColorFromDye(ItemStack stack) {
+        int dyeDamage = getDyeDamage(stack);
+        return dyeDamage < 0 ? -1 : BlockCloth.c(dyeDamage);
+    }
+
+    private static int getDyeDamage(ItemStack stack) {
+        if (stack == null) {
+            return -1;
+        }
+
+        ResourceLocation key = getDyeStackKey(stack);
+        if (key != null) {
+            int damage = ItemRegistry.getDefaultDamage(key.toString());
+            if (damage >= 0 && damage < 16) {
+                return damage;
+            }
+
+            damage = getDyeDamageFromPath(key.getPath());
+            if (damage >= 0) {
+                return damage;
+            }
+        }
+
+        Item item = stack.getItem();
+        if (item instanceof ItemDye || stack.id == Item.INK_SACK.id) {
+            return stack.getData() & 15;
+        }
+
+        return -1;
+    }
+
+    private static ResourceLocation getDyeStackKey(ItemStack stack) {
+        Holder<Item> holder = stack.getItemHolder();
+        if (holder != null && holder.key() != null) {
+            return holder.key();
+        }
+
+        return ItemRegistry.getKeyForStack(stack);
+    }
+
+    private static int getDyeDamageFromPath(String path) {
+        if (path == null) {
+            return -1;
+        }
+
+        if ("cocoa_beans".equals(path)) {
+            return 3;
+        }
+
+        if (!path.endsWith("_dye")) {
+            return -1;
+        }
+
+        String color = path.substring(0, path.length() - "_dye".length());
+        String[] colors = new String[]{"black", "red", "green", "brown", "blue", "purple", "cyan", "light_gray", "gray", "pink", "lime", "yellow", "light_blue", "magenta", "orange", "white"};
+        for (int j = 0; j < colors.length; ++j) {
+            if (colors[j].equals(color)) {
+                return j;
+            }
+        }
+
+        return -1;
     }
 
     void a(boolean flag) {
@@ -472,6 +581,87 @@ public class EntityWolf extends EntityAnimal {
 
     public void setOwnerName(String s) {
         this.setWolfOwnerValue(s);
+    }
+
+    public String getOwnerUUID() {
+        return this.getWolfOwnerUUIDValue();
+    }
+
+    public void setOwnerUUID(String s) {
+        this.setWolfOwnerUUIDValue(s);
+    }
+
+    public boolean isOwnedBy(EntityHuman entityhuman) {
+        if (entityhuman == null) {
+            return false;
+        }
+
+        String ownerUuid = normalizeOwnerUuid(this.getOwnerUUID());
+        String playerUuid = normalizeOwnerUuid(getPlayerOwnerUUID(entityhuman));
+        if (ownerUuid.length() > 0 && playerUuid.length() > 0 && ownerUuid.equals(playerUuid)) {
+            this.rememberOwnerIdentity(entityhuman);
+            return true;
+        }
+
+        String ownerName = this.getOwnerName();
+        boolean ownedByName = ownerName != null && ownerName.length() > 0 && entityhuman.name != null && entityhuman.name.equalsIgnoreCase(ownerName);
+        if (ownedByName) {
+            this.rememberOwnerIdentity(entityhuman);
+        }
+
+        return ownedByName;
+    }
+
+    private EntityHuman getOwnerEntity() {
+        String ownerName = this.getOwnerName();
+        if (ownerName != null && ownerName.length() > 0) {
+            EntityHuman byName = this.world.a(ownerName);
+            if (byName != null) {
+                this.rememberOwnerIdentity(byName);
+                return byName;
+            }
+
+            for (int i = 0; i < this.world.players.size(); ++i) {
+                EntityHuman player = (EntityHuman)this.world.players.get(i);
+                if (player != null && player.name != null && player.name.equalsIgnoreCase(ownerName)) {
+                    this.rememberOwnerIdentity(player);
+                    return player;
+                }
+            }
+        }
+
+        String ownerUuid = normalizeOwnerUuid(this.getOwnerUUID());
+        if (ownerUuid.length() == 0) {
+            return null;
+        }
+
+        for (int i = 0; i < this.world.players.size(); ++i) {
+            EntityHuman player = (EntityHuman)this.world.players.get(i);
+            String playerUuid = normalizeOwnerUuid(getPlayerOwnerUUID(player));
+            if (playerUuid.length() > 0 && ownerUuid.equals(playerUuid)) {
+                this.rememberOwnerIdentity(player);
+                return player;
+            }
+        }
+
+        return null;
+    }
+
+    private void rememberOwnerIdentity(EntityHuman entityhuman) {
+        if (entityhuman == null) {
+            return;
+        }
+
+        String ownerName = this.getOwnerName();
+        if ((ownerName == null || ownerName.length() == 0) && entityhuman.name != null) {
+            this.setOwnerName(entityhuman.name);
+        }
+
+        String ownerUuid = this.getOwnerUUID();
+        String playerUuid = getPlayerOwnerUUID(entityhuman);
+        if ((ownerUuid == null || ownerUuid.length() == 0) && playerUuid.length() > 0) {
+            this.setOwnerUUID(playerUuid);
+        }
     }
 
     public boolean isSitting() {
@@ -516,6 +706,14 @@ public class EntityWolf extends EntityAnimal {
         }
     }
 
+    public int getCollarColor() {
+        return this.getSyncedCollarColor() & 15;
+    }
+
+    public void setCollarColor(int color) {
+        this.setSyncedCollarColor((byte)(color & 15));
+    }
+
     private byte getWolfFlags() {
         Byte value = this.getSynchedEntityData() == null ? null : this.getSynchedEntityData().get(DATA_WOLF_FLAGS_ID);
         if (value != null) {
@@ -550,6 +748,24 @@ public class EntityWolf extends EntityAnimal {
         }
     }
 
+    private String getWolfOwnerUUIDValue() {
+        String value = this.getSynchedEntityData() == null ? null : this.getSynchedEntityData().get(DATA_WOLF_OWNER_UUID_ID);
+        if (value != null) {
+            return value;
+        }
+        String legacy = this.datawatcher.c(25);
+        return legacy == null ? "" : legacy;
+    }
+
+    private void setWolfOwnerUUIDValue(String ownerUuid) {
+        String value = ownerUuid == null ? "" : ownerUuid.trim();
+        if (this.getSynchedEntityData() != null) {
+            this.getSynchedEntityData().set(DATA_WOLF_OWNER_UUID_ID, value);
+        } else {
+            this.datawatcher.watch(25, value);
+        }
+    }
+
     private int getSyncedWolfHealth() {
         Integer value = this.getSynchedEntityData() == null ? null : this.getSynchedEntityData().get(DATA_WOLF_HEALTH_ID);
         if (value != null) {
@@ -563,6 +779,56 @@ public class EntityWolf extends EntityAnimal {
             this.getSynchedEntityData().set(DATA_WOLF_HEALTH_ID, Integer.valueOf(wolfHealth));
         } else {
             this.datawatcher.watch(18, Integer.valueOf(wolfHealth));
+        }
+    }
+
+    private byte getSyncedCollarColor() {
+        Byte value = this.getSynchedEntityData() == null ? null : this.getSynchedEntityData().get(DATA_WOLF_COLLAR_COLOR_ID);
+        if (value != null) {
+            return value.byteValue();
+        }
+        return this.datawatcher.a(24);
+    }
+
+    private void setSyncedCollarColor(byte collarColor) {
+        if (this.getSynchedEntityData() != null) {
+            this.getSynchedEntityData().set(DATA_WOLF_COLLAR_COLOR_ID, Byte.valueOf(collarColor));
+        } else {
+            this.datawatcher.watch(24, Byte.valueOf(collarColor));
+        }
+    }
+
+    private static String getPlayerOwnerUUID(EntityHuman entityhuman) {
+        UUID uuid = null;
+        if (entityhuman instanceof EntityPlayer) {
+            uuid = ((EntityPlayer)entityhuman).getMojangUUID();
+        }
+
+        return uuid == null ? "" : uuid.toString();
+    }
+
+    private static boolean isUuidLike(String value) {
+        return normalizeOwnerUuid(value).length() == 32;
+    }
+
+    private static String normalizeOwnerUuid(String value) {
+        if (value == null) {
+            return "";
+        }
+
+        String trimmed = value.trim();
+        if (trimmed.length() == 0) {
+            return "";
+        }
+
+        if (trimmed.length() == 32) {
+            return trimmed.toLowerCase();
+        }
+
+        try {
+            return UUID.fromString(trimmed).toString().replace("-", "").toLowerCase();
+        } catch (IllegalArgumentException ignored) {
+            return trimmed.replace("-", "").toLowerCase();
         }
     }
 }

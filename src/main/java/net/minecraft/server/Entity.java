@@ -1418,7 +1418,9 @@ public abstract class Entity implements SyncedDataHolder {
             return;
         }
 
-        this.burn(event.getDamage());
+        if (!this.fireProof) {
+            this.damageEntity(entityweatherstorm, event.getDamage());
+        }
         // CraftBukkit end
 
         ++this.fireTicks;

@@ -586,7 +586,7 @@ public abstract class EntityHuman extends EntityLiving {
             if (entityliving instanceof EntityWolf) {
                 EntityWolf entitywolf = (EntityWolf) entityliving;
 
-                if (entitywolf.isTamed() && this.name.equals(entitywolf.getOwnerName())) {
+                if (entitywolf.isTamed() && entitywolf.isOwnedBy(this)) {
                     return;
                 }
             }
@@ -599,7 +599,7 @@ public abstract class EntityHuman extends EntityLiving {
                     Entity entity = (Entity) iterator.next();
                     EntityWolf entitywolf1 = (EntityWolf) entity;
 
-                    if (entitywolf1.isTamed() && entitywolf1.F() == null && this.name.equals(entitywolf1.getOwnerName()) && (!flag || !entitywolf1.isSitting())) {
+                    if (entitywolf1.isTamed() && entitywolf1.F() == null && entitywolf1.isOwnedBy(this) && (!flag || !entitywolf1.isSitting())) {
                         // CraftBukkit start
                         org.bukkit.entity.Entity bukkitTarget = entity == null ? null : entityliving.getBukkitEntity();
 
