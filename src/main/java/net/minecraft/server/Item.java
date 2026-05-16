@@ -1,5 +1,7 @@
 package net.minecraft.server;
 
+import net.minecraft.server.registry.ItemRegistry;
+
 import java.util.Random;
 
 public class Item {
@@ -153,6 +155,18 @@ public class Item {
         }
 
         byId[256 + i] = this;
+    }
+
+    public static int getId(Item item) {
+        return ItemRegistry.getRuntimeId(item);
+    }
+
+    public static Item byId(int runtimeId) {
+        return ItemRegistry.getByRuntimeId(runtimeId);
+    }
+
+    public Holder<Item> builtInRegistryHolder() {
+        return ItemRegistry.getHolder(this);
     }
 
     public Item b(int i) {

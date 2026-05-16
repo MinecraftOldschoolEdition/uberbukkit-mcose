@@ -12,6 +12,7 @@ import net.minecraft.server.ItemSapling;
 import net.minecraft.server.ItemStack;
 import net.minecraft.server.ItemStoneBrick;
 import net.minecraft.server.Holder;
+import net.minecraft.server.IdMap;
 import net.minecraft.server.MappedRegistry;
 import net.minecraft.server.util.ResourceLocation;
 
@@ -83,6 +84,26 @@ public final class ItemRegistry {
     public static Holder<Item> getHolderByRuntimeId(int runtimeId) {
         ensureScanned();
         return holders.holderById(runtimeId);
+    }
+
+    public static IdMap<Item> idMap() {
+        ensureScanned();
+        return holders;
+    }
+
+    public static MappedRegistry<Item> registry() {
+        ensureScanned();
+        return holders;
+    }
+
+    public static int getRuntimeId(Item item) {
+        ensureScanned();
+        return holders.getId(item);
+    }
+
+    public static Item getByRuntimeId(int runtimeId) {
+        ensureScanned();
+        return holders.byId(runtimeId);
     }
 
     public static ResourceLocation getKeyForStack(ItemStack stack) {

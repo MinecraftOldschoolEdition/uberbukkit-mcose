@@ -226,6 +226,9 @@ public final class BlockStateBridge {
                 bridged = Integer.valueOf(block.id);
             }
         }
+        if (bridged != null && !"minecraft".equals(namespace)) {
+            return toRegisteredLegacy(bridged.intValue(), path, props);
+        }
 
         if ("minecraft".equals(namespace) && "air".equals(path)) {
             int meta = clamp(parseInt(props.get(PROP_LEGACY_META), 0), 0, 15);
@@ -644,6 +647,17 @@ public final class BlockStateBridge {
         } catch (NumberFormatException ignored) {
             return fallback;
         }
+    }
+
+    private static LegacyBlockData toRegisteredLegacy(int blockId, String path, Map<String, String> props) {
+        int legacyMeta = clamp(parseInt(props.get(PROP_LEGACY_META), 0), 0, 15);
+        Block block = blockId >= 0 && blockId < Block.byId.length ? Block.byId[blockId] : null;
+        if (block instanceof BlockPiston || isPath(path, "piston", "sticky_piston")) {
+            int facing = props.get(PROP_FACING) == null ? (legacyMeta & 7) : pistonMetaFromFacing(props.get(PROP_FACING));
+            boolean extended = getBoolean(props, PROP_EXTENDED, (legacyMeta & 8) != 0);
+            return new LegacyBlockData(blockId, (facing & 7) | (extended ? 8 : 0), false);
+        }
+        return new LegacyBlockData(blockId, legacyMeta, false);
     }
 
     private static boolean getBoolean(Map<String, String> props, String name, boolean fallback) {

@@ -1,6 +1,7 @@
 package net.minecraft.server;
 
 import com.legacyminecraft.poseidon.PoseidonConfig;
+import net.minecraft.server.registry.BlockRegistry;
 import uk.betacraft.uberbukkit.UberbukkitConfig;
 
 import java.util.ArrayList;
@@ -176,6 +177,18 @@ public class Block {
             r[i] = !material.blocksLight();
             isTileEntity[i] = false;
         }
+    }
+
+    public static int getId(Block block) {
+        return BlockRegistry.getRuntimeId(block);
+    }
+
+    public static Block byId(int runtimeId) {
+        return BlockRegistry.getByRuntimeId(runtimeId);
+    }
+
+    public Holder<Block> builtInRegistryHolder() {
+        return BlockRegistry.getHolder(this);
     }
 
     protected Block g() {

@@ -1,6 +1,9 @@
 package net.minecraft.server.registry;
 
 import net.minecraft.server.Block;
+import net.minecraft.server.Holder;
+import net.minecraft.server.IdMap;
+import net.minecraft.server.MappedRegistry;
 import net.minecraft.server.util.ResourceLocation;
 
 import java.nio.charset.StandardCharsets;
@@ -21,6 +24,7 @@ import java.util.Set;
 public final class BlockRegistry {
     private static final Map<ResourceLocation, Block> byKey = new HashMap<ResourceLocation, Block>();
     private static final Map<Block, ResourceLocation> keyOf = new IdentityHashMap<Block, ResourceLocation>();
+    private static final MappedRegistry<Block> runtimeRegistry = new MappedRegistry<Block>();
     private static final List<Listener> listeners = new ArrayList<Listener>();
     private static boolean scanned = false;
 
@@ -40,6 +44,7 @@ public final class BlockRegistry {
         if (!keyOf.containsKey(block)) {
             keyOf.put(block, key);
         }
+        runtimeRegistry.registerIfAbsent(key, block, legacyId);
         try { Registries.BLOCK.registerIfAbsent(key, block); } catch (Throwable ignored) {}
         for (int i = 0; i < listeners.size(); i++) {
             try { listeners.get(i).onRegistered(key, block); } catch (Throwable ignored) {}
@@ -69,6 +74,41 @@ public final class BlockRegistry {
     public static ResourceLocation getKey(Block block) {
         ensureScanned();
         return keyOf.get(block);
+    }
+
+    public static Holder<Block> getHolder(ResourceLocation key) {
+        ensureScanned();
+        return runtimeRegistry.getHolder(key);
+    }
+
+    public static Holder<Block> getHolder(Block block) {
+        ensureScanned();
+        return runtimeRegistry.getHolder(block);
+    }
+
+    public static Holder<Block> getHolderByRuntimeId(int runtimeId) {
+        ensureScanned();
+        return runtimeRegistry.holderById(runtimeId);
+    }
+
+    public static IdMap<Block> idMap() {
+        ensureScanned();
+        return runtimeRegistry;
+    }
+
+    public static MappedRegistry<Block> registry() {
+        ensureScanned();
+        return runtimeRegistry;
+    }
+
+    public static int getRuntimeId(Block block) {
+        ensureScanned();
+        return runtimeRegistry.getId(block);
+    }
+
+    public static Block getByRuntimeId(int runtimeId) {
+        ensureScanned();
+        return runtimeRegistry.byId(runtimeId);
     }
 
     public static Block getByLegacyId(int legacyId) {
