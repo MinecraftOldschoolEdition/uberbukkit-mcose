@@ -1,6 +1,8 @@
 package net.minecraft.server;
 
 import com.legacyminecraft.poseidon.PoseidonConfig;
+import net.minecraft.server.registry.BlockRegistry;
+import net.minecraft.server.util.ResourceLocation;
 import org.bukkit.event.block.BlockPistonExtendEvent;
 import org.bukkit.event.block.BlockPistonRetractEvent;
 
@@ -11,6 +13,9 @@ import java.util.ArrayList;
 
 public class BlockPiston extends Block {
 
+    private static final String HIPPOPLATIMUS_PISTONS_NAMESPACE = "hippoplatimus_pistons";
+    private static final double HIPPOPLATIMUS_PISTON_LAUNCH = 1.1999999731779099D;
+    private static final double HIPPOPLATIMUS_STICKY_PISTON_LAUNCH = 0.7199999839067459D;
     private boolean a;
     private boolean b;
 
@@ -348,6 +353,16 @@ public class BlockPiston extends Block {
                 }
             }
 
+            if (this.isHippoplatimusPistonBlock()) {
+                this.launchHippoplatimusEntities(world, i1, j1, k1, l);
+                if (!this.a && l == 1) {
+                    int[] adjusted = this.launchHippoplatimusFallingBlocks(world, i, j, k, i1, j1, k1, l);
+                    i1 = adjusted[0];
+                    j1 = adjusted[1];
+                    k1 = adjusted[2];
+                }
+            }
+
             while (i1 != i || j1 != j || k1 != k) {
                 l1 = i1 - PistonBlockTextures.b[l];
                 i2 = j1 - PistonBlockTextures.c[l];
@@ -370,5 +385,67 @@ public class BlockPiston extends Block {
 
             return true;
         }
+    }
+
+    private boolean isHippoplatimusPistonBlock() {
+        ResourceLocation key = BlockRegistry.getKey(this);
+        if (key == null || !HIPPOPLATIMUS_PISTONS_NAMESPACE.equals(key.getNamespace())) {
+            return false;
+        }
+        String path = key.getPath();
+        return "piston".equals(path) || "sticky_piston".equals(path);
+    }
+
+    private void launchHippoplatimusEntities(World world, int x, int y, int z, int facing) {
+        double velocity = this.a ? HIPPOPLATIMUS_STICKY_PISTON_LAUNCH : HIPPOPLATIMUS_PISTON_LAUNCH;
+        AxisAlignedBB entityBox = AxisAlignedBB.b((double) x, (double) y, (double) z, (double) (x + 1), (double) (y + 1), (double) (z + 1));
+        this.launchHippoplatimusEntities(world, entityBox, velocity, facing, false);
+        AxisAlignedBB minecartBox = AxisAlignedBB.b((double) x, (double) (y - 1), (double) z, (double) (x + 1), (double) (y + 1), (double) (z + 1));
+        this.launchHippoplatimusEntities(world, minecartBox, velocity, facing, true);
+    }
+
+    private void launchHippoplatimusEntities(World world, AxisAlignedBB box, double velocity, int facing, boolean minecartsOnly) {
+        ArrayList entities = new ArrayList(world.b((Entity) null, box));
+        for (int index = 0; index < entities.size(); ++index) {
+            Entity entity = (Entity) entities.get(index);
+            if (minecartsOnly && !(entity instanceof EntityMinecart)) {
+                continue;
+            }
+            entity.motX += (double) PistonBlockTextures.b[facing] * velocity;
+            entity.motY += (double) PistonBlockTextures.c[facing] * velocity;
+            entity.motZ += (double) PistonBlockTextures.d[facing] * velocity;
+            entity.airBorne = true;
+            entity.velocityChanged = true;
+        }
+    }
+
+    private int[] launchHippoplatimusFallingBlocks(World world, int pistonX, int pistonY, int pistonZ, int emptyX, int emptyY, int emptyZ, int facing) {
+        int offsetX = PistonBlockTextures.b[facing];
+        int offsetY = PistonBlockTextures.c[facing];
+        int offsetZ = PistonBlockTextures.d[facing];
+        double velocity = (double) offsetY * 0.23999999463558197D * 5.0D;
+
+        while (velocity >= 0.4D) {
+            int blockX = emptyX - offsetX;
+            int blockY = emptyY - offsetY;
+            int blockZ = emptyZ - offsetZ;
+            if (blockX == pistonX && blockY == pistonY && blockZ == pistonZ) {
+                break;
+            }
+            int blockId = world.getTypeId(blockX, blockY, blockZ);
+            if (blockId != Block.SAND.id && blockId != Block.GRAVEL.id) {
+                break;
+            }
+            world.setTypeId(blockX, blockY, blockZ, 0);
+            EntityFallingSand falling = new EntityFallingSand(world, (double) blockX + 0.5D, (double) blockY + 0.5D, (double) blockZ + 0.5D, blockId);
+            falling.motY += velocity;
+            world.addEntity(falling);
+            emptyX = blockX;
+            emptyY = blockY;
+            emptyZ = blockZ;
+            velocity -= 0.2D;
+        }
+
+        return new int[] { emptyX, emptyY, emptyZ };
     }
 }
