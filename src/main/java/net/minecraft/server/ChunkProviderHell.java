@@ -326,7 +326,7 @@ public class ChunkProviderHell implements IChunkProvider {
             j1 = k + this.h.nextInt(16) + 8;
             k1 = this.h.nextInt(120) + 4;
             l1 = l + this.h.nextInt(16) + 8;
-            (new WorldGenHellLava(Block.LAVA.id)).a(this.n, this.h, j1, k1, l1);
+            (new WorldGenHellLava("minecraft:lava")).a(this.n, this.h, j1, k1, l1);
         }
 
         i1 = this.h.nextInt(this.h.nextInt(10) + 1) + 1;
@@ -360,14 +360,14 @@ public class ChunkProviderHell implements IChunkProvider {
             j1 = k + this.h.nextInt(16) + 8;
             k1 = this.h.nextInt(128);
             l1 = l + this.h.nextInt(16) + 8;
-            (new WorldGenFlowers(Block.BROWN_MUSHROOM.id)).a(this.n, this.h, j1, k1, l1);
+            (new WorldGenFlowers("minecraft:brown_mushroom")).a(this.n, this.h, j1, k1, l1);
         }
 
         if (this.h.nextInt(1) == 0) {
             j1 = k + this.h.nextInt(16) + 8;
             k1 = this.h.nextInt(128);
             l1 = l + this.h.nextInt(16) + 8;
-            (new WorldGenFlowers(Block.RED_MUSHROOM.id)).a(this.n, this.h, j1, k1, l1);
+            (new WorldGenFlowers("minecraft:red_mushroom")).a(this.n, this.h, j1, k1, l1);
         }
 
         BlockSand.instaFall = false;

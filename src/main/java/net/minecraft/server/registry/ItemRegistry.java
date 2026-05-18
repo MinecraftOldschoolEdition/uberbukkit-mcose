@@ -182,7 +182,9 @@ public final class ItemRegistry {
         Item item = getByLegacyId(legacyId);
         if (item == null) return null;
         ResourceLocation key = getKey(item);
-        return key != null ? key.toString() : ("legacy:" + legacyId);
+        if (key != null) return key.toString();
+        ResourceLocation vanillaKey = VanillaRegistryKeys.itemKey(item);
+        return vanillaKey == null ? null : vanillaKey.toString();
     }
 
     public static String canonicalizeIdentifier(String any) {
@@ -264,20 +266,25 @@ public final class ItemRegistry {
 
     private static void registerCanonicalFor(int id, Item item) {
         try {
+            ResourceLocation key = VanillaRegistryKeys.itemKey(item);
             String internal = item.a();
             if (internal == null || internal.length() == 0) {
-                internal = "legacy_" + id;
+                internal = "unregistered_item";
             }
 
             String stripped = RegistryKeyPolicy.stripKnownPrefix(internal);
             String snake = RegistryKeyPolicy.toSnakeCase(stripped);
-            String canonicalPath = RegistryKeyPolicy.canonicalizePath(snake);
-            if (item instanceof ItemBlock) {
-                canonicalPath = RegistryKeyPolicy.canonicalizeBlockPath(snake, item.id);
+            if (key == null) {
+                String canonicalPath = RegistryKeyPolicy.canonicalizePath(snake);
+                if (item instanceof ItemBlock) {
+                    Block block = item.id >= 0 && item.id < Block.byId.length ? Block.byId[item.id] : null;
+                    ResourceLocation blockKey = VanillaRegistryKeys.blockKey(block);
+                    canonicalPath = blockKey == null ? RegistryKeyPolicy.canonicalizeBlockPath(snake, item.id) : blockKey.getPath();
+                }
+                canonicalPath = canonicalRedstoneTorchItemPath(item, canonicalPath);
+                key = new ResourceLocation("minecraft", canonicalPath);
             }
-            canonicalPath = canonicalRedstoneTorchItemPath(item, canonicalPath);
 
-            ResourceLocation key = new ResourceLocation("minecraft", canonicalPath);
             Item existingForKey = byKey.get(key);
             if (existingForKey != null && existingForKey != item) {
                 if (item instanceof ItemRecord) {
@@ -295,7 +302,7 @@ public final class ItemRegistry {
                     } else if (isBlockItem && !path.endsWith("_block")) {
                         key = new ResourceLocation("minecraft", path + "_block");
                     } else {
-                        key = new ResourceLocation("minecraft", RegistryKeyPolicy.collisionLegacySuffix(path, id));
+                        key = new ResourceLocation("minecraft", RegistryKeyPolicy.collisionCompatibilitySuffix(path, id));
                     }
                 }
             }
@@ -379,13 +386,19 @@ public final class ItemRegistry {
             registerAliasIfFree(new ResourceLocation("minecraft", "redstone_torch_idle"), item);
         }
 
-        if (item instanceof ItemLog || "log".equals(path)) {
+        if (item instanceof ItemLog || "log".equals(path) || "oak_log".equals(path)) {
             registerColorMeta("oak_log", item, 0);
             registerColorMeta("spruce_log", item, 1);
             registerColorMeta("birch_log", item, 2);
         }
 
-        if (item instanceof ItemSapling || "sapling".equals(path)) {
+        if (item.id == Block.LEAVES.id || "leaves".equals(path) || "oak_leaves".equals(path)) {
+            registerColorMeta("oak_leaves", item, 0);
+            registerColorMeta("spruce_leaves", item, 1);
+            registerColorMeta("birch_leaves", item, 2);
+        }
+
+        if (item instanceof ItemSapling || "sapling".equals(path) || "oak_sapling".equals(path)) {
             registerColorMeta("oak_sapling", item, 0);
             registerColorMeta("spruce_sapling", item, 1);
             registerColorMeta("birch_sapling", item, 2);

@@ -42,33 +42,33 @@ public final class WorldFeatureRegistryBootstrap {
         // Ores (registered as templates)
         WorldFeatureRegistryApi.register(
             new ResourceLocation("minecraft", "ore_coal"),
-            new WorldGenMinable(Block.COAL_ORE.id, 16)
+            new WorldGenMinable("minecraft:coal_ore", 16)
         );
         WorldFeatureRegistryApi.register(
             new ResourceLocation("minecraft", "ore_iron"),
-            new WorldGenMinable(Block.IRON_ORE.id, 8)
+            new WorldGenMinable("minecraft:iron_ore", 8)
         );
         WorldFeatureRegistryApi.register(
             new ResourceLocation("minecraft", "ore_gold"),
-            new WorldGenMinable(Block.GOLD_ORE.id, 8)
+            new WorldGenMinable("minecraft:gold_ore", 8)
         );
         WorldFeatureRegistryApi.register(
             new ResourceLocation("minecraft", "ore_redstone"),
-            new WorldGenMinable(Block.REDSTONE_ORE.id, 7)
+            new WorldGenMinable("minecraft:redstone_ore", 7)
         );
         WorldFeatureRegistryApi.register(
             new ResourceLocation("minecraft", "ore_diamond"),
-            new WorldGenMinable(Block.DIAMOND_ORE.id, 7)
+            new WorldGenMinable("minecraft:diamond_ore", 7)
         );
         WorldFeatureRegistryApi.register(
             new ResourceLocation("minecraft", "ore_lapis"),
-            new WorldGenMinable(Block.LAPIS_ORE.id, 6)
+            new WorldGenMinable("minecraft:lapis_ore", 6)
         );
         
         // Vegetation
         WorldFeatureRegistryApi.register(
             new ResourceLocation("minecraft", "flowers"),
-            new WorldGenFlowers(Block.YELLOW_FLOWER.id)
+            new WorldGenFlowers("minecraft:dandelion")
         );
         WorldFeatureRegistryApi.register(
             new ResourceLocation("minecraft", "tall_grass"),
@@ -76,7 +76,7 @@ public final class WorldFeatureRegistryBootstrap {
         );
         WorldFeatureRegistryApi.register(
             new ResourceLocation("minecraft", "dead_bush"),
-            new WorldGenDeadBush(Block.DEAD_BUSH.id)
+            new WorldGenDeadBush("minecraft:dead_bush")
         );
         WorldFeatureRegistryApi.register(
             new ResourceLocation("minecraft", "reed"),
@@ -98,19 +98,19 @@ public final class WorldFeatureRegistryBootstrap {
         );
         WorldFeatureRegistryApi.register(
             new ResourceLocation("minecraft", "water_lake"),
-            new WorldGenLakes(Block.STATIONARY_WATER.id)
+            new WorldGenLakes("minecraft:water")
         );
         WorldFeatureRegistryApi.register(
             new ResourceLocation("minecraft", "lava_lake"),
-            new WorldGenLakes(Block.STATIONARY_LAVA.id)
+            new WorldGenLakes("minecraft:lava")
         );
         WorldFeatureRegistryApi.register(
             new ResourceLocation("minecraft", "spring_water"),
-            new WorldGenLiquids(Block.WATER.id)
+            new WorldGenLiquids("minecraft:water")
         );
         WorldFeatureRegistryApi.register(
             new ResourceLocation("minecraft", "spring_lava"),
-            new WorldGenLiquids(Block.LAVA.id)
+            new WorldGenLiquids("minecraft:lava")
         );
         WorldFeatureRegistryApi.register(
             new ResourceLocation("minecraft", "dungeon"),
@@ -120,7 +120,7 @@ public final class WorldFeatureRegistryBootstrap {
         // Nether features
         WorldFeatureRegistryApi.register(
             new ResourceLocation("minecraft", "hell_lava"),
-            new WorldGenHellLava(Block.LAVA.id)
+            new WorldGenHellLava("minecraft:lava")
         );
         WorldFeatureRegistryApi.register(
             new ResourceLocation("minecraft", "glowstone"),

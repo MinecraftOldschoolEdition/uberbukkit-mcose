@@ -315,7 +315,7 @@ public class ChunkProviderHellClassic implements IChunkProvider {
             int x = baseX + this.rand.nextInt(16) + 8;
             int y = this.rand.nextInt(this.rand.nextInt(48) + 8);
             int z = baseZ + this.rand.nextInt(16) + 8;
-            (new WorldGenLiquids(Block.LAVA.id)).a(this.worldObj, this.rand, x, y, z);
+            (new WorldGenLiquids("minecraft:lava")).a(this.worldObj, this.rand, x, y, z);
         }
     }
 

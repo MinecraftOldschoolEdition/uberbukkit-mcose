@@ -274,14 +274,18 @@ public final class BlockStateBridge {
             return new LegacyBlockData(getMovingPistonId(), meta, false);
         }
 
-        if (isPath(path, "water", "flowing_water", "lava", "flowing_lava", "stationary_water", "stationary_lava")) {
-            boolean water = isPath(path, "water", "flowing_water", "stationary_water")
+        if (isLegacyId(bridged, getFlowingWaterId()) || isLegacyId(bridged, getStillWaterId())
+                || isLegacyId(bridged, getFlowingLavaId()) || isLegacyId(bridged, getStillLavaId())
+                || isPath(path, "water", "water_still", "flowing_water", "lava", "lava_still", "flowing_lava", "stationary_water", "stationary_lava")) {
+            boolean water = isPath(path, "water", "water_still", "flowing_water", "stationary_water")
+                    || isLegacyId(bridged, getFlowingWaterId()) || isLegacyId(bridged, getStillWaterId())
                     || "water".equalsIgnoreCase(props.get(PROP_FLUID));
             int level = clamp(parseInt(props.get(PROP_LEVEL), 0), 0, 15);
             boolean falling = getBoolean(props, PROP_FALLING, (level & 8) != 0);
             String variant = props.get(PROP_VARIANT);
             boolean flowing = "flowing".equalsIgnoreCase(variant)
                     || isPath(path, "flowing_water", "flowing_lava")
+                    || (variant == null && (isLegacyId(bridged, getFlowingWaterId()) || isLegacyId(bridged, getFlowingLavaId())))
                     || (!"still".equalsIgnoreCase(variant) && !isPath(path, "stationary_water", "stationary_lava") && ((level & 7) > 0 || falling));
             int meta = (level & 7) | (falling ? 8 : 0);
             int id;
@@ -329,12 +333,12 @@ public final class BlockStateBridge {
             return new LegacyBlockData(getLadderId(), meta, false);
         }
 
-        if (isLegacyId(bridged, getWallSignId()) || isPath(path, "wall_sign", "sign_wall")) {
+        if (isLegacyId(bridged, getWallSignId()) || isPath(path, "oak_wall_sign", "wall_sign", "sign_wall")) {
             int meta = resolveMeta(props, horizontalMetaFromFacing(props.get(PROP_FACING), 2));
             return new LegacyBlockData(getWallSignId(), meta, false);
         }
 
-        if (isLegacyId(bridged, getStandingSignId()) || isPath(path, "standing_sign", "sign_post")) {
+        if (isLegacyId(bridged, getStandingSignId()) || isPath(path, "oak_sign", "standing_sign", "sign_post")) {
             int meta = resolveMeta(props, clamp(parseInt(props.get(PROP_ROTATION), 0), 0, 15));
             return new LegacyBlockData(getStandingSignId(), meta, false);
         }
@@ -351,20 +355,20 @@ public final class BlockStateBridge {
             return new LegacyBlockData(getLeverId(), meta, false);
         }
 
-        if (isLegacyId(bridged, getStonePressurePlateId()) || isLegacyId(bridged, getWoodPressurePlateId()) || isPath(path, "pressure_plate", "stone_pressure_plate", "wooden_pressure_plate")) {
-            int id = isLegacyId(bridged, getWoodPressurePlateId()) || isPath(path, "wooden_pressure_plate") ? getWoodPressurePlateId() : getStonePressurePlateId();
+        if (isLegacyId(bridged, getStonePressurePlateId()) || isLegacyId(bridged, getWoodPressurePlateId()) || isPath(path, "pressure_plate", "stone_pressure_plate", "oak_pressure_plate", "wooden_pressure_plate")) {
+            int id = isLegacyId(bridged, getWoodPressurePlateId()) || isPath(path, "oak_pressure_plate", "wooden_pressure_plate") ? getWoodPressurePlateId() : getStonePressurePlateId();
             int meta = resolveMeta(props, getBoolean(props, PROP_POWERED, false) ? 1 : 0);
             return new LegacyBlockData(id, meta, false);
         }
 
-        if (isLegacyId(bridged, getPumpkinId()) || isLegacyId(bridged, getJackOLanternId()) || isPath(path, "pumpkin", "lit_pumpkin", "jack_o_lantern")) {
+        if (isLegacyId(bridged, getPumpkinId()) || isLegacyId(bridged, getJackOLanternId()) || isPath(path, "pumpkin", "carved_pumpkin", "lit_pumpkin", "jack_o_lantern")) {
             int id = isLegacyId(bridged, getJackOLanternId()) || isPath(path, "lit_pumpkin", "jack_o_lantern") ? getJackOLanternId() : getPumpkinId();
             int fallback = pumpkinMetaFromFacing(props.get(PROP_FACING));
             int meta = resolveMeta(props, clamp(parseInt(props.get(PROP_ROTATION), fallback), 0, 3));
             return new LegacyBlockData(id, meta, false);
         }
 
-        if (isLegacyId(bridged, getTrapdoorId()) || isPath(path, "trapdoor", "wooden_trapdoor", "iron_trapdoor")) {
+        if (isLegacyId(bridged, getTrapdoorId()) || isPath(path, "oak_trapdoor", "trapdoor", "wooden_trapdoor", "iron_trapdoor")) {
             int fallback = trapdoorMetaFromFacing(props.get(PROP_FACING));
             int orientation = clamp(parseInt(props.get(PROP_ROTATION), fallback), 0, 3);
             int baseMeta = orientation | (getBoolean(props, PROP_OPEN, false) ? 4 : 0);
@@ -372,7 +376,7 @@ public final class BlockStateBridge {
             return new LegacyBlockData(getTrapdoorId(), meta, false);
         }
 
-        if (isLegacyId(bridged, getFenceGateId()) || isPath(path, "fence_gate", "fencegate")) {
+        if (isLegacyId(bridged, getFenceGateId()) || isPath(path, "oak_fence_gate", "fence_gate", "fencegate")) {
             int fallback = fenceGateMetaFromFacing(props.get(PROP_FACING));
             int orientation = clamp(parseInt(props.get(PROP_ROTATION), fallback), 0, 3);
             int baseMeta = orientation | (getBoolean(props, PROP_OPEN, false) ? 4 : 0);
@@ -406,7 +410,7 @@ public final class BlockStateBridge {
             return new LegacyBlockData(id, meta, false);
         }
 
-        if (isLegacyId(bridged, getWoodDoorId()) || isLegacyId(bridged, getIronDoorId()) || isPath(path, "wooden_door", "wood_door", "iron_door")) {
+        if (isLegacyId(bridged, getWoodDoorId()) || isLegacyId(bridged, getIronDoorId()) || isPath(path, "oak_door", "wooden_door", "wood_door", "iron_door")) {
             int id = isLegacyId(bridged, getIronDoorId()) || isPath(path, "iron_door") ? getIronDoorId() : getWoodDoorId();
             int fallback = clamp(parseInt(props.get(PROP_ROTATION), doorRotationFromFacing(props.get(PROP_FACING))), 0, 3);
             int baseMeta = fallback
@@ -539,11 +543,11 @@ public final class BlockStateBridge {
             return clamp(horizontalMetaFromFacing(props.get(PROP_FACING), 2), 0, 15);
         }
 
-        if (legacyId == getWallSignId() || isPath(path, "wall_sign", "sign_wall")) {
+        if (legacyId == getWallSignId() || isPath(path, "oak_wall_sign", "wall_sign", "sign_wall")) {
             return clamp(horizontalMetaFromFacing(props.get(PROP_FACING), 2), 0, 15);
         }
 
-        if (legacyId == getStandingSignId() || isPath(path, "standing_sign", "sign_post")) {
+        if (legacyId == getStandingSignId() || isPath(path, "oak_sign", "standing_sign", "sign_post")) {
             return clamp(parseInt(props.get(PROP_ROTATION), 0), 0, 15);
         }
 
@@ -557,22 +561,22 @@ public final class BlockStateBridge {
             return orientation | (getBoolean(props, PROP_POWERED, false) ? 8 : 0);
         }
 
-        if (legacyId == getStonePressurePlateId() || legacyId == getWoodPressurePlateId() || isPath(path, "pressure_plate", "stone_pressure_plate", "wooden_pressure_plate")) {
+        if (legacyId == getStonePressurePlateId() || legacyId == getWoodPressurePlateId() || isPath(path, "pressure_plate", "stone_pressure_plate", "oak_pressure_plate", "wooden_pressure_plate")) {
             return getBoolean(props, PROP_POWERED, false) ? 1 : 0;
         }
 
-        if (legacyId == getPumpkinId() || legacyId == getJackOLanternId() || isPath(path, "pumpkin", "lit_pumpkin", "jack_o_lantern")) {
+        if (legacyId == getPumpkinId() || legacyId == getJackOLanternId() || isPath(path, "pumpkin", "carved_pumpkin", "lit_pumpkin", "jack_o_lantern")) {
             int fallback = pumpkinMetaFromFacing(props.get(PROP_FACING));
             return clamp(parseInt(props.get(PROP_ROTATION), fallback), 0, 3);
         }
 
-        if (legacyId == getTrapdoorId() || isPath(path, "trapdoor", "wooden_trapdoor", "iron_trapdoor")) {
+        if (legacyId == getTrapdoorId() || isPath(path, "oak_trapdoor", "trapdoor", "wooden_trapdoor", "iron_trapdoor")) {
             int fallback = trapdoorMetaFromFacing(props.get(PROP_FACING));
             int orientation = clamp(parseInt(props.get(PROP_ROTATION), fallback), 0, 3);
             return orientation | (getBoolean(props, PROP_OPEN, false) ? 4 : 0);
         }
 
-        if (legacyId == getFenceGateId() || isPath(path, "fence_gate", "fencegate")) {
+        if (legacyId == getFenceGateId() || isPath(path, "oak_fence_gate", "fence_gate", "fencegate")) {
             int fallback = fenceGateMetaFromFacing(props.get(PROP_FACING));
             int orientation = clamp(parseInt(props.get(PROP_ROTATION), fallback), 0, 3);
             return orientation | (getBoolean(props, PROP_OPEN, false) ? 4 : 0);
@@ -595,7 +599,7 @@ public final class BlockStateBridge {
             return fallback & 15;
         }
 
-        if (legacyId == getWoodDoorId() || legacyId == getIronDoorId() || isPath(path, "wooden_door", "wood_door", "iron_door")) {
+        if (legacyId == getWoodDoorId() || legacyId == getIronDoorId() || isPath(path, "oak_door", "wooden_door", "wood_door", "iron_door")) {
             int rotation = clamp(parseInt(props.get(PROP_ROTATION), doorRotationFromFacing(props.get(PROP_FACING))), 0, 3);
             int meta = rotation;
             if (getBoolean(props, PROP_OPEN, false)) {

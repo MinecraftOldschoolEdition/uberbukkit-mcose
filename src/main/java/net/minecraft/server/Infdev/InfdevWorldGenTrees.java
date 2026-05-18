@@ -44,7 +44,7 @@ public final class InfdevWorldGenTrees extends WorldGenerator {
             } else {
                 checkY = world.getTypeId(x, y - 1, z);
                 if ((checkY == Block.GRASS.id || checkY == Block.DIRT.id) && y < 128 - height - 1) {
-                    world.setRawTypeId(x, y - 1, z, Block.DIRT.id);
+                    setGeneratedBlock(world, x, y - 1, z, Block.DIRT.id);
 
                     int leafY;
                     for (leafY = y - 3 + height; leafY <= y + height; ++leafY) {
@@ -58,7 +58,7 @@ public final class InfdevWorldGenTrees extends WorldGenerator {
                                 int offsetZ = leafZ - z;
                                 if ((Math.abs(offsetX) != checkZ || Math.abs(offsetZ) != checkZ || random.nextInt(2) != 0 && checkX != 0)
                                     && !Block.o[world.getTypeId(blockId, leafY, leafZ)]) {
-                                    world.setRawTypeId(blockId, leafY, leafZ, Block.LEAVES.id);
+                                    setGeneratedBlock(world, blockId, leafY, leafZ, Block.LEAVES.id);
                                 }
                             }
                         }
@@ -66,7 +66,7 @@ public final class InfdevWorldGenTrees extends WorldGenerator {
 
                     for (leafY = 0; leafY < height; ++leafY) {
                         if (!Block.o[world.getTypeId(x, y + leafY, z)]) {
-                            world.setRawTypeId(x, y + leafY, z, Block.LOG.id);
+                            setGeneratedBlock(world, x, y + leafY, z, Block.LOG.id);
                         }
                     }
 

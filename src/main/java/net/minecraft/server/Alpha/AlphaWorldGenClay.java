@@ -44,7 +44,7 @@ public class AlphaWorldGenClay extends WorldGenerator {
 							if (var35 * var35 + var37 * var37 + var39 * var39 < 1.0D) {
 								int var41 = var1.getTypeId(var32, var33, var34);
 								if (var41 == Block.SAND.id) {
-									var1.setRawTypeId(var32, var33, var34, this.clayBlockId);
+									setGeneratedBlock(var1, var32, var33, var34, this.clayBlockId);
 								}
 							}
 						}

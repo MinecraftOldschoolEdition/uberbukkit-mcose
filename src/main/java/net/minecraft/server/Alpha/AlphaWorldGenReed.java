@@ -17,7 +17,7 @@ public class AlphaWorldGenReed extends WorldGenerator {
 
 				for (int var11 = 0; var11 < var10; ++var11) {
 					if (Block.SUGAR_CANE_BLOCK.f(var1, var7, var8 + var11, var9)) {
-						var1.setRawTypeId(var7, var8 + var11, var9, Block.SUGAR_CANE_BLOCK.id);
+						setGeneratedBlock(var1, var7, var8 + var11, var9, Block.SUGAR_CANE_BLOCK.id);
 					}
 				}
 			}

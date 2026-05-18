@@ -2,16 +2,25 @@ package net.minecraft.server.Alpha;
 
 import java.util.Random;
 import net.minecraft.server.Block;
+import net.minecraft.server.BlockStateKey;
 import net.minecraft.server.MathHelper;
 import net.minecraft.server.World;
 import net.minecraft.server.WorldGenerator;
 
 public class AlphaWorldGenMinable extends WorldGenerator {
 	private int minableBlockId;
+	private BlockStateKey minableState;
 	private int numberOfBlocks;
 
 	public AlphaWorldGenMinable(int var1, int var2) {
 		this.minableBlockId = var1;
+		this.minableState = stateFromBlockId(var1);
+		this.numberOfBlocks = var2;
+	}
+
+	public AlphaWorldGenMinable(String blockId, int var2) {
+		this.minableBlockId = -1;
+		this.minableState = stateFromIdentifier(blockId);
 		this.numberOfBlocks = var2;
 	}
 
@@ -39,7 +48,7 @@ public class AlphaWorldGenMinable extends WorldGenerator {
 						double var37 = ((double)var33 + 0.5D - var22) / (var30 / 2.0D);
 						double var39 = ((double)var34 + 0.5D - var24) / (var28 / 2.0D);
 						if (var35 * var35 + var37 * var37 + var39 * var39 < 1.0D && var1.getTypeId(var32, var33, var34) == Block.STONE.id) {
-							var1.setRawTypeId(var32, var33, var34, this.minableBlockId);
+							setGeneratedBlock(var1, var32, var33, var34, this.minableState);
 						}
 					}
 				}

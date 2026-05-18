@@ -99,6 +99,15 @@ public class EntityTypes {
     }
 
     public static String b(Entity entity) {
+        if (entity == null) {
+            return null;
+        }
+
+        ResourceLocation key = EntityTypeRegistryApi.getKey(entity.getClass());
+        if (key != null) {
+            return key.toString();
+        }
+
         return (String) b.get(entity.getClass());
     }
 

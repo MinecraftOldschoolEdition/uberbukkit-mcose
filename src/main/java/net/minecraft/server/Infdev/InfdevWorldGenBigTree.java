@@ -46,7 +46,7 @@ public final class InfdevWorldGenBigTree extends WorldGenerator {
                 pos[longestAxis] = MathHelper.floor((double)(from[longestAxis] + progress) + 0.5D);
                 pos[axis1] = MathHelper.floor((double)from[axis1] + (double)progress * slope1 + 0.5D);
                 pos[axis2] = MathHelper.floor((double)from[axis2] + (double)progress * slope2 + 0.5D);
-                this.worldObj.setRawTypeId(pos[0], pos[1], pos[2], blockId);
+                setGeneratedBlock(this.worldObj, pos[0], pos[1], pos[2], blockId);
             }
         }
     }
@@ -242,7 +242,7 @@ public final class InfdevWorldGenBigTree extends WorldGenerator {
                         pos[1] = center[1];
                         int existing = this.worldObj.getTypeId(pos[0], pos[1], pos[2]);
                         if (existing == 0 || existing == Block.LEAVES.id) {
-                            this.worldObj.setRawTypeId(pos[0], pos[1], pos[2], Block.LEAVES.id);
+                            setGeneratedBlock(this.worldObj, pos[0], pos[1], pos[2], Block.LEAVES.id);
                         }
                     }
                 }

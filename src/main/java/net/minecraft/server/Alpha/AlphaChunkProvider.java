@@ -329,49 +329,49 @@ public class AlphaChunkProvider implements IChunkProvider {
             int xx = x + this.rand.nextInt(16);
             int yy = this.rand.nextInt(128);
             int zz = z + this.rand.nextInt(16);
-            (new AlphaWorldGenMinable(Block.DIRT.id, 32)).a(this.worldObj, this.rand, xx, yy, zz);
+            (new AlphaWorldGenMinable("minecraft:dirt", 32)).a(this.worldObj, this.rand, xx, yy, zz);
         }
 
         for (int i = 0; i < 10; ++i) {
             int xx = x + this.rand.nextInt(16);
             int yy = this.rand.nextInt(128);
             int zz = z + this.rand.nextInt(16);
-            (new AlphaWorldGenMinable(Block.GRAVEL.id, 32)).a(this.worldObj, this.rand, xx, yy, zz);
+            (new AlphaWorldGenMinable("minecraft:gravel", 32)).a(this.worldObj, this.rand, xx, yy, zz);
         }
 
         for (int i = 0; i < 20; ++i) {
             int xx = x + this.rand.nextInt(16);
             int yy = this.rand.nextInt(128);
             int zz = z + this.rand.nextInt(16);
-            (new AlphaWorldGenMinable(Block.COAL_ORE.id, 16)).a(this.worldObj, this.rand, xx, yy, zz);
+            (new AlphaWorldGenMinable("minecraft:coal_ore", 16)).a(this.worldObj, this.rand, xx, yy, zz);
         }
 
         for (int i = 0; i < 20; ++i) {
             int xx = x + this.rand.nextInt(16);
             int yy = this.rand.nextInt(64);
             int zz = z + this.rand.nextInt(16);
-            (new AlphaWorldGenMinable(Block.IRON_ORE.id, 8)).a(this.worldObj, this.rand, xx, yy, zz);
+            (new AlphaWorldGenMinable("minecraft:iron_ore", 8)).a(this.worldObj, this.rand, xx, yy, zz);
         }
 
         for (int i = 0; i < 2; ++i) {
             int xx = x + this.rand.nextInt(16);
             int yy = this.rand.nextInt(32);
             int zz = z + this.rand.nextInt(16);
-            (new AlphaWorldGenMinable(Block.GOLD_ORE.id, 8)).a(this.worldObj, this.rand, xx, yy, zz);
+            (new AlphaWorldGenMinable("minecraft:gold_ore", 8)).a(this.worldObj, this.rand, xx, yy, zz);
         }
 
         for (int i = 0; i < 8; ++i) {
             int xx = x + this.rand.nextInt(16);
             int yy = this.rand.nextInt(16);
             int zz = z + this.rand.nextInt(16);
-            (new AlphaWorldGenMinable(Block.REDSTONE_ORE.id, 7)).a(this.worldObj, this.rand, xx, yy, zz);
+            (new AlphaWorldGenMinable("minecraft:redstone_ore", 7)).a(this.worldObj, this.rand, xx, yy, zz);
         }
 
         for (int i = 0; i < 1; ++i) {
             int xx = x + this.rand.nextInt(16);
             int yy = this.rand.nextInt(16);
             int zz = z + this.rand.nextInt(16);
-            (new AlphaWorldGenMinable(Block.DIAMOND_ORE.id, 7)).a(this.worldObj, this.rand, xx, yy, zz);
+            (new AlphaWorldGenMinable("minecraft:diamond_ore", 7)).a(this.worldObj, this.rand, xx, yy, zz);
         }
 
         d = 0.5D;
@@ -400,28 +400,28 @@ public class AlphaChunkProvider implements IChunkProvider {
             int xx = x + this.rand.nextInt(16) + 8;
             int yy = this.rand.nextInt(128);
             int zz = z + this.rand.nextInt(16) + 8;
-            (new AlphaWorldGenFlowers(Block.YELLOW_FLOWER.id)).a(this.worldObj, this.rand, xx, yy, zz);
+            (new AlphaWorldGenFlowers("minecraft:dandelion")).a(this.worldObj, this.rand, xx, yy, zz);
         }
 
         if (this.rand.nextInt(2) == 0) {
             int xx = x + this.rand.nextInt(16) + 8;
             int yy = this.rand.nextInt(128);
             int zz = z + this.rand.nextInt(16) + 8;
-            (new AlphaWorldGenFlowers(Block.RED_ROSE.id)).a(this.worldObj, this.rand, xx, yy, zz);
+            (new AlphaWorldGenFlowers("minecraft:poppy")).a(this.worldObj, this.rand, xx, yy, zz);
         }
 
         if (this.rand.nextInt(4) == 0) {
             int xx = x + this.rand.nextInt(16) + 8;
             int yy = this.rand.nextInt(128);
             int zz = z + this.rand.nextInt(16) + 8;
-            (new AlphaWorldGenFlowers(Block.BROWN_MUSHROOM.id)).a(this.worldObj, this.rand, xx, yy, zz);
+            (new AlphaWorldGenFlowers("minecraft:brown_mushroom")).a(this.worldObj, this.rand, xx, yy, zz);
         }
 
         if (this.rand.nextInt(8) == 0) {
             int xx = x + this.rand.nextInt(16) + 8;
             int yy = this.rand.nextInt(128);
             int zz = z + this.rand.nextInt(16) + 8;
-            (new AlphaWorldGenFlowers(Block.RED_MUSHROOM.id)).a(this.worldObj, this.rand, xx, yy, zz);
+            (new AlphaWorldGenFlowers("minecraft:red_mushroom")).a(this.worldObj, this.rand, xx, yy, zz);
         }
 
         for (int i = 0; i < 10; ++i) {
@@ -442,21 +442,21 @@ public class AlphaChunkProvider implements IChunkProvider {
             int xx = x + this.rand.nextInt(16) + 8;
             int yy = this.rand.nextInt(this.rand.nextInt(120) + 8);
             int zz = z + this.rand.nextInt(16) + 8;
-            (new AlphaWorldGenLiquids(Block.WATER.id)).a(this.worldObj, this.rand, xx, yy, zz);
+            (new AlphaWorldGenLiquids("minecraft:water")).a(this.worldObj, this.rand, xx, yy, zz);
         }
 
         for (int i = 0; i < 20; ++i) {
             int xx = x + this.rand.nextInt(16) + 8;
             int yy = this.rand.nextInt(this.rand.nextInt(this.rand.nextInt(112) + 8) + 8);
             int zz = z + this.rand.nextInt(16) + 8;
-            (new AlphaWorldGenLiquids(Block.LAVA.id)).a(this.worldObj, this.rand, xx, yy, zz);
+            (new AlphaWorldGenLiquids("minecraft:lava")).a(this.worldObj, this.rand, xx, yy, zz);
         }
 
         for (int snowX = x + 8; snowX < x + 8 + 16; ++snowX) {
             for (int snowZ = z + 8; snowZ < z + 8 + 16; ++snowZ) {
                 int topY = this.worldObj.e(snowX, snowZ);
                 if (this.worldObj.worldData.isSnowWorld() && topY > 0 && topY < 128 && this.worldObj.getTypeId(snowX, topY, snowZ) == 0 && this.worldObj.getMaterial(snowX, topY - 1, snowZ).isSolid() && this.worldObj.getMaterial(snowX, topY - 1, snowZ) != Material.ICE) {
-                    this.worldObj.setTypeId(snowX, topY, snowZ, Block.SNOW.id);
+                    this.worldObj.setBlockStateAndData(snowX, topY, snowZ, "minecraft:snow");
                 }
             }
         }

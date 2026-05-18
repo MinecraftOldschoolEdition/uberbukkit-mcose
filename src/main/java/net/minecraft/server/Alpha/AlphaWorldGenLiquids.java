@@ -2,14 +2,23 @@ package net.minecraft.server.Alpha;
 
 import java.util.Random;
 import net.minecraft.server.Block;
+import net.minecraft.server.BlockStateBridge;
+import net.minecraft.server.BlockStateKey;
 import net.minecraft.server.World;
 import net.minecraft.server.WorldGenerator;
 
 public class AlphaWorldGenLiquids extends WorldGenerator {
 	private int liquidBlockId;
+	private BlockStateKey liquidState;
 
 	public AlphaWorldGenLiquids(int var1) {
 		this.liquidBlockId = var1;
+		this.liquidState = stateFromBlockId(var1);
+	}
+
+	public AlphaWorldGenLiquids(String blockId) {
+		this.liquidState = stateFromIdentifier(blockId);
+		this.liquidBlockId = BlockStateBridge.toLegacy(this.liquidState).blockId;
 	}
 
 	public boolean a(World var1, Random var2, int var3, int var4, int var5) {
@@ -55,7 +64,7 @@ public class AlphaWorldGenLiquids extends WorldGenerator {
 			}
 
 			if (var6 == 3 && var7 == 1) {
-				var1.setTypeId(var3, var4, var5, this.liquidBlockId);
+				setGeneratedBlockAndData(var1, var3, var4, var5, this.liquidState);
 			}
 
 			return true;

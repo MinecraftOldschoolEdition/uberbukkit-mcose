@@ -430,7 +430,7 @@ public final class ItemStack {
                 }
             }
             if (key == null) {
-                key = new ResourceLocation("legacy", "item_" + this.id);
+                key = new ResourceLocation("minecraft", "unregistered_item_" + this.id);
             }
             holder = Holder.direct(key, item, this.id);
         }

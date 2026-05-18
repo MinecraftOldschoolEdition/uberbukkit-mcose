@@ -44,7 +44,7 @@ public class AlphaWorldGenTrees extends WorldGenerator {
 			} else {
 				var8 = var1.getTypeId(var3, var4 - 1, var5);
 				if((var8 == Block.GRASS.id || var8 == Block.DIRT.id) && var4 < 128 - var6 - 1) {
-					var1.setRawTypeId(var3, var4 - 1, var5, Block.DIRT.id);
+					setGeneratedBlock(var1, var3, var4 - 1, var5, Block.DIRT.id);
 
 					int var16;
 					for(var16 = var4 - 3 + var6; var16 <= var4 + var6; ++var16) {
@@ -57,7 +57,7 @@ public class AlphaWorldGenTrees extends WorldGenerator {
 							for(int var14 = var5 - var11; var14 <= var5 + var11; ++var14) {
 								int var15 = var14 - var5;
 								if((Math.abs(var13) != var11 || Math.abs(var15) != var11 || var2.nextInt(2) != 0 && var10 != 0) && !Block.o[var1.getTypeId(var12, var16, var14)]) {
-									var1.setRawTypeId(var12, var16, var14, Block.LEAVES.id);
+									setGeneratedBlock(var1, var12, var16, var14, Block.LEAVES.id);
 								}
 							}
 						}
@@ -66,7 +66,7 @@ public class AlphaWorldGenTrees extends WorldGenerator {
 					for(var16 = 0; var16 < var6; ++var16) {
 						var10 = var1.getTypeId(var3, var4 + var16, var5);
 						if(var10 == 0 || var10 == Block.LEAVES.id) {
-							var1.setRawTypeId(var3, var4 + var16, var5, Block.LOG.id);
+							setGeneratedBlock(var1, var3, var4 + var16, var5, Block.LOG.id);
 						}
 					}
 

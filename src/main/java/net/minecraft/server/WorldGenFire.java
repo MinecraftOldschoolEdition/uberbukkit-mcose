@@ -14,7 +14,7 @@ public class WorldGenFire extends WorldGenerator {
             int k1 = k + random.nextInt(8) - random.nextInt(8);
 
             if (world.isEmpty(i1, j1, k1) && world.getTypeId(i1, j1 - 1, k1) == Block.NETHERRACK.id) {
-                world.setTypeId(i1, j1, k1, Block.FIRE.id);
+                world.setBlockStateAndData(i1, j1, k1, "minecraft:fire");
             }
         }
 

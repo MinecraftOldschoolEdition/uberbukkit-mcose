@@ -5,9 +5,16 @@ import java.util.Random;
 public class WorldGenLiquids extends WorldGenerator {
 
     private int a;
+    private BlockStateKey state;
 
     public WorldGenLiquids(int i) {
         this.a = i;
+        this.state = stateFromBlockId(i);
+    }
+
+    public WorldGenLiquids(String blockId) {
+        this.state = stateFromIdentifier(blockId);
+        this.a = BlockStateBridge.toLegacy(this.state).blockId;
     }
 
     public boolean a(World world, Random random, int i, int j, int k) {
@@ -55,7 +62,7 @@ public class WorldGenLiquids extends WorldGenerator {
             }
 
             if (l == 3 && i1 == 1) {
-                world.setTypeId(i, j, k, this.a);
+                setGeneratedBlockAndData(world, i, j, k, this.state);
                 world.a = true;
                 Block.byId[this.a].a(world, i, j, k, random);
                 world.a = false;

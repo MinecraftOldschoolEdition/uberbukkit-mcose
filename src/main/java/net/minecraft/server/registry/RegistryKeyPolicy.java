@@ -25,23 +25,50 @@ public final class RegistryKeyPolicy {
 
     static {
         override("stonebrick", "cobblestone");
+        override("grass", "grass_block");
+        override("wood", "oak_planks");
+        override("planks", "oak_planks");
+        override("log", "oak_log");
+        override("leaves", "oak_leaves");
+        override("sapling", "oak_sapling");
+        override("cloth", "white_wool");
+        override("crops", "wheat");
+        override("tilled_field", "farmland");
+        override("sand_stone", "sandstone");
+        override("web", "cobweb");
         override("stone_moss", "mossy_cobblestone");
         override("stairs_stone", "cobblestone_stairs");
-        override("stairs_wood", "wooden_stairs");
+        override("stairs_wood", "oak_stairs");
+        override("wooden_stairs", "oak_stairs");
         override("stone_bricksmooth", "stone_bricks");
         override("stairs_stone_brick_smooth", "stone_brick_stairs");
         override("smooth_stone_brick_stairs", "stone_brick_stairs");
         override("golden_rail", "powered_rail");
-        override("door_wood", "wooden_door");
+        override("door_wood", "oak_door");
+        override("wooden_door", "oak_door");
         override("door_iron", "iron_door");
+        override("standing_sign", "oak_sign");
+        override("sign_post", "oak_sign");
+        override("wall_sign", "oak_wall_sign");
         override("not_gate", "redstone_torch");
-        override("fencegate", "fence_gate");
+        override("button", "stone_button");
+        override("fence", "oak_fence");
+        override("fence_gate", "oak_fence_gate");
+        override("fencegate", "oak_fence_gate");
+        override("trapdoor", "oak_trapdoor");
         override("hellrock", "netherrack");
         override("hellsand", "soul_sand");
         override("lightgem", "glowstone");
         override("litpumpkin", "jack_o_lantern");
+        override("flower", "dandelion");
+        override("yellow_flower", "dandelion");
+        override("rose", "poppy");
+        override("red_flower", "poppy");
 
         override("apple_gold", "golden_apple");
+        override("raw_porkchop", "porkchop");
+        override("fish_raw", "cod");
+        override("fish_cooked", "cooked_cod");
         override("yellow_dust", "glowstone_dust");
         override("minecart_chest", "chest_minecart");
         override("minecart_furnace", "furnace_minecart");
@@ -50,30 +77,71 @@ public final class RegistryKeyPolicy {
         alias("glowstone", "lightgem");
         alias("soul_sand", "hellsand");
         alias("golden_apple", "apple_gold", "gold_apple");
+        alias("porkchop", "raw_porkchop");
+        alias("cod", "fish_raw", "raw_fish");
+        alias("cooked_cod", "fish_cooked", "cooked_fish");
         alias("stone_brick_stairs", "stone_brick_smooth_stairs", "smooth_stone_brick_stairs", "stairs_stone_brick_smooth");
-        alias("wooden_stairs", "wood_stairs", "stairs_wood");
+        alias("grass_block", "grass");
+        alias("oak_planks", "wood", "planks", "wooden_planks");
+        alias("oak_log", "log");
+        alias("oak_leaves", "leaves");
+        alias("oak_sapling", "sapling");
+        alias("white_wool", "cloth", "wool");
+        alias("wheat", "crops");
+        alias("sandstone", "sand_stone");
+        alias("bricks", "brick_block");
+        alias("cobweb", "web");
+        alias("oak_stairs", "wooden_stairs", "wood_stairs", "stairs_wood");
         alias("cobblestone_stairs", "stairs_stone", "stone_stairs");
-        alias("fence_gate", "fencegate");
+        alias("oak_door", "wooden_door", "wood_door", "door_wood");
+        alias("oak_sign", "standing_sign", "sign_post");
+        alias("oak_wall_sign", "wall_sign", "sign_wall");
+        alias("oak_pressure_plate", "wooden_pressure_plate", "pressure_plate_planks");
+        alias("oak_fence", "fence");
+        alias("oak_fence_gate", "fence_gate", "fencegate");
+        alias("oak_trapdoor", "wooden_trapdoor", "trapdoor");
+        alias("stone_button", "button");
         alias("chest_minecart", "minecart_chest", "storage_minecart");
         alias("furnace_minecart", "minecart_furnace", "powered_minecart");
+        alias("dandelion", "flower", "yellow_flower");
+        alias("poppy", "rose", "red_flower");
 
+        BLOCK_ID_OVERRIDES.put(Integer.valueOf(2), "grass_block");
+        BLOCK_ID_OVERRIDES.put(Integer.valueOf(5), "oak_planks");
+        BLOCK_ID_OVERRIDES.put(Integer.valueOf(6), "oak_sapling");
         BLOCK_ID_OVERRIDES.put(Integer.valueOf(8), "water");
         BLOCK_ID_OVERRIDES.put(Integer.valueOf(9), "water_still");
         BLOCK_ID_OVERRIDES.put(Integer.valueOf(10), "lava");
         BLOCK_ID_OVERRIDES.put(Integer.valueOf(11), "lava_still");
+        BLOCK_ID_OVERRIDES.put(Integer.valueOf(17), "oak_log");
+        BLOCK_ID_OVERRIDES.put(Integer.valueOf(18), "oak_leaves");
+        BLOCK_ID_OVERRIDES.put(Integer.valueOf(24), "sandstone");
+        BLOCK_ID_OVERRIDES.put(Integer.valueOf(30), "cobweb");
+        BLOCK_ID_OVERRIDES.put(Integer.valueOf(35), "white_wool");
+        BLOCK_ID_OVERRIDES.put(Integer.valueOf(37), "dandelion");
+        BLOCK_ID_OVERRIDES.put(Integer.valueOf(38), "poppy");
+        BLOCK_ID_OVERRIDES.put(Integer.valueOf(45), "bricks");
+        BLOCK_ID_OVERRIDES.put(Integer.valueOf(53), "oak_stairs");
+        BLOCK_ID_OVERRIDES.put(Integer.valueOf(59), "wheat");
+        BLOCK_ID_OVERRIDES.put(Integer.valueOf(60), "farmland");
         BLOCK_ID_OVERRIDES.put(Integer.valueOf(61), "furnace");
         BLOCK_ID_OVERRIDES.put(Integer.valueOf(62), "lit_furnace");
-        BLOCK_ID_OVERRIDES.put(Integer.valueOf(63), "standing_sign");
-        BLOCK_ID_OVERRIDES.put(Integer.valueOf(68), "wall_sign");
+        BLOCK_ID_OVERRIDES.put(Integer.valueOf(63), "oak_sign");
+        BLOCK_ID_OVERRIDES.put(Integer.valueOf(64), "oak_door");
+        BLOCK_ID_OVERRIDES.put(Integer.valueOf(68), "oak_wall_sign");
         BLOCK_ID_OVERRIDES.put(Integer.valueOf(70), "stone_pressure_plate");
-        BLOCK_ID_OVERRIDES.put(Integer.valueOf(72), "wooden_pressure_plate");
+        BLOCK_ID_OVERRIDES.put(Integer.valueOf(72), "oak_pressure_plate");
         BLOCK_ID_OVERRIDES.put(Integer.valueOf(73), "redstone_ore");
         BLOCK_ID_OVERRIDES.put(Integer.valueOf(74), "lit_redstone_ore");
         // Canonical redstone torch should resolve to the lit placeable variant.
         BLOCK_ID_OVERRIDES.put(Integer.valueOf(75), "redstone_torch_off");
         BLOCK_ID_OVERRIDES.put(Integer.valueOf(76), "redstone_torch");
+        BLOCK_ID_OVERRIDES.put(Integer.valueOf(77), "stone_button");
+        BLOCK_ID_OVERRIDES.put(Integer.valueOf(85), "oak_fence");
         BLOCK_ID_OVERRIDES.put(Integer.valueOf(93), "repeater");
         BLOCK_ID_OVERRIDES.put(Integer.valueOf(94), "lit_repeater");
+        BLOCK_ID_OVERRIDES.put(Integer.valueOf(96), "oak_trapdoor");
+        BLOCK_ID_OVERRIDES.put(Integer.valueOf(188), "oak_fence_gate");
     }
 
     private RegistryKeyPolicy() {}
@@ -220,8 +288,8 @@ public final class RegistryKeyPolicy {
         return null;
     }
 
-    public static String collisionLegacySuffix(String basePath, int legacyId) {
-        return basePath + "_legacy_" + legacyId;
+    public static String collisionCompatibilitySuffix(String basePath, int legacyId) {
+        return basePath + "_compat_" + legacyId;
     }
 
     private static boolean isMaterial(String s) {

@@ -5,9 +5,16 @@ import java.util.Random;
 public class WorldGenFlowers extends WorldGenerator {
 
     private int a;
+    private BlockStateKey state;
 
     public WorldGenFlowers(int i) {
         this.a = i;
+        this.state = stateFromBlockId(i);
+    }
+
+    public WorldGenFlowers(String blockId) {
+        this.state = stateFromIdentifier(blockId);
+        this.a = BlockStateBridge.toLegacy(this.state).blockId;
     }
 
     public boolean a(World world, Random random, int i, int j, int k) {
@@ -17,7 +24,7 @@ public class WorldGenFlowers extends WorldGenerator {
             int k1 = k + random.nextInt(8) - random.nextInt(8);
 
             if (world.isEmpty(i1, j1, k1) && ((BlockFlower) Block.byId[this.a]).f(world, i1, j1, k1)) {
-                world.setRawTypeId(i1, j1, k1, this.a);
+                setGeneratedBlock(world, i1, j1, k1, this.state);
             }
         }
 

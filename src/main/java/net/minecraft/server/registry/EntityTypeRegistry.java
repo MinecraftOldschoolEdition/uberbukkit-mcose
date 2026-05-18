@@ -201,11 +201,16 @@ public final class EntityTypeRegistry {
         if (clazz == null || raw == null) return;
         if (clazz == Entity.class) return;
         String snake = toSnakeCase(raw);
-        ResourceLocation primary = new ResourceLocation("minecraft", snake);
+        ResourceLocation primary = VanillaRegistryKeys.entityKey(raw);
+        if (primary == null) {
+            primary = new ResourceLocation("minecraft", snake);
+        }
         register(primary, clazz);
+        keyOf.put(clazz, primary);
         // aliases for legacy names
         try { registerAlias(new ResourceLocation("minecraft", raw), clazz); } catch (Throwable ignored) {}
         try { registerAlias(new ResourceLocation("minecraft", raw.toLowerCase()), clazz); } catch (Throwable ignored) {}
+        try { registerAlias(new ResourceLocation("minecraft", snake), clazz); } catch (Throwable ignored) {}
 
         String path = primary.getPath();
         if ("minecart".equals(path)) {
@@ -215,13 +220,19 @@ public final class EntityTypeRegistry {
             registerAlias(new ResourceLocation("minecraft", "furnace_minecart"), clazz);
             keyToVariant.put(primary, Integer.valueOf(0));
         }
-        if ("falling_sand".equals(path)) {
+        if ("falling_block".equals(path) || "falling_sand".equals(path)) {
+            registerAlias(new ResourceLocation("minecraft", "falling_sand"), clazz);
             registerAlias(new ResourceLocation("minecraft", "falling_gravel"), clazz);
+        }
+        if ("pig_zombie".equals(path) || "pigzombie".equals(path) || "zombified_piglin".equals(path)) {
+            registerAlias(new ResourceLocation("minecraft", "pig_zombie"), clazz);
+            registerAlias(new ResourceLocation("minecraft", "pigzombie"), clazz);
         }
         if ("snow_man".equals(path) || "snowman".equals(path) || "snow_golem".equals(path)) {
             registerAlias(new ResourceLocation("minecraft", "snowman"), clazz);
             registerAlias(new ResourceLocation("minecraft", "snow_golem"), clazz);
-            ResourceLocation pref = new ResourceLocation("minecraft", "snowman");
+            registerAlias(new ResourceLocation("minecraft", "snow_man"), clazz);
+            ResourceLocation pref = new ResourceLocation("minecraft", "snow_golem");
             byKey.put(pref, clazz);
             keyOf.put(clazz, pref);
             cacheLegacyMapping(pref, clazz);

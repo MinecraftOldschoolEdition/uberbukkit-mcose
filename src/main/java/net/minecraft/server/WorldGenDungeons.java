@@ -83,27 +83,27 @@ public class WorldGenDungeons extends WorldGenerator {
                 for (l1 = j + b0; l1 >= j - 1; --l1) {
                     for (i2 = k - i1 - 1; i2 <= k + i1 + 1; ++i2) {
                         if (k1 != i - l - 1 && l1 != j - 1 && i2 != k - i1 - 1 && k1 != i + l + 1 && l1 != j + b0 + 1 && i2 != k + i1 + 1) {
-                            world.setTypeId(k1, l1, i2, 0);
+                            world.setBlockStateAndData(k1, l1, i2, "minecraft:air");
                         } else if (l1 >= 0 && !world.getMaterial(k1, l1 - 1, i2).isBuildable()) {
-                            world.setTypeId(k1, l1, i2, 0);
+                            world.setBlockStateAndData(k1, l1, i2, "minecraft:air");
                         } else if (world.getMaterial(k1, l1, i2).isBuildable()) {
                             if (useStoneBricks) {
                                 // Monster dungeon: use stone bricks, mossy stone bricks, and cracked stone bricks
                                 if (l1 == j - 1 && random.nextInt(4) != 0) {
                                     // Floor: mostly mossy stone bricks
-                                    world.setTypeIdAndData(k1, l1, i2, Block.STONE_BRICK.id, MOSSY_STONE_BRICK_META);
+                                    setGeneratedBlockAndData(world, k1, l1, i2, Block.STONE_BRICK.id, MOSSY_STONE_BRICK_META);
                                 } else {
                                     // Walls/ceiling: mix of stone brick variants
                                     int brickType = random.nextInt(3);
                                     int meta = brickType == 0 ? STONE_BRICK_META : (brickType == 1 ? MOSSY_STONE_BRICK_META : CRACKED_STONE_BRICK_META);
-                                    world.setTypeIdAndData(k1, l1, i2, Block.STONE_BRICK.id, meta);
+                                    setGeneratedBlockAndData(world, k1, l1, i2, Block.STONE_BRICK.id, meta);
                                 }
                             } else {
                                 // Regular dungeon: cobblestone and mossy cobblestone
                                 if (l1 == j - 1 && random.nextInt(4) != 0) {
-                                    world.setTypeId(k1, l1, i2, Block.MOSSY_COBBLESTONE.id);
+                                    world.setBlockStateAndData(k1, l1, i2, "minecraft:mossy_cobblestone");
                                 } else {
-                                    world.setTypeId(k1, l1, i2, Block.COBBLESTONE.id);
+                                    world.setBlockStateAndData(k1, l1, i2, "minecraft:cobblestone");
                                 }
                             }
                         }
@@ -137,7 +137,7 @@ public class WorldGenDungeons extends WorldGenerator {
                         }
 
                         if (k2 == 1) {
-                            world.setTypeId(i2, j, j2, Block.CHEST.id);
+                            world.setBlockStateAndData(i2, j, j2, "minecraft:chest");
                             TileEntityChest tileentitychest = (TileEntityChest) world.getTileEntity(i2, j, j2);
 
                             LootTable chestLoot = lootTable != null ? lootTable : simpleDungeonLoot;
@@ -151,7 +151,7 @@ public class WorldGenDungeons extends WorldGenerator {
                 }
             }
 
-            world.setTypeId(i, j, k, Block.MOB_SPAWNER.id);
+            world.setBlockStateAndData(i, j, k, "minecraft:mob_spawner");
             TileEntityMobSpawner tileentitymobspawner = (TileEntityMobSpawner) world.getTileEntity(i, j, k);
 
             // Use structure type to pick spawner mob

@@ -13,7 +13,7 @@ public class WorldGenLightStone2 extends WorldGenerator {
         } else if (world.getTypeId(i, j + 1, k) != Block.NETHERRACK.id) {
             return false;
         } else {
-            world.setTypeId(i, j, k, Block.GLOWSTONE.id);
+            world.setBlockStateAndData(i, j, k, "minecraft:glowstone");
 
             for (int l = 0; l < 1500; ++l) {
                 int i1 = i + random.nextInt(8) - random.nextInt(8);
@@ -56,7 +56,7 @@ public class WorldGenLightStone2 extends WorldGenerator {
                     }
 
                     if (l1 == 1) {
-                        world.setTypeId(i1, j1, k1, Block.GLOWSTONE.id);
+                        world.setBlockStateAndData(i1, j1, k1, "minecraft:glowstone");
                     }
                 }
             }

@@ -34,7 +34,7 @@ public class WorldGenBigMushroom extends WorldGenerator {
         if (below != Block.DIRT.id && below != Block.GRASS.id) return false;
         if (!Block.BROWN_MUSHROOM.canPlace(world, x, y, z)) return false;
 
-        world.setTypeId(x, y - 1, z, Block.DIRT.id);
+        world.setBlockStateAndData(x, y - 1, z, "minecraft:dirt");
         int capY = y + height;
         if (t == 1) capY = y + height - 3;
 
@@ -62,7 +62,7 @@ public class WorldGenBigMushroom extends WorldGenerator {
                     }
                     if (meta == 5 && yy < y + height) meta = 0;
                     if ((meta != 0 || y >= y + height - 1) && !Block.n[world.getTypeId(xx, yy, zz)]) {
-                        world.setRawTypeIdAndData(xx, yy, zz, (Block.BROWN_MUSHROOM_CAP != null ? Block.BROWN_MUSHROOM_CAP.id : 99) + t, meta);
+                        setGeneratedBlock(world, xx, yy, zz, (Block.BROWN_MUSHROOM_CAP != null ? Block.BROWN_MUSHROOM_CAP.id : 99) + t, meta);
                     }
                 }
             }
@@ -70,10 +70,9 @@ public class WorldGenBigMushroom extends WorldGenerator {
 
         for (int i = 0; i < height; ++i) {
             int id = world.getTypeId(x, y + i, z);
-            if (!Block.n[id]) world.setRawTypeIdAndData(x, y + i, z, (Block.BROWN_MUSHROOM_CAP != null ? Block.BROWN_MUSHROOM_CAP.id : 99) + t, 10);
+            if (!Block.n[id]) setGeneratedBlock(world, x, y + i, z, (Block.BROWN_MUSHROOM_CAP != null ? Block.BROWN_MUSHROOM_CAP.id : 99) + t, 10);
         }
         return true;
     }
 }
-
 

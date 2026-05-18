@@ -2,15 +2,23 @@ package net.minecraft.server.Infdev;
 
 import java.util.Random;
 import net.minecraft.server.Block;
+import net.minecraft.server.BlockStateKey;
 import net.minecraft.server.MathHelper;
 import net.minecraft.server.World;
 import net.minecraft.server.WorldGenerator;
 
 public final class InfdevWorldGenMinable extends WorldGenerator {
     private final int minableBlockId;
+    private final BlockStateKey minableState;
 
     public InfdevWorldGenMinable(int blockId) {
         this.minableBlockId = blockId;
+        this.minableState = stateFromBlockId(blockId);
+    }
+
+    public InfdevWorldGenMinable(String blockId) {
+        this.minableBlockId = -1;
+        this.minableState = stateFromIdentifier(blockId);
     }
 
     public boolean a(World world, Random random, int x, int y, int z) {
@@ -44,7 +52,7 @@ public final class InfdevWorldGenMinable extends WorldGenerator {
                         double dy = ((double)oreY + 0.5D - centerY) / (radiusY / 2.0D);
                         double dz = ((double)oreZ + 0.5D - centerZ) / (radiusXZ / 2.0D);
                         if (dx * dx + dy * dy + dz * dz < 1.0D && world.getTypeId(oreX, oreY, oreZ) == Block.STONE.id) {
-                            world.setRawTypeId(oreX, oreY, oreZ, this.minableBlockId);
+                            setGeneratedBlock(world, oreX, oreY, oreZ, this.minableState);
                         }
                     }
                 }

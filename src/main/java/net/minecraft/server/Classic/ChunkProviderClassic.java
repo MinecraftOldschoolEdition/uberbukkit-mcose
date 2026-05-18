@@ -223,19 +223,19 @@ public class ChunkProviderClassic implements IChunkProvider {
             int x = baseX + this.rand.nextInt(16);
             int y = this.rand.nextInt(128);
             int z = baseZ + this.rand.nextInt(16);
-            (new WorldGenMinable(Block.COAL_ORE.id, 16)).a(this.worldObj, this.rand, x, y, z);
+            (new WorldGenMinable("minecraft:coal_ore", 16)).a(this.worldObj, this.rand, x, y, z);
         }
         for (int i = 0; i < 10; ++i) { // iron
             int x = baseX + this.rand.nextInt(16);
             int y = this.rand.nextInt(64);
             int z = baseZ + this.rand.nextInt(16);
-            (new WorldGenMinable(Block.IRON_ORE.id, 8)).a(this.worldObj, this.rand, x, y, z);
+            (new WorldGenMinable("minecraft:iron_ore", 8)).a(this.worldObj, this.rand, x, y, z);
         }
         for (int i = 0; i < 2; ++i) { // gold
             int x = baseX + this.rand.nextInt(16);
             int y = this.rand.nextInt(32);
             int z = baseZ + this.rand.nextInt(16);
-            (new WorldGenMinable(Block.GOLD_ORE.id, 8)).a(this.worldObj, this.rand, x, y, z);
+            (new WorldGenMinable("minecraft:gold_ore", 8)).a(this.worldObj, this.rand, x, y, z);
         }
 
         // Trees
@@ -255,13 +255,13 @@ public class ChunkProviderClassic implements IChunkProvider {
             int x = baseX + this.rand.nextInt(16) + 8;
             int y = this.rand.nextInt(128);
             int z = baseZ + this.rand.nextInt(16) + 8;
-            (new WorldGenFlowers(Block.YELLOW_FLOWER.id)).a(this.worldObj, this.rand, x, y, z);
+            (new WorldGenFlowers("minecraft:dandelion")).a(this.worldObj, this.rand, x, y, z);
         }
         if (this.rand.nextInt(2) == 0) {
             int x = baseX + this.rand.nextInt(16) + 8;
             int y = this.rand.nextInt(128);
             int z = baseZ + this.rand.nextInt(16) + 8;
-            (new WorldGenFlowers(Block.RED_ROSE.id)).a(this.worldObj, this.rand, x, y, z);
+            (new WorldGenFlowers("minecraft:poppy")).a(this.worldObj, this.rand, x, y, z);
         }
         for (int i = 0; i < 10; ++i) {
             int x = baseX + this.rand.nextInt(16) + 8;
@@ -275,13 +275,13 @@ public class ChunkProviderClassic implements IChunkProvider {
             int x = baseX + this.rand.nextInt(16) + 8;
             int y = this.rand.nextInt(this.rand.nextInt(112) + 8);
             int z = baseZ + this.rand.nextInt(16) + 8;
-            (new WorldGenLiquids(Block.WATER.id)).a(this.worldObj, this.rand, x, y, z);
+            (new WorldGenLiquids("minecraft:water")).a(this.worldObj, this.rand, x, y, z);
         }
         for (int i = 0; i < 10; ++i) {
             int x = baseX + this.rand.nextInt(16) + 8;
             int y = this.rand.nextInt(this.rand.nextInt(112) + 8);
             int z = baseZ + this.rand.nextInt(16) + 8;
-            (new WorldGenLiquids(Block.LAVA.id)).a(this.worldObj, this.rand, x, y, z);
+            (new WorldGenLiquids("minecraft:lava")).a(this.worldObj, this.rand, x, y, z);
         }
 
         BlockSand.instaFall = false;

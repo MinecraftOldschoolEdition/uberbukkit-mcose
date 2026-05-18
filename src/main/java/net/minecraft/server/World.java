@@ -22,6 +22,7 @@ import java.util.*;
 import net.minecraft.server.event.EventBus;
 import net.minecraft.server.event.events.EntitySpawnEvent;
 import net.minecraft.server.registry.BlockCapabilityRegistryApi;
+import net.minecraft.server.util.ResourceLocation;
 import uk.betacraft.uberbukkit.packet.Packet62Sound;
 
 // CraftBukkit start
@@ -1086,12 +1087,28 @@ public class World implements IBlockAccess {
         return this.setRawTypeIdAndData(i, j, k, legacy.blockId, legacy.metadata);
     }
 
+    public boolean setBlockState(int i, int j, int k, ResourceLocation blockKey) {
+        return this.setBlockState(i, j, k, new BlockStateKey(blockKey));
+    }
+
+    public boolean setBlockState(int i, int j, int k, String blockKey) {
+        return this.setBlockState(i, j, k, new ResourceLocation(blockKey));
+    }
+
     public boolean setBlockStateAndData(int i, int j, int k, BlockStateKey stateKey) {
         BlockStateBridge.LegacyBlockData legacy = BlockStateBridge.toLegacy(stateKey);
         if (legacy.fallbackUsed) {
             System.err.println("[BlockState] nearest legacy fallback projection at " + i + "," + j + "," + k + " for " + stateKey);
         }
         return this.setTypeIdAndData(i, j, k, legacy.blockId, legacy.metadata);
+    }
+
+    public boolean setBlockStateAndData(int i, int j, int k, ResourceLocation blockKey) {
+        return this.setBlockStateAndData(i, j, k, new BlockStateKey(blockKey));
+    }
+
+    public boolean setBlockStateAndData(int i, int j, int k, String blockKey) {
+        return this.setBlockStateAndData(i, j, k, new ResourceLocation(blockKey));
     }
 
     public void notify(int i, int j, int k) {

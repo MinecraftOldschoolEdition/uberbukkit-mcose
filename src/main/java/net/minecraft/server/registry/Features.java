@@ -49,8 +49,8 @@ public final class Features {
         if (key == null) return null;
         String path = key.getPath();
         if ("dungeon".equals(path)) return new WorldGenDungeons();
-        if ("lake_water".equals(path)) return new WorldGenLakes(Block.STATIONARY_WATER.id);
-        if ("lake_lava".equals(path)) return new WorldGenLakes(Block.STATIONARY_LAVA.id);
+        if ("lake_water".equals(path)) return new WorldGenLakes("minecraft:water");
+        if ("lake_lava".equals(path)) return new WorldGenLakes("minecraft:lava");
         return null;
     }
 

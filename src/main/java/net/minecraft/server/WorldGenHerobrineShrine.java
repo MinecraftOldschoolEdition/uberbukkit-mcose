@@ -72,22 +72,22 @@ public class WorldGenHerobrineShrine extends WorldGenerator {
                 for (int clearY = platformY; clearY <= platformY + 3; clearY++) {
                     int blockId = world.getTypeId(x + dx, clearY, z + dz);
                     if (blockId != 0) {
-                        world.setTypeId(x + dx, clearY, z + dz, 0);
+                        world.setBlockStateAndData(x + dx, clearY, z + dz, "minecraft:air");
                     }
                 }
                 // Place gold platform
-                world.setTypeId(x + dx, platformY, z + dz, goldId);
+                world.setBlockStateAndData(x + dx, platformY, z + dz, "minecraft:gold_block");
             }
         }
         
         // Place redstone torches on the four edges (N/S/E/W)
-        world.setTypeIdAndData(x, platformY + 1, z - 1, torchId, 0); // North
-        world.setTypeIdAndData(x, platformY + 1, z + 1, torchId, 0); // South
-        world.setTypeIdAndData(x + 1, platformY + 1, z, torchId, 0); // East
-        world.setTypeIdAndData(x - 1, platformY + 1, z, torchId, 0); // West
+        setGeneratedBlockAndData(world, x, platformY + 1, z - 1, torchId, 0); // North
+        setGeneratedBlockAndData(world, x, platformY + 1, z + 1, torchId, 0); // South
+        setGeneratedBlockAndData(world, x + 1, platformY + 1, z, torchId, 0); // East
+        setGeneratedBlockAndData(world, x - 1, platformY + 1, z, torchId, 0); // West
         
         // Place netherrack on top of center gold block
-        world.setTypeId(x, platformY + 1, z, netherrackId);
+        world.setBlockStateAndData(x, platformY + 1, z, "minecraft:netherrack");
         
         return true;
     }
@@ -315,4 +315,3 @@ public class WorldGenHerobrineShrine extends WorldGenerator {
         return null;
     }
 }
-

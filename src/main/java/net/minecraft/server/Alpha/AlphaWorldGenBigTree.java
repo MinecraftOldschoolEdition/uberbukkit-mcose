@@ -120,7 +120,7 @@ public class AlphaWorldGenBigTree extends WorldGenerator {
 						if(var14 != 0 && var14 != 18) {
 							++var13;
 						} else {
-							this.worldObj.setRawTypeId(var11[0], var11[1], var11[2], var6);
+							setGeneratedBlock(this.worldObj, var11[0], var11[1], var11[2], var6);
 							++var13;
 						}
 					}
@@ -195,7 +195,7 @@ public class AlphaWorldGenBigTree extends WorldGenerator {
 				var14[var6] = MathHelper.floor((double)(var1[var6] + var15) + 0.5D);
 				var14[var7] = MathHelper.floor((double)var1[var7] + (double)var15 * var10 + 0.5D);
 				var14[var8] = MathHelper.floor((double)var1[var8] + (double)var15 * var12 + 0.5D);
-				this.worldObj.setRawTypeId(var14[0], var14[1], var14[2], var3);
+				setGeneratedBlock(this.worldObj, var14[0], var14[1], var14[2], var3);
 			}
 
 		}

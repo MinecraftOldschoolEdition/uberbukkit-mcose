@@ -343,7 +343,7 @@ public final class StatisticRegistryApi {
             return null;
         }
 
-        String suffix = "_legacy_" + legacyId;
+        String suffix = "_compat_" + legacyId;
         if (path.endsWith(suffix)) {
             return key;
         }
@@ -370,7 +370,7 @@ public final class StatisticRegistryApi {
             }
         }
 
-        return "legacy_" + legacyIdFallback;
+        return "unregistered_block_" + legacyIdFallback;
     }
 
     private static String getItemKeyPath(Item item, int legacyIdFallback) {
@@ -392,7 +392,7 @@ public final class StatisticRegistryApi {
             }
         }
 
-        return "legacy_" + legacyIdFallback;
+        return "unregistered_item_" + legacyIdFallback;
     }
 
     private static void rebuildIndexesInternal() {

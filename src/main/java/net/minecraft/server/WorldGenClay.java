@@ -49,7 +49,7 @@ public class WorldGenClay extends WorldGenerator {
                                 int j3 = world.getTypeId(k2, l2, i3);
 
                                 if (j3 == Block.SAND.id) {
-                                    world.setRawTypeId(k2, l2, i3, this.a);
+                                    setGeneratedBlock(world, k2, l2, i3, "minecraft:clay");
                                 }
                             }
                         }

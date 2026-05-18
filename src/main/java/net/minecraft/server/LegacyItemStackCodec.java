@@ -152,7 +152,7 @@ public final class LegacyItemStackCodec {
     }
 
     private static void logUnmappableVanilla(ItemStack stack) {
-        String key = "legacy:" + stack.id;
+        String key = "unmapped:" + stack.id;
         Holder<Item> holder = null;
         try {
             holder = stack.getItemHolder();

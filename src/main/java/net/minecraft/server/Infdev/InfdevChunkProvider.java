@@ -26,26 +26,26 @@ public final class InfdevChunkProvider implements IChunkProvider {
     private final InfdevNoiseGeneratorOctaves mobSpawnerNoise;
     private final World worldObj;
 
-    private final InfdevWorldGenMinable coalGen = new InfdevWorldGenMinable(Block.COAL_ORE.id);
-    private final InfdevWorldGenMinable ironGen = new InfdevWorldGenMinable(Block.IRON_ORE.id);
-    private final InfdevWorldGenMinable goldGen = new InfdevWorldGenMinable(Block.GOLD_ORE.id);
-    private final InfdevWorldGenMinable diamondGen = new InfdevWorldGenMinable(Block.DIAMOND_ORE.id);
-    private final InfdevWorldGenMinable redstoneGen = new InfdevWorldGenMinable(Block.REDSTONE_ORE.id);
-    private final InfdevWorldGenMinable lapisGen = new InfdevWorldGenMinable(Block.LAPIS_ORE.id);
-    private final InfdevWorldGenMinable dirtGen = new InfdevWorldGenMinable(Block.DIRT.id);
-    private final InfdevWorldGenMinable gravelGen = new InfdevWorldGenMinable(Block.GRAVEL.id);
+    private final InfdevWorldGenMinable coalGen = new InfdevWorldGenMinable("minecraft:coal_ore");
+    private final InfdevWorldGenMinable ironGen = new InfdevWorldGenMinable("minecraft:iron_ore");
+    private final InfdevWorldGenMinable goldGen = new InfdevWorldGenMinable("minecraft:gold_ore");
+    private final InfdevWorldGenMinable diamondGen = new InfdevWorldGenMinable("minecraft:diamond_ore");
+    private final InfdevWorldGenMinable redstoneGen = new InfdevWorldGenMinable("minecraft:redstone_ore");
+    private final InfdevWorldGenMinable lapisGen = new InfdevWorldGenMinable("minecraft:lapis_ore");
+    private final InfdevWorldGenMinable dirtGen = new InfdevWorldGenMinable("minecraft:dirt");
+    private final InfdevWorldGenMinable gravelGen = new InfdevWorldGenMinable("minecraft:gravel");
     private final InfdevWorldGenBigTree bigTreeGen = new InfdevWorldGenBigTree();
     private final WorldGenerator dungeonGen = Features.create("minecraft:dungeon");
     private final WorldGenClay clayGen = new WorldGenClay(32);
-    private final WorldGenFlowers yellowFlowerGen = new WorldGenFlowers(Block.YELLOW_FLOWER.id);
-    private final WorldGenFlowers redFlowerGen = new WorldGenFlowers(Block.RED_ROSE.id);
-    private final WorldGenFlowers brownMushroomGen = new WorldGenFlowers(Block.BROWN_MUSHROOM.id);
-    private final WorldGenFlowers redMushroomGen = new WorldGenFlowers(Block.RED_MUSHROOM.id);
+    private final WorldGenFlowers yellowFlowerGen = new WorldGenFlowers("minecraft:dandelion");
+    private final WorldGenFlowers redFlowerGen = new WorldGenFlowers("minecraft:poppy");
+    private final WorldGenFlowers brownMushroomGen = new WorldGenFlowers("minecraft:brown_mushroom");
+    private final WorldGenFlowers redMushroomGen = new WorldGenFlowers("minecraft:red_mushroom");
     private final WorldGenReed reedGen = new WorldGenReed();
     private final WorldGenCactus cactusGen = new WorldGenCactus();
     private final WorldGenPumpkin pumpkinGen = new WorldGenPumpkin();
-    private final WorldGenLiquids waterSpringGen = new WorldGenLiquids(Block.WATER.id);
-    private final WorldGenLiquids lavaSpringGen = new WorldGenLiquids(Block.LAVA.id);
+    private final WorldGenLiquids waterSpringGen = new WorldGenLiquids("minecraft:water");
+    private final WorldGenLiquids lavaSpringGen = new WorldGenLiquids("minecraft:lava");
 
     public InfdevChunkProvider(World world, long seed) {
         this.worldObj = world;

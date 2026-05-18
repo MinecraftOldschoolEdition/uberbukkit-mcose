@@ -214,17 +214,20 @@ public final class BlockRegistry {
     private static void registerCanonicalFor(int legacyId, Block block) {
         String internal = block.l();
         if (internal == null || internal.length() == 0) {
-            internal = "block_" + legacyId;
+            internal = "unregistered_block";
         }
 
         String stripped = RegistryKeyPolicy.stripKnownPrefix(internal);
         String rawSnake = RegistryKeyPolicy.toSnakeCase(stripped);
-        String canonicalPath = RegistryKeyPolicy.canonicalizeBlockPath(rawSnake, legacyId);
-        ResourceLocation canonicalKey = new ResourceLocation(RegistryKeyPolicy.DEFAULT_NAMESPACE, canonicalPath);
+        ResourceLocation canonicalKey = VanillaRegistryKeys.blockKey(block);
+        if (canonicalKey == null) {
+            String canonicalPath = RegistryKeyPolicy.canonicalizeBlockPath(rawSnake, legacyId);
+            canonicalKey = new ResourceLocation(RegistryKeyPolicy.DEFAULT_NAMESPACE, canonicalPath);
+        }
 
         Block conflict = byKey.get(canonicalKey);
         if (conflict != null && conflict != block) {
-            String collisionKey = RegistryKeyPolicy.collisionLegacySuffix(canonicalPath, legacyId);
+            String collisionKey = RegistryKeyPolicy.collisionCompatibilitySuffix(canonicalKey.getPath(), legacyId);
             canonicalKey = new ResourceLocation(RegistryKeyPolicy.DEFAULT_NAMESPACE, collisionKey);
         }
 

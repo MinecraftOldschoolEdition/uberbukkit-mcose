@@ -44,14 +44,14 @@ public class AlphaWorldGenDungeons extends WorldGenerator {
 				for (var11 = var4 + var6; var11 >= var4 - 1; --var11) {
 					for (var12 = var5 - var8 - 1; var12 <= var5 + var8 + 1; ++var12) {
 						if (var10 != var3 - var7 - 1 && var11 != var4 - 1 && var12 != var5 - var8 - 1 && var10 != var3 + var7 + 1 && var11 != var4 + var6 + 1 && var12 != var5 + var8 + 1) {
-							var1.setTypeId(var10, var11, var12, 0);
+							setGeneratedBlockAndData(var1, var10, var11, var12, 0);
 						} else if (var11 >= 0 && !var1.getMaterial(var10, var11 - 1, var12).isSolid()) {
-							var1.setTypeId(var10, var11, var12, 0);
+							setGeneratedBlockAndData(var1, var10, var11, var12, 0);
 						} else if (var1.getMaterial(var10, var11, var12).isSolid()) {
 							if (var11 == var4 - 1 && var2.nextInt(4) != 0) {
-								var1.setTypeId(var10, var11, var12, Block.MOSSY_COBBLESTONE.id);
+								setGeneratedBlockAndData(var1, var10, var11, var12, Block.MOSSY_COBBLESTONE.id);
 							} else {
-								var1.setTypeId(var10, var11, var12, Block.COBBLESTONE.id);
+								setGeneratedBlockAndData(var1, var10, var11, var12, Block.COBBLESTONE.id);
 							}
 						}
 					}
@@ -82,7 +82,7 @@ public class AlphaWorldGenDungeons extends WorldGenerator {
 						}
 
 						if (var15 == 1) {
-							var1.setTypeId(var12, var4, var14, Block.CHEST.id);
+							setGeneratedBlockAndData(var1, var12, var4, var14, Block.CHEST.id);
 							TileEntityChest var16 = (TileEntityChest)var1.getTileEntity(var12, var4, var14);
 							int var17 = 0;
 
@@ -103,7 +103,7 @@ public class AlphaWorldGenDungeons extends WorldGenerator {
 				}
 			}
 
-			var1.setTypeId(var3, var4, var5, Block.MOB_SPAWNER.id);
+			setGeneratedBlockAndData(var1, var3, var4, var5, Block.MOB_SPAWNER.id);
 			TileEntityMobSpawner var19 = (TileEntityMobSpawner)var1.getTileEntity(var3, var4, var5);
 			var19.a(this.pickMobSpawner(var2));
 			return true;

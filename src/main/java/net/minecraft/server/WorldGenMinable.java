@@ -7,10 +7,18 @@ import uk.betacraft.uberbukkit.UberbukkitConfig;
 public class WorldGenMinable extends WorldGenerator {
 
     private int a;
+    private BlockStateKey state;
     private int b;
 
     public WorldGenMinable(int i, int j) {
         this.a = i;
+        this.state = stateFromBlockId(i);
+        this.b = j;
+    }
+
+    public WorldGenMinable(String blockId, int j) {
+        this.a = -1;
+        this.state = stateFromIdentifier(blockId);
         this.b = j;
     }
 
@@ -50,7 +58,7 @@ public class WorldGenMinable extends WorldGenerator {
                             double d14 = ((double) k1 + 0.5D - d8) / (d10 / 2.0D);
 
                             if (d12 * d12 + d13 * d13 + d14 * d14 < 1.0D && world.getTypeId(i1, j1, k1) == Block.STONE.id) {
-                                world.setRawTypeId(i1, j1, k1, this.a);
+                                setGeneratedBlock(world, i1, j1, k1, this.state);
                             }
                         }
                     }
@@ -75,7 +83,7 @@ public class WorldGenMinable extends WorldGenerator {
                                     double d14 = ((double) i3 + 0.5D - d8) / (d10 / 2.0D);
 
                                     if (d12 * d12 + d13 * d13 + d14 * d14 < 1.0D && world.getTypeId(k2, l2, i3) == Block.STONE.id) {
-                                        world.setRawTypeId(k2, l2, i3, this.a);
+                                        setGeneratedBlock(world, k2, l2, i3, this.state);
                                     }
                                 }
                             }
