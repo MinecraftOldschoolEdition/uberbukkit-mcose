@@ -122,7 +122,11 @@ public class ChunkLoader implements IChunkLoader {
         WorldData worldData = world == null ? null : world.q();
         boolean writeStateOnly = worldData != null && worldData.i() >= WorldSaveVersions.MCREGION_2;
         if (writeStateOnly) {
-            BlockStateCodec.writeStateData(nbttagcompound, chunk.b, data.a);
+            if (shouldPreserveOriginalRegionCoreState(chunk)) {
+                preserveOriginalRegionCoreState(nbttagcompound, chunk);
+            } else {
+                BlockStateCodec.writeStateData(nbttagcompound, chunk.b, data.a);
+            }
         } else {
             nbttagcompound.a("Blocks", chunk.b);
             nbttagcompound.a("Data", data.a);
@@ -216,6 +220,11 @@ public class ChunkLoader implements IChunkLoader {
         if (decodedState != null) {
             chunk.b = decodedState.blocks;
             chunk.e = new NibbleArray(decodedState.metadata);
+            chunk.regionCoreOriginalStatePalette = nbttagcompound.l(BlockStateCodec.KEY_PALETTE);
+            chunk.regionCoreOriginalStateData = copyBytes(nbttagcompound.j(BlockStateCodec.KEY_DATA));
+            chunk.regionCoreOriginalStateHasBits = nbttagcompound.hasKey(BlockStateCodec.KEY_BITS);
+            chunk.regionCoreOriginalStateBits = nbttagcompound.c(BlockStateCodec.KEY_BITS);
+            chunk.regionCoreUsedFallbackProjection = decodedState.usedNearestFallback;
             if (decodedState.usedNearestFallback) {
                 System.out.println("[RegionCore] Loaded chunk [" + i + "," + j + "] with nearest-state legacy fallback projections.");
             }
@@ -317,6 +326,35 @@ public class ChunkLoader implements IChunkLoader {
         }
 
         return chunk;
+    }
+
+    private static boolean shouldPreserveOriginalRegionCoreState(Chunk chunk) {
+        return chunk != null
+                && chunk.regionCoreUsedFallbackProjection
+                && !chunk.o
+                && chunk.regionCoreOriginalStatePalette != null
+                && chunk.regionCoreOriginalStateData != null
+                && chunk.regionCoreOriginalStateData.length > 0;
+    }
+
+    private static void preserveOriginalRegionCoreState(NBTTagCompound levelTag, Chunk chunk) {
+        levelTag.a(BlockStateCodec.KEY_PALETTE, (NBTBase) chunk.regionCoreOriginalStatePalette);
+        levelTag.a(BlockStateCodec.KEY_DATA, copyBytes(chunk.regionCoreOriginalStateData));
+        if (chunk.regionCoreOriginalStateHasBits) {
+            levelTag.a(BlockStateCodec.KEY_BITS, chunk.regionCoreOriginalStateBits);
+        } else {
+            levelTag.remove(BlockStateCodec.KEY_BITS);
+        }
+    }
+
+    private static byte[] copyBytes(byte[] source) {
+        if (source == null) {
+            return null;
+        }
+
+        byte[] copy = new byte[source.length];
+        System.arraycopy(source, 0, copy, 0, source.length);
+        return copy;
     }
 
     public void a() {

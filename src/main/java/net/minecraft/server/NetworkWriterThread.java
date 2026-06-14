@@ -28,9 +28,7 @@ class NetworkWriterThread extends Thread {
 
                 if (sentAnyPackets) {
                     try {
-                        if (NetworkManager.e(this.a) != null) {
-                            NetworkManager.e(this.a).flush();
-                        }
+                        this.a.flushOutputStream();
                     } catch (IOException ioexception) {
                         if (!NetworkManager.f(this.a)) {
                             NetworkManager.a(this.a, (Exception) ioexception);

@@ -645,6 +645,13 @@ public abstract class EntityHuman extends EntityLiving {
 
     public void c(Entity entity) {
         ItemStack itemstack = this.G();
+        if (entity instanceof EntityAnimal && ((EntityAnimal) entity).isLeashedTo(this)) {
+            boolean creative = this.gameMode == 1;
+            ((EntityAnimal) entity).clearLeashed(!creative);
+            ItemLead.syncLeashDataToClients((EntityAnimal) entity);
+            return;
+        }
+
         if (itemstack != null && entity instanceof EntityLiving && ItemLead.isLeadItemStack(itemstack)) {
             itemstack.a((EntityLiving) entity, this);
             if (itemstack.count == 0) {
@@ -652,6 +659,9 @@ public abstract class EntityHuman extends EntityLiving {
                 this.H();
             }
             if (entity instanceof EntityAnimal && ((EntityAnimal) entity).isLeashedTo(this)) {
+                return;
+            }
+            if (entity instanceof EntityWolf && ((EntityWolf) entity).isLeashFleeing()) {
                 return;
             }
         }

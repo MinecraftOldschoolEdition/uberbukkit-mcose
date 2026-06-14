@@ -13,26 +13,41 @@ public final class LegacyEntityNbtCodec {
         if (entityTag == null) {
             return false;
         }
-        if (entityTag.hasKey("id")) {
-            return false;
-        }
+        boolean changed = false;
+        changed |= ensureCoreLegacyFields(entityTag);
 
         String modernType = entityTag.getString("entity_type");
         if (modernType == null || modernType.length() == 0) {
-            return false;
+            return changed;
         }
 
         String normalized = EntityTypeRegistry.normalizeInputIdentifier(modernType);
         if (normalized == null) {
-            return false;
+            return changed;
         }
 
         String legacyName = EntityTypeRegistry.getLegacyName(new ResourceLocation(normalized));
         if (legacyName == null || legacyName.length() == 0) {
+            return changed;
+        }
+
+        if (!entityTag.hasKey("id")) {
+            entityTag.setString("id", legacyName);
+            changed = true;
+        }
+        return changed;
+    }
+
+    private static boolean ensureCoreLegacyFields(NBTTagCompound entityTag) {
+        if (!entityTag.hasKey("entity_data")) {
             return false;
         }
 
-        entityTag.setString("id", legacyName);
-        return true;
+        NBTTagCompound entityData = entityTag.k("entity_data");
+        if (!entityTag.hasKey("CustomName") && entityData.hasKey("custom_name")) {
+            entityTag.setString("CustomName", entityData.getString("custom_name"));
+            return true;
+        }
+        return false;
     }
 }

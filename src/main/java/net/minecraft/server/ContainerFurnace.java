@@ -109,16 +109,11 @@ public class ContainerFurnace extends Container {
                 boolean isSmeltable = FurnaceRecipes.getInstance().a(itemstack1.getItem().id) != null ||
                                       RecyclingManager.getInstance().getSmeltRecycleResult(itemstack1) != null;
                 
-                if (TileEntityFurnace.isFuel(itemstack1)) {
-                    // Item is fuel - try fuel slot first
-                    this.a(itemstack1, 1, 2, false);
-                    // If fuel slot couldn't take it all and item is also smeltable, try input
-                    if (itemstack1.count > 0 && isSmeltable) {
-                        this.a(itemstack1, 0, 1, false);
-                    }
-                } else if (isSmeltable) {
-                    // Item is smeltable but not fuel - put in input slot
+                if (isSmeltable) {
+                    // Match the client: smeltable items prefer the input slot even if they can also burn.
                     this.a(itemstack1, 0, 1, false);
+                } else if (TileEntityFurnace.isFuel(itemstack1)) {
+                    this.a(itemstack1, 1, 2, false);
                 } else if (i >= 3 && i < 30) {
                     // Not furnace-related, move between inventory sections
                     this.a(itemstack1, 30, 39, false);
@@ -144,7 +139,7 @@ public class ContainerFurnace extends Container {
                 return null;
             }
 
-            slot.a(itemstack1);
+            slot.a(itemstack);
         }
 
         return itemstack;

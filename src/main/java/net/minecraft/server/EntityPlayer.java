@@ -32,6 +32,9 @@ import uk.betacraft.uberbukkit.protocol.Protocol;
 
 public class EntityPlayer extends EntityHuman implements ICrafting {
     private static final int BOW_POSE_DURATION_TICKS = 10;
+    private static final float MIN_CHUNKS_PER_TICK = 0.01F;
+    private static final float MAX_CHUNKS_PER_TICK = 64.0F;
+    private static final float START_CHUNKS_PER_TICK = 9.0F;
 
     public NetServerHandler netServerHandler;
     public MinecraftServer b;
@@ -39,9 +42,12 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
     public double d;
     public double e;
     public List chunkCoordIntPairQueue = new LinkedList();
-    public Set playerChunkCoordIntPairs = new HashSet();
+    public Set playerChunkCoordIntPairs = java.util.Collections.synchronizedSet(new HashSet());
+    public Set playerLoadedChunkCoordIntPairs = java.util.Collections.synchronizedSet(new HashSet());
     public final List removeQueue = new LinkedList(); // poseidon
     private int lastChunkStreamTick = Integer.MIN_VALUE;
+    private float desiredChunksPerTick = START_CHUNKS_PER_TICK;
+    private float chunkBatchQuota = 1.0F;
     private int bL = -99999999;
     private int bM = 60;
     private ItemStack[] bN = new ItemStack[] { null, null, null, null, null };
@@ -365,6 +371,122 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
         return (WorldServer) this.world;
     }
 
+    public void markFullChunkDelivered(Packet packet) {
+        if (packet instanceof Packet51MapChunk) {
+            Packet51MapChunk chunkPacket = (Packet51MapChunk) packet;
+            this.markFullChunkDelivered(chunkPacket.a, chunkPacket.b, chunkPacket.c, chunkPacket.d, chunkPacket.e, chunkPacket.f);
+        } else if (packet instanceof Packet202MapChunkZstd) {
+            Packet202MapChunkZstd chunkPacket = (Packet202MapChunkZstd) packet;
+            this.markFullChunkDelivered(chunkPacket.a, chunkPacket.b, chunkPacket.c, chunkPacket.d, chunkPacket.e, chunkPacket.f);
+        }
+    }
+
+    private void markFullChunkDelivered(int blockX, int blockY, int blockZ, int width, int height, int depth) {
+        if (blockY == 0 && width >= 16 && height >= 128 && depth >= 16) {
+            ChunkCoordIntPair pair = new ChunkCoordIntPair(blockX >> 4, blockZ >> 4);
+            if (this.playerChunkCoordIntPairs.contains(pair)) {
+                this.playerLoadedChunkCoordIntPairs.add(pair);
+            }
+        }
+    }
+
+    public boolean hasChunkDelivered(ChunkCoordIntPair pair) {
+        return pair != null && this.playerLoadedChunkCoordIntPairs.contains(pair);
+    }
+
+    private int computeAdaptiveChunkSendLimit(int pendingChunkPackets, int totalCompressionQueue) {
+        float target = this.computeTargetChunksPerTick(pendingChunkPackets, totalCompressionQueue);
+        float blend = target < this.desiredChunksPerTick ? 0.65F : 0.20F;
+        this.desiredChunksPerTick += (target - this.desiredChunksPerTick) * blend;
+        this.desiredChunksPerTick = clamp(this.desiredChunksPerTick, MIN_CHUNKS_PER_TICK, MAX_CHUNKS_PER_TICK);
+
+        float maxBatchSize = Math.max(1.0F, this.desiredChunksPerTick);
+        this.chunkBatchQuota = Math.min(this.chunkBatchQuota + this.desiredChunksPerTick, maxBatchSize);
+        if (this.chunkBatchQuota < 1.0F) {
+            return 0;
+        }
+        return Math.max(1, Math.min((int) this.chunkBatchQuota, (int) MAX_CHUNKS_PER_TICK));
+    }
+
+    private float computeTargetChunksPerTick(int pendingChunkPackets, int totalCompressionQueue) {
+        float target = 16.0F;
+        int serverAgeTicks = this.b != null ? this.b.ticks : Integer.MAX_VALUE;
+        boolean startupTrafficGuard = serverAgeTicks >= 0 && serverAgeTicks < 1200;
+
+        if (pendingChunkPackets > 220) {
+            target = 3.0F;
+        } else if (pendingChunkPackets > 160) {
+            target = 5.0F;
+        } else if (pendingChunkPackets > 110) {
+            target = 7.0F;
+        } else if (pendingChunkPackets > 70) {
+            target = 10.0F;
+        } else if (pendingChunkPackets > 36) {
+            target = 13.0F;
+        }
+
+        double horizontalSpeedSq = this.motX * this.motX + this.motZ * this.motZ;
+        if (horizontalSpeedSq > 0.12D * 0.12D) {
+            target += 6.0F;
+        } else if (horizontalSpeedSq > 0.06D * 0.06D) {
+            target += 3.0F;
+        }
+        if (target > 24.0F) {
+            target = 24.0F;
+        }
+
+        if (startupTrafficGuard) {
+            float startupCap;
+            if (serverAgeTicks < 200) {
+                startupCap = 4.0F;
+            } else if (serverAgeTicks < 400) {
+                startupCap = 6.0F;
+            } else if (serverAgeTicks < 800) {
+                startupCap = 8.0F;
+            } else {
+                startupCap = 10.0F;
+            }
+
+            if (pendingChunkPackets > 180) {
+                startupCap = Math.min(startupCap, 2.0F);
+            } else if (pendingChunkPackets > 120) {
+                startupCap = Math.min(startupCap, 4.0F);
+            } else if (pendingChunkPackets > 80) {
+                startupCap = Math.min(startupCap, 6.0F);
+            }
+
+            target = Math.min(target, startupCap);
+        }
+
+        if (ChunkCompressionThread.isAboveHighWatermark()) {
+            target = Math.min(target, 2.0F);
+        } else if (ChunkCompressionThread.isAboveLowWatermark()) {
+            target = Math.min(target, 6.0F);
+        }
+        int totalCapacity = ChunkCompressionThread.getTotalQueueCapacity();
+        if (totalCapacity > 0 && totalCompressionQueue > (totalCapacity * 9) / 10) {
+            target = Math.min(target, 1.0F);
+        }
+
+        return clamp(target, MIN_CHUNKS_PER_TICK, MAX_CHUNKS_PER_TICK);
+    }
+
+    private void finishAdaptiveChunkBatch(int sentChunks, boolean compressionBackedUp) {
+        if (sentChunks > 0) {
+            this.chunkBatchQuota = Math.max(0.0F, this.chunkBatchQuota - (float) sentChunks);
+        }
+        if (compressionBackedUp && this.chunkBatchQuota > 1.0F) {
+            this.chunkBatchQuota = 1.0F;
+        }
+    }
+
+    private static float clamp(float value, float min, float max) {
+        if (value < min) {
+            return min;
+        }
+        return value > max ? max : value;
+    }
+
     public void a(boolean flag) {
         super.m_();
 
@@ -406,65 +528,7 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
                 ArrayList arraylist1 = new ArrayList();
                 int pendingChunkPackets = this.netServerHandler.getQueuedPacketCount() + ChunkCompressionThread.getPlayerQueueSize(this);
                 int totalCompressionQueue = ChunkCompressionThread.getTotalQueueSize();
-                int maxChunksThisTick = 16;
-                int serverAgeTicks = this.b != null ? this.b.ticks : Integer.MAX_VALUE;
-                boolean startupTrafficGuard = serverAgeTicks >= 0 && serverAgeTicks < 1200;
-
-                // Keep chunk stream moving even under backlog so fast flight does not leave stripe-like gaps.
-                if (pendingChunkPackets > 220) {
-                    maxChunksThisTick = 3;
-                } else if (pendingChunkPackets > 160) {
-                    maxChunksThisTick = 5;
-                } else if (pendingChunkPackets > 110) {
-                    maxChunksThisTick = 7;
-                } else if (pendingChunkPackets > 70) {
-                    maxChunksThisTick = 10;
-                } else if (pendingChunkPackets > 36) {
-                    maxChunksThisTick = 13;
-                }
-
-                double horizontalSpeedSq = this.motX * this.motX + this.motZ * this.motZ;
-                if (horizontalSpeedSq > 0.12D * 0.12D) {
-                    maxChunksThisTick += 6;
-                } else if (horizontalSpeedSq > 0.06D * 0.06D) {
-                    maxChunksThisTick += 3;
-                }
-                if (maxChunksThisTick > 24) {
-                    maxChunksThisTick = 24;
-                }
-
-                if (startupTrafficGuard) {
-                    // During the first minute after boot, ramp chunk output gradually to keep interaction packets responsive.
-                    int startupCap;
-                    if (serverAgeTicks < 200) {
-                        startupCap = 4;
-                    } else if (serverAgeTicks < 400) {
-                        startupCap = 6;
-                    } else if (serverAgeTicks < 800) {
-                        startupCap = 8;
-                    } else {
-                        startupCap = 10;
-                    }
-
-                    if (pendingChunkPackets > 180) {
-                        startupCap = Math.min(startupCap, 2);
-                    } else if (pendingChunkPackets > 120) {
-                        startupCap = Math.min(startupCap, 4);
-                    } else if (pendingChunkPackets > 80) {
-                        startupCap = Math.min(startupCap, 6);
-                    }
-
-                    maxChunksThisTick = Math.min(maxChunksThisTick, startupCap);
-                }
-
-                if (ChunkCompressionThread.isAboveHighWatermark()) {
-                    maxChunksThisTick = Math.min(maxChunksThisTick, 2);
-                } else if (ChunkCompressionThread.isAboveLowWatermark()) {
-                    maxChunksThisTick = Math.min(maxChunksThisTick, 6);
-                }
-                if (totalCompressionQueue > (ChunkCompressionThread.getTotalQueueCapacity() * 9) / 10) {
-                    maxChunksThisTick = Math.min(maxChunksThisTick, 1);
-                }
+                int maxChunksThisTick = this.computeAdaptiveChunkSendLimit(pendingChunkPackets, totalCompressionQueue);
 
                 LinkedList queue = this.chunkCoordIntPairQueue instanceof LinkedList ?
                     (LinkedList) this.chunkCoordIntPairQueue :
@@ -473,35 +537,40 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
                     this.chunkCoordIntPairQueue = queue;
                 }
 
-                int attempts = Math.min(queue.size(), maxChunksThisTick * 4);
-                while (attempts-- > 0 && arraylist.size() < maxChunksThisTick && !queue.isEmpty()) {
-                    ChunkCoordIntPair chunkcoordintpair = (ChunkCoordIntPair) queue.getFirst();
+                boolean compressionBackedUp = false;
+                if (maxChunksThisTick > 0) {
+                    int attempts = Math.min(queue.size(), maxChunksThisTick * 4);
+                    while (attempts-- > 0 && arraylist.size() < maxChunksThisTick && !queue.isEmpty()) {
+                        ChunkCoordIntPair chunkcoordintpair = (ChunkCoordIntPair) queue.getFirst();
 
-                    if (chunkcoordintpair == null) {
+                        if (chunkcoordintpair == null) {
+                            queue.removeFirst();
+                            continue;
+                        }
+
+                        if (!this.world.isLoaded(chunkcoordintpair.x << 4, 0, chunkcoordintpair.z << 4)) {
+                            // If not yet loaded, push back to the end of the queue instead of dropping it
+                            queue.removeFirst();
+                            queue.addLast(chunkcoordintpair);
+                            continue;
+                        }
+
+                        if (!ChunkCompressionThread.canAcceptChunk(this)) {
+                            compressionBackedUp = true;
+                            break;
+                        }
+
                         queue.removeFirst();
-                        continue;
+
+                        // CraftBukkit start - Get tile entities directly from the chunk instead of the world
+                        Chunk chunk = this.world.getChunkAt(chunkcoordintpair.x, chunkcoordintpair.z);
+                        arraylist.add(chunk);
+                        arraylist1.addAll(chunk.tileEntities.values());
+                        // CraftBukkit end
                     }
-
-                    if (!this.world.isLoaded(chunkcoordintpair.x << 4, 0, chunkcoordintpair.z << 4)) {
-                        // If not yet loaded, push back to the end of the queue instead of dropping it
-                        queue.removeFirst();
-                        queue.addLast(chunkcoordintpair);
-                        continue;
-                    }
-
-                    if (!ChunkCompressionThread.canAcceptChunk(this)) {
-                        // Compression path saturated; defer remaining chunk sends for this tick.
-                        break;
-                    }
-
-                    queue.removeFirst();
-
-                    // CraftBukkit start - Get tile entities directly from the chunk instead of the world
-                    Chunk chunk = this.world.getChunkAt(chunkcoordintpair.x, chunkcoordintpair.z);
-                    arraylist.add(chunk);
-                    arraylist1.addAll(chunk.tileEntities.values());
-                    // CraftBukkit end
                 }
+
+                this.finishAdaptiveChunkBatch(arraylist.size(), compressionBackedUp);
 
                 if (!arraylist.isEmpty()) {
                     Iterator iterator2 = arraylist.iterator();

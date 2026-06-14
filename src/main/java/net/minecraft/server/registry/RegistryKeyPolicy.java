@@ -207,6 +207,19 @@ public final class RegistryKeyPolicy {
 
     public static String toSnakeCase(String s) {
         if (s == null) return "";
+        boolean hasUpper = false;
+        boolean hasLower = false;
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (Character.isUpperCase(c)) {
+                hasUpper = true;
+            } else if (Character.isLowerCase(c)) {
+                hasLower = true;
+            }
+        }
+        if (hasUpper && !hasLower) {
+            return normalizePath(s.toLowerCase(Locale.ROOT).replace('.', '_').replace(' ', '_').replace('-', '_'));
+        }
         StringBuilder out = new StringBuilder();
         for (int i = 0; i < s.length(); i++) {
             char c = s.charAt(i);

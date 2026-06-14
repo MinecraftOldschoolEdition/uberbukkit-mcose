@@ -99,33 +99,32 @@ public class ContainerWorkbench extends Container {
 
             itemstack = itemstack1.cloneItemStack();
             if (i == 0) {
-                // Shift-click crafts repeatedly, consuming ingredients each time via SlotResult.a
-                int moved = 0;
-                Slot resultSlot = (Slot) this.e.get(0);
-                while (moved < 64) {
-                    ItemStack craft = this.resultInventory.getItem(0);
-                    if (craft == null) break;
-
-                    ItemStack toMove = craft.cloneItemStack();
-                    int amount = toMove.count;
-                    // Merge into player inventory (void method mutates toMove.count)
-                    this.a(toMove, 10, 46, true);
-                    // If any remain, inventory couldn't accept the full craft output
-                    if (toMove.count > 0) {
-                        break;
+                this.a(itemstack1, 10, 46, true);
+            } else if (i >= 10 && i < 46) {
+                boolean filledAny = false;
+                for (int j = 1; j <= 9 && itemstack1.count > 0; ++j) {
+                    Slot craftSlot = (Slot) this.e.get(j);
+                    ItemStack craftStack = craftSlot.getItem();
+                    if (craftStack == null) {
+                        craftSlot.c(itemstack1.a(1));
+                        filledAny = true;
+                    } else if (craftStack.id == itemstack1.id
+                            && (!craftStack.usesData() || craftStack.getData() == itemstack1.getData())
+                            && craftStack.count < Math.min(craftStack.getMaxStackSize(), craftSlot.d())) {
+                        ++craftStack.count;
+                        --itemstack1.count;
+                        craftSlot.c();
+                        filledAny = true;
                     }
-
-                    moved += amount;
-                    // Consume one craft worth of ingredients
-                    resultSlot.a(craft);
-                    // Recompute result and update clients
-                    this.a((IInventory) this.craftInventory);
                 }
-                return itemstack;
-            } else if (i >= 10 && i < 37) {
-                this.a(itemstack1, 37, 46, false);
-            } else if (i >= 37 && i < 46) {
-                this.a(itemstack1, 10, 37, false);
+
+                if (!filledAny) {
+                    if (i >= 10 && i < 37) {
+                        this.a(itemstack1, 37, 46, false);
+                    } else if (i >= 37 && i < 46) {
+                        this.a(itemstack1, 10, 37, false);
+                    }
+                }
             } else {
                 this.a(itemstack1, 10, 46, false);
             }
@@ -140,7 +139,7 @@ public class ContainerWorkbench extends Container {
                 return null;
             }
 
-            slot.a(itemstack1);
+            slot.a(itemstack);
         }
 
         return itemstack;

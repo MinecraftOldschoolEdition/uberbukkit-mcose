@@ -1,7 +1,9 @@
 package net.minecraft.server;
 
-import com.github.luben.zstd.Zstd;
-
+import io.airlift.compress.zstd.ZstdCompressor;
+import io.airlift.compress.zstd.ZstdDecompressor;
+import io.airlift.compress.zstd.ZstdInputStream;
+import java.io.InputStream;
 import java.util.Arrays;
 
 public final class ZstdRuntime {
@@ -32,18 +34,19 @@ public final class ZstdRuntime {
         }
 
         try {
-            long bound = Zstd.compressBound(length);
-            if (bound <= 0L || bound > Integer.MAX_VALUE) {
+            ZstdCompressor compressor = new ZstdCompressor();
+            int bound = compressor.maxCompressedLength(length);
+            if (bound <= 0) {
                 return null;
             }
 
-            byte[] out = new byte[(int) bound];
-            long written = Zstd.compressByteArray(out, 0, out.length, input, offset, length, level);
-            if (Zstd.isError(written) || written < 0L || written > (long) out.length) {
+            byte[] out = new byte[bound];
+            int written = compressor.compress(input, offset, length, out, 0, out.length);
+            if (written < 0 || written > out.length) {
                 return null;
             }
 
-            return Arrays.copyOf(out, (int) written);
+            return Arrays.copyOf(out, written);
         } catch (Throwable failure) {
             disableAfterFailure(failure);
             return null;
@@ -60,11 +63,25 @@ public final class ZstdRuntime {
 
         try {
             byte[] out = new byte[expectedSize];
-            long read = Zstd.decompressByteArray(out, 0, out.length, compressed, 0, compressed.length);
-            if (Zstd.isError(read) || read != (long) expectedSize) {
+            ZstdDecompressor decompressor = new ZstdDecompressor();
+            int read = decompressor.decompress(compressed, 0, compressed.length, out, 0, out.length);
+            if (read != expectedSize) {
                 return null;
             }
             return out;
+        } catch (Throwable failure) {
+            disableAfterFailure(failure);
+            return null;
+        }
+    }
+
+    public static InputStream openZstdInputStream(InputStream input) {
+        if (input == null || !isAvailable()) {
+            return null;
+        }
+
+        try {
+            return new ZstdInputStream(input);
         } catch (Throwable failure) {
             disableAfterFailure(failure);
             return null;
@@ -77,11 +94,9 @@ public final class ZstdRuntime {
         }
 
         try {
-            int defaultLevel = Zstd.defaultCompressionLevel();
-            available = defaultLevel != 0;
-            if (!available) {
-                logUnavailable("zstd-jni returned invalid default level");
-            }
+            new ZstdCompressor();
+            new ZstdDecompressor();
+            available = true;
         } catch (Throwable failure) {
             available = false;
             logUnavailable(failure.toString());

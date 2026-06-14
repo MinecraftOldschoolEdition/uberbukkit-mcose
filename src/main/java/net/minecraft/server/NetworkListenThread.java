@@ -5,6 +5,8 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -15,8 +17,9 @@ public class NetworkListenThread {
     private Thread e;
     public volatile boolean b = false;
     private int f = 0;
-    private ArrayList g = new ArrayList();
-    private ArrayList h = new ArrayList();
+    private final List pendingAcceptedLogins = Collections.synchronizedList(new ArrayList());
+    private final ArrayList g = new ArrayList();
+    private final ArrayList h = new ArrayList();
     public MinecraftServer c;
 
     public NetworkListenThread(MinecraftServer minecraftserver, InetAddress inetaddress, int i) throws IOException {
@@ -27,7 +30,7 @@ public class NetworkListenThread {
         this.d.setReuseAddress(true);
         this.d.setPerformancePreferences(0, 2, 1);
         // Now bind to the address and port
-        this.d.bind(new InetSocketAddress(inetaddress, i), 0);
+        this.d.bind(new InetSocketAddress(inetaddress, i), 128);
         this.b = true;
         this.e = new NetworkAcceptThread(this, "Listen thread", minecraftserver);
         this.e.start();
@@ -41,11 +44,12 @@ public class NetworkListenThread {
         if (netloginhandler == null) {
             throw new IllegalArgumentException("Got null pendingconnection!");
         } else {
-            this.g.add(netloginhandler);
+            this.pendingAcceptedLogins.add(netloginhandler);
         }
     }
 
     public void a() {
+        this.drainAcceptedLogins();
         int i;
 
         for (i = 0; i < this.g.size(); ++i) {
@@ -90,7 +94,9 @@ public class NetworkListenThread {
     }
 
     public int getPendingLoginCount() {
-        return this.g.size();
+        synchronized (this.pendingAcceptedLogins) {
+            return this.g.size() + this.pendingAcceptedLogins.size();
+        }
     }
 
     public int getActiveHandlerCount() {
@@ -107,6 +113,17 @@ public class NetworkListenThread {
 
     static void a(NetworkListenThread networklistenthread, NetLoginHandler netloginhandler) {
         networklistenthread.a(netloginhandler);
+    }
+
+    private void drainAcceptedLogins() {
+        synchronized (this.pendingAcceptedLogins) {
+            if (this.pendingAcceptedLogins.isEmpty()) {
+                return;
+            }
+
+            this.g.addAll(this.pendingAcceptedLogins);
+            this.pendingAcceptedLogins.clear();
+        }
     }
     
     /**

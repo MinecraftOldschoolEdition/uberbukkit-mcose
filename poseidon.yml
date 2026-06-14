@@ -93,6 +93,25 @@ settings:
         enabled: true
         info: When enabled, death messages are broadcast to all players like in modern Minecraft (e.g., 'Player was slain by Zombie').
     entity-tracking:
+        action-priority:
+            enabled: true
+            enabled-info: When enabled, player interaction responsiveness is prioritized over entity tracking smoothness during startup and packet backpressure.
+            mode: adaptive
+            mode-info: Tracking pressure control mode. adaptive = queue-aware hysteresis, off = disabled.
+            startup-seconds: 20
+            startup-seconds-info: Startup pressure window in seconds before adaptive queue thresholds take over.
+            enter-low-queue: 96
+            exit-low-queue: 48
+            enter-high-queue: 20
+            exit-high-queue: 8
+            enter-player-queued: 96
+            exit-player-queued: 48
+            min-pressure-ticks: 10
+            min-recovery-ticks: 80
+            near-chunk-radius: 2
+            mid-chunk-radius: 4
+            mob-update-frequency: 4
+            vehicle-update-frequency: 4
         info: These settings control how frequently entity positions are sent to clients. Lower values = smoother movement but more bandwidth/CPU. Vanilla b1.7.3 uses 3 for mobs.
         enabled: true
         mob-update-frequency: 2
@@ -134,10 +153,40 @@ settings:
         max-backlog-ms-info: Maximum milliseconds of backlog to process during catch-up.
         warn-interval-seconds: 30
         warn-interval-seconds-info: Minimum interval between backlog clamp warning logs.
+    packet-rate-limit:
+        enabled: true
+        info: This setting kicks connections whose smoothed inbound packet rate stays above the configured packets-per-second limit.
+        packets-per-second: 500
+    profiler:
+        top-offenders:
+            count: 10
+            count-info: How many top per-player offenders to include in reports.
+        deep:
+            packet-breakdown:
+                enabled: true
+            per-player:
+                enabled: true
+        auto-snapshot:
+            enabled: true
+            info: Automatically capture snapshots when tick time exceeds threshold.
+            tick-threshold-ms: 75
+            tick-threshold-ms-info: Tick-time threshold in milliseconds that triggers auto snapshots.
+            cooldown-seconds: 30
+            cooldown-seconds-info: Minimum seconds between auto snapshots.
+        ring-buffer:
+            seconds: 300
+            info: How many seconds of rolling telemetry to retain for snapshots and reports.
+        report:
+            include-json: true
+            include-text: true
+        always-on:
+            enabled: true
+            info: Collect low-overhead telemetry continuously so intermittent lag spikes are captured.
     delete-duplicate-uuids: false
     save-playerdata-by-uuid: true
     remove-join-leave-debug: true
     enable-tpc-nodelay: true
+    enable-tcp-nodelay: true
 world:
     settings:
         speed-hack-check:
@@ -208,4 +257,4 @@ command:
         info: Enables the /tps command to show the server's TPS for various intervals.
         enabled: true
     info: This section allows you to enable or disable optional Poseidon commands. This is useful if you have a plugin that conflicts with a Poseidon command.
-config-version: 5
+config-version: 6

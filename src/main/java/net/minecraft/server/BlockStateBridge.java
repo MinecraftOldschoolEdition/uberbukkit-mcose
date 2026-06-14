@@ -1,6 +1,7 @@
 package net.minecraft.server;
 
 import net.minecraft.server.registry.BlockRegistry;
+import net.minecraft.server.registry.BlockRegistryBootstrap;
 import net.minecraft.server.registry.LegacyIdBridge;
 import net.minecraft.server.util.ResourceLocation;
 
@@ -38,6 +39,7 @@ public final class BlockStateBridge {
     private BlockStateBridge() {}
 
     public static BlockStateKey fromLegacy(int blockId, int metadata) {
+        ensureLegacyBridgeReady();
         int safeMeta = metadata & 15;
         ResourceLocation blockKey = canonicalKeyForLegacy(blockId);
         BlockStateKey key = new BlockStateKey(blockKey);
@@ -212,16 +214,18 @@ public final class BlockStateBridge {
     }
 
     public static LegacyBlockData toLegacy(BlockStateKey key) {
+        ensureLegacyBridgeReady();
         if (key == null) {
             return new LegacyBlockData(0, 0, true);
         }
 
-        String namespace = key.getBlockKey().getNamespace().toLowerCase(Locale.ROOT);
-        String path = key.getBlockKey().getPath().toLowerCase(Locale.ROOT);
+        ResourceLocation blockKey = normalizeStateBlockKey(key.getBlockKey());
+        String namespace = blockKey.getNamespace().toLowerCase(Locale.ROOT);
+        String path = blockKey.getPath().toLowerCase(Locale.ROOT);
         Map<String, String> props = key.getProperties();
-        Integer bridged = LegacyIdBridge.blockIdFromKey(key.getBlockKey().toString());
+        Integer bridged = LegacyIdBridge.blockIdFromKey(blockKey.toString());
         if (bridged == null) {
-            Block block = BlockRegistry.get(key.getBlockKey());
+            Block block = BlockRegistry.get(blockKey);
             if (block != null) {
                 bridged = Integer.valueOf(block.id);
             }
@@ -443,6 +447,13 @@ public final class BlockStateBridge {
                 int meta = clamp(parseInt(props.get(PROP_LEGACY_META), 0), 0, 15);
                 return new LegacyBlockData(legacySynthetic.intValue(), meta, false);
             }
+            if ("minecraft".equals(namespace)) {
+                Integer vanillaLegacyId = vanillaLegacyIdForPath(path);
+                if (vanillaLegacyId != null) {
+                    int meta = clamp(parseInt(props.get(PROP_LEGACY_META), 0), 0, 15);
+                    return new LegacyBlockData(vanillaLegacyId.intValue(), meta, false);
+                }
+            }
         }
         int id = bridged == null ? 0 : bridged.intValue();
         int meta = props.containsKey(PROP_LEGACY_META)
@@ -501,6 +512,81 @@ public final class BlockStateBridge {
         return key;
     }
 
+    private static void ensureLegacyBridgeReady() {
+        try {
+            BlockRegistryBootstrap.initialize();
+        } catch (Throwable ignored) {
+        }
+    }
+
+    static String normalizeStateName(String name) {
+        if (name == null || name.length() == 0) {
+            return "minecraft:air";
+        }
+        return normalizeStateBlockKey(new ResourceLocation(name)).toString();
+    }
+
+    private static ResourceLocation normalizeStateBlockKey(ResourceLocation key) {
+        if (key == null) {
+            return new ResourceLocation("minecraft:air");
+        }
+        String namespace = key.getNamespace();
+        String path = key.getPath();
+        if (!"minecraft".equalsIgnoreCase(namespace)) {
+            return key;
+        }
+        String repairedPath = collapseCharacterSeparatedPath(path);
+        if (repairedPath.equals(path)) {
+            return key;
+        }
+        return new ResourceLocation(namespace, repairedPath);
+    }
+
+    private static String collapseCharacterSeparatedPath(String path) {
+        if (path == null || path.indexOf('_') < 0) {
+            return path == null ? "" : path;
+        }
+
+        String normalized = path.toLowerCase(Locale.ROOT);
+        int nonEmptySegments = 0;
+        boolean allSegmentsSingleCharacters = true;
+        int segmentLength = 0;
+        for (int i = 0; i <= normalized.length(); i++) {
+            char c = i < normalized.length() ? normalized.charAt(i) : '_';
+            if (c == '_') {
+                if (segmentLength > 0) {
+                    nonEmptySegments++;
+                    if (segmentLength != 1) {
+                        allSegmentsSingleCharacters = false;
+                    }
+                }
+                segmentLength = 0;
+            } else {
+                segmentLength++;
+            }
+        }
+        if (!allSegmentsSingleCharacters || nonEmptySegments < 3) {
+            return path;
+        }
+
+        StringBuilder out = new StringBuilder(normalized.length());
+        for (int i = 0; i < normalized.length(); i++) {
+            char c = normalized.charAt(i);
+            if (c != '_') {
+                out.append(c);
+                continue;
+            }
+            int runStart = i;
+            while (i + 1 < normalized.length() && normalized.charAt(i + 1) == '_') {
+                i++;
+            }
+            if (i > runStart && out.length() > 0 && out.charAt(out.length() - 1) != '_') {
+                out.append('_');
+            }
+        }
+        return out.toString();
+    }
+
     private static Integer parseLegacySyntheticId(String namespace, String path) {
         if (!"legacy".equals(namespace) || path == null || !path.startsWith("block_")) {
             return null;
@@ -510,6 +596,73 @@ public final class BlockStateBridge {
             return null;
         }
         return Integer.valueOf(parsed & 255);
+    }
+
+    private static Integer vanillaLegacyIdForPath(String path) {
+        if (path == null) {
+            return null;
+        }
+        if (isPath(path, "stone")) return Integer.valueOf(Block.STONE.id);
+        if (isPath(path, "grass", "grass_block")) return Integer.valueOf(Block.GRASS.id);
+        if (isPath(path, "dirt")) return Integer.valueOf(Block.DIRT.id);
+        if (isPath(path, "cobblestone")) return Integer.valueOf(Block.COBBLESTONE.id);
+        if (isPath(path, "oak_planks", "planks", "wood")) return Integer.valueOf(Block.WOOD.id);
+        if (isPath(path, "oak_sapling", "sapling")) return Integer.valueOf(Block.SAPLING.id);
+        if (isPath(path, "bedrock")) return Integer.valueOf(Block.BEDROCK.id);
+        if (isPath(path, "sand")) return Integer.valueOf(Block.SAND.id);
+        if (isPath(path, "gravel")) return Integer.valueOf(Block.GRAVEL.id);
+        if (isPath(path, "gold_ore")) return Integer.valueOf(Block.GOLD_ORE.id);
+        if (isPath(path, "iron_ore")) return Integer.valueOf(Block.IRON_ORE.id);
+        if (isPath(path, "coal_ore")) return Integer.valueOf(Block.COAL_ORE.id);
+        if (isPath(path, "oak_log", "log")) return Integer.valueOf(Block.LOG.id);
+        if (isPath(path, "oak_leaves", "leaves")) return Integer.valueOf(Block.LEAVES.id);
+        if (isPath(path, "sponge")) return Integer.valueOf(Block.SPONGE.id);
+        if (isPath(path, "wet_sponge")) return Integer.valueOf(Block.WET_SPONGE.id);
+        if (isPath(path, "glass")) return Integer.valueOf(Block.GLASS.id);
+        if (isPath(path, "lapis_ore")) return Integer.valueOf(Block.LAPIS_ORE.id);
+        if (isPath(path, "lapis_block")) return Integer.valueOf(Block.LAPIS_BLOCK.id);
+        if (isPath(path, "redstone_block")) return Integer.valueOf(Block.REDSTONE_BLOCK.id);
+        if (isPath(path, "coal_block")) return Integer.valueOf(Block.COAL_BLOCK.id);
+        if (isPath(path, "sandstone")) return Integer.valueOf(Block.SANDSTONE.id);
+        if (isPath(path, "note_block")) return Integer.valueOf(Block.NOTE_BLOCK.id);
+        if (isPath(path, "cobweb", "web")) return Integer.valueOf(Block.WEB.id);
+        if (isPath(path, "tall_grass", "long_grass")) return Integer.valueOf(Block.LONG_GRASS.id);
+        if (isPath(path, "dead_bush")) return Integer.valueOf(Block.DEAD_BUSH.id);
+        if (isPath(path, "white_wool", "wool")) return Integer.valueOf(Block.WOOL.id);
+        if (isPath(path, "dandelion", "yellow_flower")) return Integer.valueOf(Block.YELLOW_FLOWER.id);
+        if (isPath(path, "poppy", "red_rose")) return Integer.valueOf(Block.RED_ROSE.id);
+        if (isPath(path, "brown_mushroom")) return Integer.valueOf(Block.BROWN_MUSHROOM.id);
+        if (isPath(path, "red_mushroom")) return Integer.valueOf(Block.RED_MUSHROOM.id);
+        if (isPath(path, "gold_block")) return Integer.valueOf(Block.GOLD_BLOCK.id);
+        if (isPath(path, "iron_block")) return Integer.valueOf(Block.IRON_BLOCK.id);
+        if (isPath(path, "bricks", "brick")) return Integer.valueOf(Block.BRICK.id);
+        if (isPath(path, "bookshelf")) return Integer.valueOf(Block.BOOKSHELF.id);
+        if (isPath(path, "mossy_cobblestone")) return Integer.valueOf(Block.MOSSY_COBBLESTONE.id);
+        if (isPath(path, "mob_spawner")) return Integer.valueOf(Block.MOB_SPAWNER.id);
+        if (isPath(path, "crafting_table", "workbench")) return Integer.valueOf(Block.WORKBENCH.id);
+        if (isPath(path, "wheat", "crops")) return Integer.valueOf(Block.CROPS.id);
+        if (isPath(path, "farmland")) return Integer.valueOf(Block.SOIL.id);
+        if (isPath(path, "snow", "snow_layer")) return Integer.valueOf(Block.SNOW.id);
+        if (isPath(path, "ice")) return Integer.valueOf(Block.ICE.id);
+        if (isPath(path, "snow_block")) return Integer.valueOf(Block.SNOW_BLOCK.id);
+        if (isPath(path, "cactus")) return Integer.valueOf(Block.CACTUS.id);
+        if (isPath(path, "clay")) return Integer.valueOf(Block.CLAY.id);
+        if (isPath(path, "sugar_cane", "reeds")) return Integer.valueOf(Block.SUGAR_CANE_BLOCK.id);
+        if (isPath(path, "jukebox")) return Integer.valueOf(Block.JUKEBOX.id);
+        if (isPath(path, "oak_fence", "fence")) return Integer.valueOf(Block.FENCE.id);
+        if (isPath(path, "melon")) return Integer.valueOf(Block.MELON.id);
+        if (isPath(path, "pumpkin_stem")) return Integer.valueOf(Block.PUMPKIN_STEM.id);
+        if (isPath(path, "melon_stem")) return Integer.valueOf(Block.MELON_STEM.id);
+        if (isPath(path, "netherrack")) return Integer.valueOf(Block.NETHERRACK.id);
+        if (isPath(path, "soul_sand")) return Integer.valueOf(Block.SOUL_SAND.id);
+        if (isPath(path, "glowstone")) return Integer.valueOf(Block.GLOWSTONE.id);
+        if (isPath(path, "portal")) return Integer.valueOf(Block.PORTAL.id);
+        if (isPath(path, "brown_mushroom_block")) return Integer.valueOf(Block.BROWN_MUSHROOM_CAP.id);
+        if (isPath(path, "red_mushroom_block")) return Integer.valueOf(Block.RED_MUSHROOM_CAP.id);
+        if (isPath(path, "cake")) return Integer.valueOf(Block.CAKE_BLOCK.id);
+        if (isPath(path, "locked_chest")) return Integer.valueOf(Block.LOCKED_CHEST.id);
+        if (isPath(path, "stone_bricks", "stonebrick")) return Integer.valueOf(Block.STONE_BRICK.id);
+        return null;
     }
 
     private static int resolveMeta(Map<String, String> props, int fallback) {

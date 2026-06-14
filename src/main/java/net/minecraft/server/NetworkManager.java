@@ -3,6 +3,7 @@ package net.minecraft.server;
 import java.io.BufferedOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
+import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketAddress;
@@ -27,6 +28,7 @@ public class NetworkManager {
     public static int b;
     public static int c;
     private Object g = new Object();
+    private final Object writeLock = new Object();
     public Socket socket; // CraftBukkit - private -> public
     private SocketAddress i; //Project Poseidon - remove final statement
     private DataInputStream input;
@@ -36,8 +38,9 @@ public class NetworkManager {
     private List urgentQueue = Collections.synchronizedList(new ArrayList());
     private List highPriorityQueue = Collections.synchronizedList(new ArrayList());
     private List lowPriorityQueue = Collections.synchronizedList(new ArrayList());
-    private NetHandler p;
+    private volatile NetHandler p;
     private boolean q = false;
+    private volatile boolean readOnly = false;
     private Thread r;
     private Thread s;
     private boolean t = false;
@@ -392,7 +395,7 @@ public class NetworkManager {
                 }
 
                 long queueWaitMs = Math.max(0L, System.currentTimeMillis() - packet.timestamp);
-                Packet.a(packet, this.output);
+                writePacket(packet);
                 aint = e;
                 i = packet.b();
                 aint[i] += packet.a() + 1;
@@ -416,7 +419,7 @@ public class NetworkManager {
                 }
 
                 long queueWaitMs = Math.max(0L, System.currentTimeMillis() - packet.timestamp);
-                Packet.a(packet, this.output);
+                writePacket(packet);
                 aint = e;
                 i = packet.b();
                 aint[i] += packet.a() + 1;
@@ -445,7 +448,7 @@ public class NetworkManager {
                 }
 
                 long queueWaitMs = Math.max(0L, System.currentTimeMillis() - packet.timestamp);
-                Packet.a(packet, this.output);
+                writePacket(packet);
                 aint = e;
                 i = packet.b();
                 aint[i] += packet.a() + 1;
@@ -472,6 +475,39 @@ public class NetworkManager {
         }
     }
 
+    private void writePacket(Packet packet) throws IOException {
+        synchronized (this.writeLock) {
+            if (this.output == null) {
+                throw new IOException("Output stream closed");
+            }
+            Packet.a(packet, this.output);
+        }
+    }
+
+    public void flushOutputStream() throws IOException {
+        synchronized (this.writeLock) {
+            if (this.output != null) {
+                this.output.flush();
+            }
+        }
+    }
+
+    public void flushOutboundQueue(long maxWaitMs) {
+        long deadline = System.currentTimeMillis() + Math.max(0L, maxWaitMs);
+        try {
+            while (this.getQueuedPacketCount() > 0 && System.currentTimeMillis() <= deadline) {
+                if (!this.f()) {
+                    break;
+                }
+            }
+            this.flushOutputStream();
+        } catch (Exception exception) {
+            if (!this.t) {
+                this.a(exception);
+            }
+        }
+    }
+
     public void a() {
         this.s.interrupt();
         this.r.interrupt();
@@ -481,6 +517,10 @@ public class NetworkManager {
         boolean flag = false;
 
         try {
+            if (this.readOnly) {
+                return false;
+            }
+
             Packet packet = Packet.a(this.input, this.p.c(), this.pvn); // uberbukkit - allows packets to be read accordingly to client version
 
             if (packet != null) {
@@ -561,6 +601,7 @@ public class NetworkManager {
     }
 
     private boolean disconnectForPacketRate(float observedRate) {
+        this.setReadOnly();
         String playerUsername = "Unknown";
         if (this.p instanceof NetServerHandler) {
             NetServerHandler handler = (NetServerHandler) this.p;
@@ -575,8 +616,20 @@ public class NetworkManager {
         return false;
     }
 
+    public void setReadOnly() {
+        this.readOnly = true;
+        try {
+            if (this.socket != null) {
+                this.socket.shutdownInput();
+            }
+        } catch (Throwable throwable) {
+            ;
+        }
+    }
+
     public void a(String s, Object... aobject) {
         if (this.l) {
+            this.readOnly = true;
             this.t = true;
             this.u = s;
             this.v = aobject;

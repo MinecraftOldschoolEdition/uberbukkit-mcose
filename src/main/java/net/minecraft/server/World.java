@@ -71,6 +71,10 @@ public class World implements IBlockAccess {
     public boolean allowMonsters = true; // CraftBukkit - private -> public
     public boolean allowAnimals = true; // CraftBukkit - private -> public
     static int A = 0;
+    private static final int NETHER_LIGHTNING_CHANCE = 120000;
+    private static final int NETHER_LIGHTNING_PLAYER_TICK_CHANCE = 1800;
+    private static final int NETHER_LIGHTNING_MIN_Y = 8;
+    private static final int NETHER_LIGHTNING_MAX_Y = 124;
     private Set P = new HashSet();
     private int Q;
     private List R;
@@ -615,6 +619,62 @@ public class World implements IBlockAccess {
         }
 
         return this.isSafePlayerSpawnAt(x, y, z) ? y : -1;
+    }
+
+    public ChunkCoordinates findSafePlayerSpawnAtColumn(int x, int z) {
+        return this.findSafePlayerSpawnAtColumn(x, this.f(x, z), z);
+    }
+
+    public ChunkCoordinates findSafePlayerSpawnAtColumn(int x, int preferredY, int z) {
+        int terrainType = this.worldData != null ? this.worldData.getTerrainType() : 0;
+        int safeX = x;
+        int safeZ = z;
+
+        if (terrainType == 6) {
+            safeX = Math.max(1, Math.min(254, safeX));
+            safeZ = Math.max(1, Math.min(254, safeZ));
+        }
+
+        int safeY = this.findSafePlayerSpawnYFromColumn(safeX, preferredY, safeZ);
+        if (safeY > 0) {
+            return new ChunkCoordinates(safeX, safeY, safeZ);
+        }
+
+        return null;
+    }
+
+    private int findSafePlayerSpawnYFromColumn(int x, int preferredY, int z) {
+        int y = preferredY;
+        if (y < 2) {
+            y = 2;
+        } else if (y > 125) {
+            y = 125;
+        }
+
+        while (y < 126 && !this.isSafePlayerSpawnSpaceAt(x, y, z)) {
+            ++y;
+        }
+
+        if (y >= 126 && !this.isSafePlayerSpawnSpaceAt(x, y, z)) {
+            return -1;
+        }
+
+        --y;
+        while (y > 1 && this.isSafePlayerSpawnSpaceAt(x, y, z)) {
+            --y;
+        }
+
+        ++y;
+        return this.isSafePlayerSpawnAt(x, y, z) ? y : -1;
+    }
+
+    private boolean isSafePlayerSpawnSpaceAt(int x, int y, int z) {
+        if (y <= 1 || y >= 126) {
+            return false;
+        }
+
+        return this.isSafeSpawnSpaceBlock(this.getTypeId(x, y, z))
+            && this.isSafeSpawnSpaceBlock(this.getTypeId(x, y + 1, z));
     }
 
     private int computeSpawnSupportScore(int x, int z) {
@@ -1780,6 +1840,120 @@ public class World implements IBlockAccess {
 
         return -1;
     }
+
+    private void processNetherLightningTick() {
+        if (!(this.worldProvider instanceof WorldProviderHell) || this.players == null || this.players.isEmpty()) {
+            return;
+        }
+
+        if (this.random.nextInt(NETHER_LIGHTNING_PLAYER_TICK_CHANCE) != 0) {
+            return;
+        }
+
+        EntityHuman player = (EntityHuman) this.players.get(this.random.nextInt(this.players.size()));
+        this.strikeNetherLightningNearPlayer(player);
+    }
+
+    public boolean strikeNetherLightningNearPlayer(EntityHuman player) {
+        if (player == null || !(this.worldProvider instanceof WorldProviderHell)) {
+            return false;
+        }
+
+        for (int attempt = 0; attempt < 10; ++attempt) {
+            double angle = this.random.nextDouble() * Math.PI * 2.0D;
+            double distance = 10.0D + this.random.nextDouble() * 36.0D;
+            int x = MathHelper.floor(player.locX + Math.cos(angle) * distance);
+            int z = MathHelper.floor(player.locZ + Math.sin(angle) * distance);
+            int y = this.findNetherLightningStrikeYNearPlayer(player, x, z);
+            if (y >= 0) {
+                return this.strikeLightningAt((double) x + 0.5D, (double) y, (double) z + 0.5D);
+            }
+        }
+
+        return this.strikeLightningAt(player.locX, player.locY + 1.0D, player.locZ);
+    }
+
+    public boolean strikeLightningAt(double x, double y, double z) {
+        if (y < (double) NETHER_LIGHTNING_MIN_Y) {
+            y = (double) NETHER_LIGHTNING_MIN_Y;
+        }
+        if (y > (double) NETHER_LIGHTNING_MAX_Y) {
+            y = (double) NETHER_LIGHTNING_MAX_Y;
+        }
+
+        return this.strikeLightning(new EntityWeatherStorm(this, x, y, z));
+    }
+
+    private int findNetherLightningStrikeYNearPlayer(EntityHuman player, int x, int z) {
+        int groundY = this.findNetherLightningStrikeY(x, z);
+        int playerY = MathHelper.floor(player.locY + 1.0D);
+        if (playerY < NETHER_LIGHTNING_MIN_Y) {
+            playerY = NETHER_LIGHTNING_MIN_Y;
+        } else if (playerY > NETHER_LIGHTNING_MAX_Y) {
+            playerY = NETHER_LIGHTNING_MAX_Y;
+        }
+
+        if (groundY >= 0 && Math.abs(groundY - playerY) <= 24) {
+            return groundY;
+        }
+
+        for (int radius = 0; radius <= 12; ++radius) {
+            int y = playerY + radius;
+            if (this.canRenderNetherLightningAt(x, y, z)) {
+                return y;
+            }
+            y = playerY - radius;
+            if (this.canRenderNetherLightningAt(x, y, z)) {
+                return y;
+            }
+        }
+
+        return groundY >= 0 ? groundY : playerY;
+    }
+
+    private int findNetherLightningStrikeY(int x, int z) {
+        for (int attempt = 0; attempt < 12; ++attempt) {
+            int y = NETHER_LIGHTNING_MIN_Y + this.random.nextInt(NETHER_LIGHTNING_MAX_Y - NETHER_LIGHTNING_MIN_Y + 1);
+            if (this.canSpawnNetherLightningAt(x, y, z)) {
+                return y;
+            }
+        }
+
+        int topY = this.e(x, z);
+        if (topY > NETHER_LIGHTNING_MAX_Y) {
+            topY = NETHER_LIGHTNING_MAX_Y;
+        }
+
+        for (int y = topY; y >= NETHER_LIGHTNING_MIN_Y; --y) {
+            if (this.canSpawnNetherLightningAt(x, y, z)) {
+                return y;
+            }
+        }
+
+        return -1;
+    }
+
+    private boolean canSpawnNetherLightningAt(int x, int y, int z) {
+        if (y <= 1 || y > NETHER_LIGHTNING_MAX_Y || !this.isChunkLoaded(x, y, z)) {
+            return false;
+        }
+
+        if (this.getTypeId(x, y, z) != 0 || this.getTypeId(x, y + 1, z) != 0 || this.getTypeId(x, y + 2, z) != 0) {
+            return false;
+        }
+
+        int belowBlockId = this.getTypeId(x, y - 1, z);
+        return belowBlockId > 0 && Block.o[belowBlockId];
+    }
+
+    private boolean canRenderNetherLightningAt(int x, int y, int z) {
+        if (y <= 1 || y > NETHER_LIGHTNING_MAX_Y || !this.isChunkLoaded(x, y, z)) {
+            return false;
+        }
+
+        return this.getTypeId(x, y, z) == 0 && this.getTypeId(x, y + 1, z) == 0;
+    }
+
     private static long chunkKeyFromChunkCoords(int chunkX, int chunkZ) {
         return ((long) chunkX & 4294967295L) | (((long) chunkZ & 4294967295L) << 32);
     }
@@ -2574,6 +2748,8 @@ public class World implements IBlockAccess {
             SpawnerCreature.spawnEntities(this, this.allowMonsters, this.allowAnimals);
         }
 
+        this.processNetherLightningTick();
+
         // Unload chunks
         this.chunkProvider.unloadChunks(); // Corrected from b() to unloadChunks()
 
@@ -2891,6 +3067,18 @@ public class World implements IBlockAccess {
                 k1 = this.e(l, j1);
                 if (this.s(l, k1, j1)) {
                     this.strikeLightning(new EntityWeatherStorm(this, (double) l, (double) k1, (double) j1));
+                    this.m = 2;
+                }
+            }
+
+            if (this.worldProvider instanceof WorldProviderHell && this.random.nextInt(NETHER_LIGHTNING_CHANCE) == 0) {
+                this.g = this.g * 3 + 1013904223;
+                k = this.g >> 2;
+                l = i + (k & 15);
+                j1 = j + (k >> 8 & 15);
+                k1 = this.findNetherLightningStrikeY(l, j1);
+                if (k1 >= 0) {
+                    this.strikeLightning(new EntityWeatherStorm(this, (double) l + 0.5D, (double) k1, (double) j1 + 0.5D));
                     this.m = 2;
                 }
             }

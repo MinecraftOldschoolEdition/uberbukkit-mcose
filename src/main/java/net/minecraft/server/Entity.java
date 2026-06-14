@@ -1034,8 +1034,12 @@ public abstract class Entity implements SyncedDataHolder {
         nbttagcompound.a("Fire", (short) this.fireTicks);
         nbttagcompound.a("Air", (short) this.airTicks);
         nbttagcompound.a("NoGravity", this.isNoGravity());
-        if (this.getCustomName() != null && this.getCustomName().length() > 0) {
-            nbttagcompound.setString("CustomName", this.getCustomName());
+        String customName = this.getCustomName();
+        if (customName != null && customName.length() > 0) {
+            nbttagcompound.setString("CustomName", customName);
+            NBTTagCompound entityData = nbttagcompound.hasKey("entity_data") ? nbttagcompound.k("entity_data") : new NBTTagCompound();
+            entityData.setString("custom_name", customName);
+            nbttagcompound.a("entity_data", entityData);
         }
         if (this.entityTypeHolder != null && this.entityTypeHolder.key() != null) {
             nbttagcompound.setString("entity_type", this.entityTypeHolder.key().toString());
@@ -1085,6 +1089,11 @@ public abstract class Entity implements SyncedDataHolder {
         this.noGravity = nbttagcompound.m("NoGravity");
         if (nbttagcompound.hasKey("CustomName")) {
             this.customName = nbttagcompound.getString("CustomName");
+        } else if (nbttagcompound.hasKey("entity_data")) {
+            NBTTagCompound entityData = nbttagcompound.k("entity_data");
+            if (entityData.hasKey("custom_name")) {
+                this.customName = entityData.getString("custom_name");
+            }
         }
         if (nbttagcompound.hasKey("entity_type")) {
             try {

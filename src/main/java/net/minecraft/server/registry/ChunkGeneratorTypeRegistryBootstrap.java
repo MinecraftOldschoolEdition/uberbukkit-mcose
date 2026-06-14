@@ -14,6 +14,7 @@ public final class ChunkGeneratorTypeRegistryBootstrap {
         // Register known generator/provider classes with simple keys
         register("default", ChunkProviderGenerate.class);
         register("nether", ChunkProviderHell.class);
+        register("nether_sky", ChunkProviderNetherSky.class);
         register("flat", ChunkProviderFlat.class);
         register("sky", ChunkProviderSky.class);
         // Classic providers

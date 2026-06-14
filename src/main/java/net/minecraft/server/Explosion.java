@@ -225,6 +225,9 @@ public class Explosion {
         }
 
         EntityExplodeEvent event = new EntityExplodeEvent(explode, location, blockList);
+        if (this.source instanceof EntityTNTPrimed) {
+            event.setYield(1.0F);
+        }
         this.world.getServer().getPluginManager().callEvent(event);
 
         if (event.isCancelled()) {

@@ -14,7 +14,7 @@ import java.util.Map;
 import java.util.logging.Logger;
 
 /**
- * One-way upgrader that rewrites item-bearing world NBT to RegionCore stack format.
+ * One-way upgrader for RegionCore item, entity, and chunk state data.
  */
 public final class RegionCoreWorldUpgrader {
     private static final String[] ITEM_STACK_REWRITE_KEYS = new String[] {
@@ -40,49 +40,38 @@ public final class RegionCoreWorldUpgrader {
         }
 
         int worldVersion = readWorldVersion(worldDir);
-        int chestFacingRepairRev = readChestFacingRepairRevision(worldDir);
-        boolean needsFormatUpgrade = worldVersion < WorldSaveVersions.MCREGION_2;
-        boolean needsChestFacingRepair = chestFacingRepairRev < CHEST_FACING_REPAIR_REV;
-
-        if (!needsFormatUpgrade && !needsChestFacingRepair) {
+        if (!WorldSaveVersions.requiresRegionCoreConversion(worldVersion)) {
             return;
         }
 
         Logger log = logger == null ? MinecraftServer.log : logger;
-        if (needsFormatUpgrade) {
-            log.info("[RegionCore] Upgrading world '" + worldDir.getName() + "' from "
-                    + WorldSaveVersions.nameOf(worldVersion) + " to RegionCore...");
-        } else {
-            log.info("[RegionCore] Applying chest-facing parity repair revision " + CHEST_FACING_REPAIR_REV
-                    + " for world '" + worldDir.getName() + "'...");
-        }
+        log.info("[RegionCore] Upgrading world '" + worldDir.getName() + "' from "
+                + WorldSaveVersions.nameOf(worldVersion) + " to RegionCore...");
 
         int changedDatFiles = 0;
         int changedChunks = 0;
 
-        if (needsFormatUpgrade) {
-            changedDatFiles += rewriteDatIfPresent(new File(worldDir, "level.dat"));
-            changedDatFiles += rewriteDatIfPresent(new File(worldDir, "level.dat_old"));
+        changedDatFiles += rewriteDatIfPresent(new File(worldDir, "level.dat"));
+        changedDatFiles += rewriteDatIfPresent(new File(worldDir, "level.dat_old"));
 
-            File playersDir = new File(worldDir, "players");
-            File[] playerFiles = playersDir.listFiles();
-            if (playerFiles != null) {
-                for (int i = 0; i < playerFiles.length; i++) {
-                    File f = playerFiles[i];
-                    if (f != null && f.isFile() && f.getName().endsWith(".dat")) {
-                        changedDatFiles += rewriteDatIfPresent(f);
-                    }
+        File playersDir = new File(worldDir, "players");
+        File[] playerFiles = playersDir.listFiles();
+        if (playerFiles != null) {
+            for (int i = 0; i < playerFiles.length; i++) {
+                File f = playerFiles[i];
+                if (f != null && f.isFile() && f.getName().endsWith(".dat")) {
+                    changedDatFiles += rewriteDatIfPresent(f);
                 }
             }
+        }
 
-            File dataDir = new File(worldDir, "data");
-            File[] dataFiles = dataDir.listFiles();
-            if (dataFiles != null) {
-                for (int i = 0; i < dataFiles.length; i++) {
-                    File f = dataFiles[i];
-                    if (f != null && f.isFile() && f.getName().endsWith(".dat")) {
-                        changedDatFiles += rewriteDatIfPresent(f);
-                    }
+        File dataDir = new File(worldDir, "data");
+        File[] dataFiles = dataDir.listFiles();
+        if (dataFiles != null) {
+            for (int i = 0; i < dataFiles.length; i++) {
+                File f = dataFiles[i];
+                if (f != null && f.isFile() && f.getName().endsWith(".dat")) {
+                    changedDatFiles += rewriteDatIfPresent(f);
                 }
             }
         }
@@ -101,12 +90,7 @@ public final class RegionCoreWorldUpgrader {
             }
         }
 
-        if (needsFormatUpgrade) {
-            updateLevelVersion(worldDir, WorldSaveVersions.MCREGION_2);
-        }
-        if (needsChestFacingRepair) {
-            markChestFacingRepairRevision(worldDir, CHEST_FACING_REPAIR_REV);
-        }
+        updateLevelVersion(worldDir, WorldSaveVersions.MCREGION_2);
 
         log.info("[RegionCore] Upgrade complete for '" + worldDir.getName()
                 + "' (datFiles=" + changedDatFiles
@@ -216,12 +200,12 @@ public final class RegionCoreWorldUpgrader {
                         int chunkZ = regionZ * 32 + z;
                         ChestItemSnapshot chestBefore = snapshotChestItems(chunkNbt);
 
-                        // Keep parity with client SaveConverterMcRegion: item/container conversion,
+                        // Match client SaveConverterMcRegion: item/container conversion,
                         // then chest-facing repair, then block-state rewrite.
-                        boolean itemChanged = rewriteNbtTree(chunkNbt);
+                        boolean nbtChanged = rewriteNbtTree(chunkNbt);
                         boolean chestFacingChanged = rewriteChestMetadataFromLegacyOrientation(worldDir, chunkX, chunkZ, chunkNbt, chunkBlockCache);
                         boolean blockStateChanged = rewriteChunkBlockStates(chunkNbt);
-                        boolean changed = itemChanged || chestFacingChanged || blockStateChanged;
+                        boolean changed = nbtChanged || chestFacingChanged || blockStateChanged;
                         if (!changed) {
                             continue;
                         }
@@ -273,20 +257,13 @@ public final class RegionCoreWorldUpgrader {
         NBTTagCompound level = chunkNbt.k("Level");
         byte[] blocks;
         byte[] data;
-        boolean stateBackedChunk = false;
 
         if (level.hasKey("Blocks") && level.hasKey("Data")) {
             blocks = level.j("Blocks");
             data = level.j("Data");
-        } else if (BlockStateCodec.hasStateData(level)) {
-            BlockStateCodec.DecodedState decodedState = BlockStateCodec.readStateData(level);
-            if (decodedState == null) {
-                return false;
-            }
-            blocks = decodedState.blocks;
-            data = decodedState.metadata;
-            stateBackedChunk = true;
         } else {
+            // Already-RegionCore chunks must not be decoded and re-encoded by this legacy repair.
+            // That path is lossy when the registry bridge is incomplete and can erase terrain.
             return false;
         }
 
@@ -325,17 +302,7 @@ public final class RegionCoreWorldUpgrader {
         }
 
         if (changed) {
-            if (stateBackedChunk) {
-                BlockStateCodec.writeStateData(level, blocks, data);
-                if (level.hasKey("Blocks")) {
-                    level.remove("Blocks");
-                }
-                if (level.hasKey("Data")) {
-                    level.remove("Data");
-                }
-            } else {
-                level.a("Data", data);
-            }
+            level.a("Data", data);
             chunkNbt.a("Level", level);
         }
 
@@ -474,23 +441,19 @@ public final class RegionCoreWorldUpgrader {
         }
 
         NBTTagCompound level = root.k("Level");
-        byte[] blocks = null;
         if (level.hasKey("Blocks")) {
-            blocks = level.j("Blocks");
-        } else if (BlockStateCodec.hasStateData(level)) {
-            BlockStateCodec.DecodedState decodedState = BlockStateCodec.readStateData(level);
-            if (decodedState != null) {
-                blocks = decodedState.blocks;
+            byte[] blocks = level.j("Blocks");
+            if (blocks == null || blocks.length < 32768) {
+                chunkBlockCache.put(key, null);
+                return null;
             }
+
+            chunkBlockCache.put(key, blocks);
+            return blocks;
         }
 
-        if (blocks == null || blocks.length < 32768) {
-            chunkBlockCache.put(key, null);
-            return null;
-        }
-
-        chunkBlockCache.put(key, blocks);
-        return blocks;
+        chunkBlockCache.put(key, null);
+        return null;
     }
 
     private static long chunkKey(int chunkX, int chunkZ) {
@@ -610,39 +573,6 @@ public final class RegionCoreWorldUpgrader {
         return false;
     }
 
-    private static boolean rewriteChunkBlockStates(NBTTagCompound chunkNbt) {
-        if (chunkNbt == null || !chunkNbt.hasKey("Level")) {
-            return false;
-        }
-
-        NBTTagCompound level = chunkNbt.k("Level");
-        boolean changed = false;
-
-        if (level.hasKey("Blocks") && level.hasKey("Data")) {
-            byte[] blocks = level.j("Blocks");
-            byte[] data = level.j("Data");
-            if (blocks != null && data != null && blocks.length >= 32768 && data.length >= 16384) {
-                if (BlockStateCodec.writeStateData(level, blocks, data)) {
-                    changed = true;
-                }
-            }
-        }
-
-        if (BlockStateCodec.hasStateData(level)) {
-            if (level.hasKey("Blocks")) {
-                level.remove("Blocks");
-                changed = true;
-            }
-            if (level.hasKey("Data")) {
-                level.remove("Data");
-                changed = true;
-            }
-            chunkNbt.a("Level", level);
-        }
-
-        return changed;
-    }
-
     private static boolean tryUpgradeItemCompound(NBTTagCompound compound) {
         if (!looksLikeItemCompound(compound)) {
             return false;
@@ -653,7 +583,7 @@ public final class RegionCoreWorldUpgrader {
             return false;
         }
 
-        NBTTagCompound rewritten = stack.a(new NBTTagCompound());
+        NBTTagCompound rewritten = stack.save(new NBTTagCompound());
         overwriteItemStackDataPreservingWrapperFields(compound, rewritten);
         return true;
     }
@@ -697,6 +627,39 @@ public final class RegionCoreWorldUpgrader {
                 target.a(key, value);
             }
         }
+    }
+
+    private static boolean rewriteChunkBlockStates(NBTTagCompound chunkNbt) {
+        if (chunkNbt == null || !chunkNbt.hasKey("Level")) {
+            return false;
+        }
+
+        NBTTagCompound level = chunkNbt.k("Level");
+        boolean changed = false;
+
+        if (level.hasKey("Blocks") && level.hasKey("Data")) {
+            byte[] blocks = level.j("Blocks");
+            byte[] data = level.j("Data");
+            if (blocks != null && data != null && blocks.length >= 32768 && data.length >= 16384) {
+                if (BlockStateCodec.writeStateData(level, blocks, data)) {
+                    changed = true;
+                }
+            }
+        }
+
+        if (BlockStateCodec.hasStateData(level)) {
+            if (level.hasKey("Blocks")) {
+                level.remove("Blocks");
+                changed = true;
+            }
+            if (level.hasKey("Data")) {
+                level.remove("Data");
+                changed = true;
+            }
+            chunkNbt.a("Level", level);
+        }
+
+        return changed;
     }
 
     private static void updateLevelVersion(File worldDir, int version) {

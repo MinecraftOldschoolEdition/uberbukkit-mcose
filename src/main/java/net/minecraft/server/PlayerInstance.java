@@ -61,6 +61,7 @@ class PlayerInstance {
             }
 
             entityplayer.chunkCoordIntPairQueue.remove(this.location);
+            entityplayer.playerLoadedChunkCoordIntPairs.remove(this.location);
             // CraftBukkit - contains -> remove -- TODO VERIFY!!!!
             if (entityplayer.playerChunkCoordIntPairs.remove(this.location)) {
                 entityplayer.netServerHandler.sendPacket(new Packet50PreChunk(this.chunkX, this.chunkZ, false));
@@ -117,7 +118,7 @@ class PlayerInstance {
         for (int i = 0; i < this.b.size(); ++i) {
             EntityPlayer entityplayer = (EntityPlayer) this.b.get(i);
 
-            if (entityplayer.playerChunkCoordIntPairs.contains(this.location)) {
+            if (entityplayer.hasChunkDelivered(this.location)) {
                 entityplayer.netServerHandler.sendPacket(packet.clone());
             }
         }

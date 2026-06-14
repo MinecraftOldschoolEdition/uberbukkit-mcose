@@ -59,6 +59,9 @@ public class MinecraftServer implements Runnable, ICommandListener {
     public ServerConfigurationManager serverConfigurationManager;
     public ConsoleCommandHandler consoleCommandHandler; // CraftBukkit - made public
     private boolean isRunning = true;
+    private static final int GRACEFUL_STOP_DRAIN_TICKS = 4;
+    private boolean gracefulStopRequested = false;
+    private int gracefulStopDrainTicksRemaining = 0;
     public boolean isStopped = false;
     int ticks = 0;
     public String i;
@@ -274,22 +277,22 @@ public class MinecraftServer implements Runnable, ICommandListener {
         } else {
             log.info("Allow commands: host/operators only");
         }
+
+        try {
+            net.minecraft.server.registry.BlockRegistryBootstrap.initialize();
+            net.minecraft.server.registry.ItemRegistryBootstrap.initialize();
+            net.minecraft.server.registry.LegacyIdBridge.refresh();
+        } catch (Throwable registryFailure) {
+            log.log(Level.WARNING, "[RegistryBootstrap] Failed to initialize core registries before world IO; continuing.", registryFailure);
+        }
         
         String preflightWorldName = this.propertyManager.getString("level-name", "world");
         try {
             WorldLoaderServer preflightLoader = new WorldLoaderServer(this.worldContainer);
-            boolean needsLegacyConversion = preflightLoader.isConvertable(preflightWorldName)
-                || preflightLoader.hasLegacyChunkData(preflightWorldName);
-            if (needsLegacyConversion) {
-                log.info("Converting map!");
-                if (!preflightLoader.convert(preflightWorldName, new ConvertProgressUpdater(this))) {
-                    throw new RuntimeException("Legacy world conversion did not complete for '" + preflightWorldName + "'");
-                }
-            }
-            RegionCoreWorldUpgrader.upgradeWorldToRegionCore(new File(this.worldContainer, preflightWorldName), log);
+            this.upgradeWorldStorageIfNeeded(preflightLoader, preflightWorldName);
             if (this.propertyManager.getBoolean("allow-nether", true) && !this.singleplayerLayout) {
                 String preflightNetherName = preflightWorldName + "_" + Environment.getEnvironment(-1).toString().toLowerCase();
-                RegionCoreWorldUpgrader.upgradeWorldToRegionCore(new File(this.worldContainer, preflightNetherName), log);
+                this.upgradeWorldStorageIfNeeded(preflightLoader, preflightNetherName);
             }
         } catch (RuntimeException conversionFailure) {
             log.log(Level.WARNING, "[RegionCore] Failed to fully upgrade world data during preflight startup; continuing with existing world data.", conversionFailure);
@@ -411,6 +414,18 @@ public class MinecraftServer implements Runnable, ICommandListener {
         } catch (ClassNotFoundException e) {
             return false;
         }
+    }
+
+    private void upgradeWorldStorageIfNeeded(WorldLoaderServer loader, String worldName) {
+        boolean needsLegacyConversion = loader.isConvertable(worldName) || loader.hasLegacyChunkData(worldName);
+        if (needsLegacyConversion) {
+            log.info("Converting map '" + worldName + "'!");
+            if (!loader.convert(worldName, new ConvertProgressUpdater(this))) {
+                throw new RuntimeException("Legacy world conversion did not complete for '" + worldName + "'");
+            }
+        }
+
+        RegionCoreWorldUpgrader.upgradeWorldToRegionCore(new File(this.worldContainer, worldName), log);
     }
 
     private void a(Convertable convertable, String s, long i) {
@@ -810,7 +825,33 @@ public class MinecraftServer implements Runnable, ICommandListener {
     }
 
     public void a() {
-        this.isRunning = false;
+        synchronized (this) {
+            if (!this.isRunning || this.gracefulStopRequested) {
+                return;
+            }
+            this.gracefulStopRequested = true;
+            this.gracefulStopDrainTicksRemaining = GRACEFUL_STOP_DRAIN_TICKS;
+        }
+        log.info("Stop requested; draining network packets for " + GRACEFUL_STOP_DRAIN_TICKS + " ticks before final save.");
+    }
+
+    private void processGracefulStopDrainTick() {
+        boolean stopNow = false;
+        synchronized (this) {
+            if (!this.gracefulStopRequested || !this.isRunning) {
+                return;
+            }
+            if (this.gracefulStopDrainTicksRemaining > 0) {
+                --this.gracefulStopDrainTicksRemaining;
+            }
+            if (this.gracefulStopDrainTicksRemaining <= 0) {
+                this.isRunning = false;
+                stopNow = true;
+            }
+        }
+        if (stopNow) {
+            log.info("Graceful stop drain complete; shutting down.");
+        }
     }
 
     public void run() {
@@ -879,6 +920,7 @@ public class MinecraftServer implements Runnable, ICommandListener {
 
             while (this.isRunning) {
                 this.b();
+                this.processGracefulStopDrainTick();
 
                 try {
                     Thread.sleep(10L);
@@ -1060,6 +1102,7 @@ public class MinecraftServer implements Runnable, ICommandListener {
         profiler.startSection("consoleCommandDispatch");
         try {
             this.b();
+            this.processGracefulStopDrainTick();
         } catch (Exception exception) {
             log.log(Level.WARNING, "Unexpected exception while parsing console command", exception);
         } finally {

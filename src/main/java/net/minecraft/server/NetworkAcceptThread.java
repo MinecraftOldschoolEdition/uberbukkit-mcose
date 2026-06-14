@@ -63,6 +63,9 @@ class NetworkAcceptThread extends Thread {
                     if (throttleTriggered) {
                         socket.close();
                     } else {
+                        try { socket.setTcpNoDelay(true); } catch (IOException ignored) {}
+                        try { socket.setSoTimeout(30000); } catch (IOException ignored) {}
+                        try { socket.setKeepAlive(false); } catch (IOException ignored) {}
                         NetLoginHandler netloginhandler = new NetLoginHandler(this.a, socket, "Connection #" + NetworkListenThread.b(this.b));
                         NetworkListenThread.a(this.b, netloginhandler);
                     }

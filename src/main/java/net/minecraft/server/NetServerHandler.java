@@ -470,6 +470,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
 
         this.player.B();
         this.sendPacket(new Packet255KickDisconnect(s));
+        this.networkManager.flushOutboundQueue(250L);
         this.networkManager.d();
 
         // CraftBukkit start
@@ -1844,6 +1845,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
                 // If compression queue is currently saturated, fall back to direct network queue
                 // to avoid dropping chunk packets.
                 this.networkManager.queue(packet);
+                this.player.markFullChunkDelivered(packet);
             }
             packet = null;
         } else if (packet instanceof Packet3Chat) {
@@ -2213,14 +2215,18 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             if (stack.count < 1) stack.count = 1;
             if (stack.count > max) stack.count = max;
         }
-        if (slot >= 0 && slot < 36) {
+        if (slot >= 5 && slot < 9) {
+            this.player.inventory.armor[8 - slot] = stack;
+        } else if (slot >= 0 && slot < 36) {
             this.player.inventory.items[slot] = stack;
         } else if (slot >= 36 && slot < 45) {
             this.player.inventory.items[slot - 36] = stack;
         } else {
             return;
         }
-        ItemStack confirm = (slot >= 36 && slot < 45) ? this.player.inventory.items[slot - 36] : this.player.inventory.items[slot];
+        ItemStack confirm = (slot >= 5 && slot < 9)
+                ? this.player.inventory.armor[8 - slot]
+                : ((slot >= 36 && slot < 45) ? this.player.inventory.items[slot - 36] : this.player.inventory.items[slot]);
         this.player.netServerHandler.sendPacket(new Packet103SetSlot(0, slot, confirm));
     }
 

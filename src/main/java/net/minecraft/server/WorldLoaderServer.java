@@ -19,12 +19,16 @@ public class WorldLoaderServer extends WorldLoader {
     public boolean isConvertable(String s) {
         WorldData worlddata = this.b(s);
 
-        return worlddata != null && worlddata.i() == WorldSaveVersions.LEGACY_PRE_MCREGION;
+        return worlddata != null && WorldSaveVersions.requiresRegionCoreConversion(worlddata.i());
     }
 
     public boolean hasLegacyChunkData(String s) {
         File file1 = new File(this.a, s);
         if (!file1.exists() || !file1.isDirectory()) {
+            return false;
+        }
+
+        if (!WorldSaveVersions.isLegacyPreMcRegion(this.getWorldVersionOrLegacy(s))) {
             return false;
         }
 
@@ -38,42 +42,54 @@ public class WorldLoaderServer extends WorldLoader {
 
     public boolean convert(String s, IProgressUpdate iprogressupdate) {
         iprogressupdate.a(0);
-        ArrayList arraylist = new ArrayList();
-        ArrayList arraylist1 = new ArrayList();
-        ArrayList arraylist2 = new ArrayList();
-        ArrayList arraylist3 = new ArrayList();
         File file1 = new File(this.a, s);
-        File file2 = new File(file1, "DIM-1");
         if (!file1.exists() || !file1.isDirectory()) {
             return false;
         }
 
-        System.out.println("Scanning folders...");
-        this.a(file1, arraylist, arraylist1);
-        if (file2.exists()) {
-            this.a(file2, arraylist2, arraylist3);
+        int worldVersion = this.getWorldVersionOrLegacy(s);
+        if (!WorldSaveVersions.requiresRegionCoreConversion(worldVersion)) {
+            iprogressupdate.a(100);
+            return true;
         }
 
-        int i = arraylist.size() + arraylist2.size() + arraylist1.size() + arraylist3.size();
+        if (WorldSaveVersions.isLegacyPreMcRegion(worldVersion)) {
+            ArrayList arraylist = new ArrayList();
+            ArrayList arraylist1 = new ArrayList();
+            ArrayList arraylist2 = new ArrayList();
+            ArrayList arraylist3 = new ArrayList();
+            File file2 = new File(file1, "DIM-1");
 
-        System.out.println("Total conversion count is " + i);
-        this.a(file1, arraylist, 0, i, iprogressupdate);
-        if (file2.exists()) {
-            this.a(file2, arraylist2, arraylist.size(), i, iprogressupdate);
-        }
-        WorldData worlddata = this.b(s);
-        if (worlddata == null) {
-            throw new RuntimeException("Failed to load world metadata after legacy chunk conversion for '" + s + "'");
+            System.out.println("Scanning folders...");
+            this.a(file1, arraylist, arraylist1);
+            if (file2.exists()) {
+                this.a(file2, arraylist2, arraylist3);
+            }
+
+            int i = arraylist.size() + arraylist2.size() + arraylist1.size() + arraylist3.size();
+
+            System.out.println("Total conversion count is " + i);
+            if (i > 0) {
+                this.a(file1, arraylist, 0, i, iprogressupdate);
+                if (file2.exists()) {
+                    this.a(file2, arraylist2, arraylist.size(), i, iprogressupdate);
+                }
+                this.a(arraylist1, arraylist.size() + arraylist2.size(), i, iprogressupdate);
+                if (file2.exists()) {
+                    this.a(arraylist3, arraylist.size() + arraylist2.size() + arraylist1.size(), i, iprogressupdate);
+                }
+            }
+
+            WorldData worlddata = this.b(s);
+            if (worlddata == null) {
+                throw new RuntimeException("Failed to load world metadata after legacy chunk conversion for '" + s + "'");
+            }
+
+            worlddata.a(WorldSaveVersions.MCREGION_1);
+            IDataManager idatamanager = this.a(s, false);
+            idatamanager.a(worlddata);
         }
 
-        worlddata.a(WorldSaveVersions.MCREGION_1);
-        IDataManager idatamanager = this.a(s, false);
-
-        idatamanager.a(worlddata);
-        this.a(arraylist1, arraylist.size() + arraylist2.size(), i, iprogressupdate);
-        if (file2.exists()) {
-            this.a(arraylist3, arraylist.size() + arraylist2.size() + arraylist1.size(), i, iprogressupdate);
-        }
         try {
             // Keep conversion parity with client RegionCore upgrade logic so chest inventories/facing
             // and other legacy item-bearing NBT are rewritten in one deterministic pass.
@@ -85,6 +101,11 @@ public class WorldLoaderServer extends WorldLoader {
         iprogressupdate.a(100);
 
         return true;
+    }
+
+    private int getWorldVersionOrLegacy(String s) {
+        WorldData worlddata = this.b(s);
+        return worlddata == null ? WorldSaveVersions.LEGACY_PRE_MCREGION : worlddata.i();
     }
 
     private boolean containsLegacyChunkFiles(File file1) {

@@ -40,6 +40,7 @@ public class SimpleCommandMap implements CommandMap {
         fallbackCommands.add(new KillCommand());
         fallbackCommands.add(new HelpCommand());
         fallbackCommands.add(new WeatherCommand());
+        fallbackCommands.add(new LightningCommand());
         fallbackCommands.add(new GameruleCommand());
         fallbackCommands.add(new GameModeCommand());
         fallbackCommands.add(new DifficultyCommand());

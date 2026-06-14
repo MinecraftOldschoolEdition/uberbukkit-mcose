@@ -105,8 +105,10 @@ public class ContainerPlayer extends Container {
             if (i == 0) {
                 this.a(itemstack1, 9, 45, true);
             } else if (i >= 9 && i < 36) {
+                this.tryAutoEquipArmor(itemstack1);
                 this.a(itemstack1, 36, 45, false);
             } else if (i >= 36 && i < 45) {
+                this.tryAutoEquipArmor(itemstack1);
                 this.a(itemstack1, 9, 36, false);
             } else {
                 this.a(itemstack1, 9, 45, false);
@@ -122,9 +124,32 @@ public class ContainerPlayer extends Container {
                 return null;
             }
 
-            slot.a(itemstack1);
+            slot.a(itemstack);
         }
 
         return itemstack;
+    }
+
+    private void tryAutoEquipArmor(ItemStack itemstack) {
+        if (itemstack == null || itemstack.count <= 0 || itemstack.getItem() == null) {
+            return;
+        }
+
+        int armorType = -1;
+        if (itemstack.getItem() instanceof ItemArmor) {
+            armorType = ((ItemArmor) itemstack.getItem()).bk;
+        } else if (itemstack.getItem().id == Block.PUMPKIN.id) {
+            armorType = 0;
+        }
+
+        int armorSlotIndex = 5 + armorType;
+        if (armorType < 0 || armorSlotIndex < 0 || armorSlotIndex >= this.e.size()) {
+            return;
+        }
+
+        Slot armorSlot = (Slot) this.e.get(armorSlotIndex);
+        if (armorSlot != null && !armorSlot.b() && armorSlot.isAllowed(itemstack)) {
+            armorSlot.c(itemstack.a(1));
+        }
     }
 }

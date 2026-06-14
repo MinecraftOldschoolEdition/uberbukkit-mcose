@@ -30,8 +30,32 @@ public class ItemLead extends Item {
     }
 
     public boolean attachToAnimal(ItemStack itemstack, EntityAnimal entityanimal, EntityHuman entityhuman) {
-        if (itemstack == null || entityanimal == null || entityhuman == null || entityanimal.isLeashed()) {
+        if (itemstack == null || entityanimal == null || entityhuman == null) {
             return false;
+        }
+
+        if (entityanimal.isLeashed()) {
+            if (!entityanimal.isLeashedToFence()) {
+                return false;
+            }
+            entityanimal.clearLeashed(true);
+            syncLeashDataToClients(entityanimal);
+        }
+
+        if (entityanimal instanceof EntityWolf) {
+            EntityWolf wolf = (EntityWolf) entityanimal;
+            if (!wolf.isTamed()) {
+                entityanimal.setLeashedToPlayer(entityhuman);
+                boolean creative = entityhuman.gameMode == 1;
+                if (!creative) {
+                    --itemstack.count;
+                }
+                boolean handled = wolf.startLeashFlee(entityhuman);
+                if (handled) {
+                    syncLeashDataToClients(entityanimal);
+                }
+                return handled;
+            }
         }
 
         entityanimal.setLeashedToPlayer(entityhuman);
@@ -115,7 +139,7 @@ public class ItemLead extends Item {
         return releasedAny;
     }
 
-    private static void syncLeashDataToClients(EntityAnimal entityanimal) {
+    static void syncLeashDataToClients(EntityAnimal entityanimal) {
         if (entityanimal == null || entityanimal.world == null || entityanimal.world.isStatic || !(entityanimal.world instanceof WorldServer)) {
             return;
         }

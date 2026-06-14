@@ -884,6 +884,11 @@ public final class CommandAutocompleteRegistry {
             { ARG_WEATHER_TYPE, ARG_INTEGER }
         }, true);
 
+        registerSpecInternal(BUILTIN_OWNER, "lightning", new String[] { "strike" }, new String[][] {
+            {},
+            { ARG_COORD, ARG_COORD, ARG_COORD }
+        }, true);
+
         registerSpecInternal(BUILTIN_OWNER, "time", new String[0], new String[][] {
             { ARG_TIME_ACTION, ARG_TIME_VALUE }
         }, true);

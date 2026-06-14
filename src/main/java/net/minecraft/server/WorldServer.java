@@ -59,27 +59,39 @@ public class WorldServer extends World implements BlockChangeDelegate {
         if (this.generator != null) {
             provider = new CustomChunkGenerator(this, this.getSeed(), this.generator);
         } else if (this.worldProvider instanceof WorldProviderHell) {
-            // Choose Classic Nether generator for CLASSIC terrain worlds
+            // Choose Nether variant from the overworld terrain type.
             boolean classic = false;
+            boolean netherSky = false;
             try {
                 // Prefer explicit overworld terrain type if available
                 if (this.server != null) {
                     WorldServer overworld = this.server.getWorldServer(0);
-                    if (overworld != null && overworld.worldData != null && overworld.worldData.getTerrainType() == 6) {
+                    int overworldTerrainType = overworld != null && overworld.worldData != null ? overworld.worldData.getTerrainType() : 0;
+                    if (overworldTerrainType == 3) {
+                        netherSky = true;
+                    } else if (overworldTerrainType == 6) {
                         classic = true;
                     }
                 }
                 // Fallback to configured level-type string (covers early init)
-                if (!classic && this.server != null && this.server.configuredLevelType != null) {
+                if (!classic && !netherSky && this.server != null && this.server.configuredLevelType != null) {
                     classic = this.server.configuredLevelType.equalsIgnoreCase("CLASSIC");
+                    netherSky = this.server.configuredLevelType.equalsIgnoreCase("SKY");
                 }
                 // Final fallback to this world's own WorldData
-                if (!classic && this.worldData != null && this.worldData.getTerrainType() == 6) classic = true;
+                if (!classic && !netherSky && this.worldData != null) {
+                    int terrainType = this.worldData.getTerrainType();
+                    netherSky = terrainType == 3;
+                    classic = terrainType == 6;
+                }
             } catch (Throwable ignore) {}
 
             if (classic) {
                 provider = new net.minecraft.server.Classic.ChunkProviderHellClassic(this, this.getSeed());
                 MinecraftServer.log.info("[WorldServer] Nether provider: ClassicHellLevelSource for world '" + this.worldData.name + "'");
+            } else if (netherSky) {
+                provider = new ChunkProviderNetherSky(this, this.getSeed());
+                MinecraftServer.log.info("[WorldServer] Nether provider: NetherSkyLevelSource for world '" + (this.worldData != null ? this.worldData.name : "<unknown>") + "'");
             } else {
                 provider = new NetherChunkGenerator(this, this.getSeed());
                 MinecraftServer.log.info("[WorldServer] Nether provider: Default for world '" + (this.worldData != null ? this.worldData.name : "<unknown>") + "'");

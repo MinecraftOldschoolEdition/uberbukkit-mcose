@@ -13,6 +13,13 @@ public final class SpawnerCreature {
 
     private static Set b = new HashSet();
     protected static final Class[] a = new Class[] { EntitySpider.class, EntityZombie.class, EntitySkeleton.class };
+    private static final int SKY_WORLD_SPAWN_CAP_DIVISOR = 512;
+    private static final int SKY_WORLD_MONSTER_CAP_BASE = 32;
+    private static final int SKY_WORLD_MONSTER_CAP_PER_PLAYER = 8;
+    private static final int SKY_WORLD_NETHER_MONSTER_CAP_BASE = 24;
+    private static final int SKY_WORLD_NETHER_MONSTER_CAP_PER_PLAYER = 6;
+    private static final int SKY_WORLD_CREATURE_CAP_BASE = 8;
+    private static final int SKY_WORLD_CREATURE_CAP_PER_PLAYER = 2;
 
     public SpawnerCreature() {
     }
@@ -54,10 +61,16 @@ public final class SpawnerCreature {
 
             j = aenumcreaturetype.length;
 
+            boolean useSkyWorldMobCaps = usesSkyWorldMobCaps(world);
+            int playerCount = world.players.size();
+
+            labelTypes:
             for (int j1 = 0; j1 < j; ++j1) {
                 EnumCreatureType enumcreaturetype = aenumcreaturetype[j1];
+                int creatureCount = world.a(enumcreaturetype.a());
+                int creatureCap = getCreatureCapForWorld(world, enumcreaturetype, b.size(), playerCount, useSkyWorldMobCaps);
 
-                if ((!enumcreaturetype.d() || flag1) && (enumcreaturetype.d() || flag) && world.a(enumcreaturetype.a()) <= enumcreaturetype.b() * b.size() / 256) {
+                if ((!enumcreaturetype.d() || flag1) && (enumcreaturetype.d() || flag) && isCreatureUnderCap(creatureCount, creatureCap, useSkyWorldMobCaps)) {
                     Iterator iterator = b.iterator();
 
                         label113:
@@ -135,6 +148,13 @@ public final class SpawnerCreature {
                                                         // CraftBukkit - added a reason for spawning this creature
                                                         world.addEntity(entityliving, SpawnReason.NATURAL);
                                                         a(entityliving, world, f, f1, f2);
+                                                        if (useSkyWorldMobCaps) {
+                                                            ++creatureCount;
+                                                            if (creatureCount >= creatureCap) {
+                                                                i += l2;
+                                                                continue labelTypes;
+                                                            }
+                                                        }
                                                         if (l2 >= entityliving.l()) {
                                                             continue label113;
                                                         }
@@ -154,6 +174,69 @@ public final class SpawnerCreature {
 
             return i;
         }
+    }
+
+    private static boolean usesSkyWorldMobCaps(World world) {
+        return getTerrainType(world) == 3;
+    }
+
+    private static int getTerrainType(World world) {
+        if (world != null && world.worldData != null) {
+            int terrainType = world.worldData.getTerrainType();
+            if (terrainType != 0) {
+                return terrainType;
+            }
+        }
+
+        if (world instanceof WorldServer) {
+            try {
+                MinecraftServer server = ((WorldServer)world).server;
+                WorldServer overworld = server != null ? server.getWorldServer(0) : null;
+                if (overworld != null && overworld.worldData != null) {
+                    return overworld.worldData.getTerrainType();
+                }
+            } catch (Throwable ignore) {}
+        }
+
+        return world != null && world.worldData != null ? world.worldData.getTerrainType() : 0;
+    }
+
+    private static int getCreatureCapForWorld(World world, EnumCreatureType creatureType, int eligibleChunks, int playerCount, boolean useSkyWorldMobCaps) {
+        int vanillaCap = creatureType.b() * eligibleChunks / 256;
+        if (!useSkyWorldMobCaps) {
+            return vanillaCap;
+        }
+
+        int reducedCap = creatureType.b() * eligibleChunks / SKY_WORLD_SPAWN_CAP_DIVISOR;
+        int absoluteCap = getSkyWorldAbsoluteCreatureCap(world, creatureType, playerCount);
+        if (absoluteCap <= 0) {
+            return 0;
+        }
+
+        int cap = Math.min(reducedCap, absoluteCap);
+        return cap <= 0 ? 1 : cap;
+    }
+
+    private static int getSkyWorldAbsoluteCreatureCap(World world, EnumCreatureType creatureType, int playerCount) {
+        int players = Math.max(1, playerCount);
+        boolean isNether = world != null && world.worldProvider instanceof WorldProviderHell;
+        if (creatureType == EnumCreatureType.MONSTER) {
+            return isNether
+                    ? SKY_WORLD_NETHER_MONSTER_CAP_BASE + players * SKY_WORLD_NETHER_MONSTER_CAP_PER_PLAYER
+                    : SKY_WORLD_MONSTER_CAP_BASE + players * SKY_WORLD_MONSTER_CAP_PER_PLAYER;
+        }
+        if (creatureType == EnumCreatureType.CREATURE) {
+            return SKY_WORLD_CREATURE_CAP_BASE + players * SKY_WORLD_CREATURE_CAP_PER_PLAYER;
+        }
+        if (creatureType == EnumCreatureType.WATER_CREATURE) {
+            return players;
+        }
+
+        return Math.max(1, creatureType.b() / 2);
+    }
+
+    private static boolean isCreatureUnderCap(int creatureCount, int creatureCap, boolean useStrictCap) {
+        return useStrictCap ? creatureCount < creatureCap : creatureCount <= creatureCap;
     }
 
     private static boolean a(EnumCreatureType enumcreaturetype, World world, int i, int j, int k) {

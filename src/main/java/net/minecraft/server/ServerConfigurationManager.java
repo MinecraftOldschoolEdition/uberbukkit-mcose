@@ -118,6 +118,7 @@ public class ServerConfigurationManager {
         this.playerFileData.b(entityplayer);
         this.applyLocalLanOwnerSnapshot(entityplayer);
         this.syncLoadedPlayerWorld(entityplayer);
+        this.movePlayerToCurrentColumnSurface(this.server.getWorldServer(entityplayer.dimension), entityplayer);
         
         // Apply default gamemode from server.properties for new players only
         if (isNewPlayer && this.server.defaultGameMode != 0) {
@@ -207,6 +208,8 @@ public class ServerConfigurationManager {
             }
 
             entityplayer.e(ownerTag);
+            this.syncLoadedPlayerWorld(entityplayer);
+            this.movePlayerToCurrentColumnSurface(this.server.getWorldServer(entityplayer.dimension), entityplayer);
             this.localLanOwnerName = entityplayer.name;
             this.saveLocalLanOwnerSnapshot(entityplayer);
             a.info("[MCOSE LAN] Applied exact singleplayer owner snapshot for " + entityplayer.name
@@ -369,6 +372,35 @@ public class ServerConfigurationManager {
         }
     }
 
+    private void movePlayerToCurrentColumnSurface(WorldServer world, EntityPlayer player) {
+        if (world == null || player == null) {
+            return;
+        }
+
+        int originalX = MathHelper.floor(player.locX);
+        int originalZ = MathHelper.floor(player.locZ);
+        world.chunkProviderServer.getChunkAt(originalX >> 4, originalZ >> 4);
+        player.setPosition(player.locX, player.locY, player.locZ);
+        if (world.getEntities(player, player.boundingBox).size() == 0 && !this.isPlayerInsideSolidBlock(world, player)) {
+            return;
+        }
+
+        int originalY = MathHelper.floor(player.boundingBox.b + 0.001D);
+        ChunkCoordinates safe = world.findSafePlayerSpawnAtColumn(originalX, originalY, originalZ);
+        double standingEyeHeight = player.height < 1.0F ? 1.62D : (double) player.height;
+        if (safe != null) {
+            double targetX = safe.x == originalX ? player.locX : (double) safe.x + 0.5D;
+            double targetZ = safe.z == originalZ ? player.locZ : (double) safe.z + 0.5D;
+            player.setPosition(targetX, (double) safe.y + standingEyeHeight + 0.01D, targetZ);
+        }
+
+        this.nudgePlayerUpUntilClear(world, player, 128);
+        player.motX = 0.0D;
+        player.motY = 0.0D;
+        player.motZ = 0.0D;
+        player.fallDistance = 0.0F;
+    }
+
     private void enforceSafeSpawnPosition(WorldServer world, EntityPlayer player) {
         if (world == null || player == null) {
             return;
@@ -376,13 +408,8 @@ public class ServerConfigurationManager {
 
         this.nudgePlayerUpUntilClear(world, player, 24);
 
-        if (this.isPlayerInsideSolidBlock(world, player)) {
-            int x = MathHelper.floor(player.locX);
-            int z = MathHelper.floor(player.locZ);
-            ChunkCoordinates safe = world.findSafeSpawnNear(x, z, 24, this.shouldPreferShorelineSpawn(world));
-            if (safe != null) {
-                player.setPosition((double) safe.x + 0.5D, (double) safe.y + 0.01D, (double) safe.z + 0.5D);
-            }
+        if (this.isPlayerInsideSolidBlock(world, player) || !this.isStandingOnSolidGround(world, player)) {
+            this.movePlayerToCurrentColumnSurface(world, player);
             this.nudgePlayerUpUntilClear(world, player, 12);
         }
 
@@ -399,7 +426,7 @@ public class ServerConfigurationManager {
 
         worldserver.chunkProviderServer.getChunkAt((int) entityplayer.locX >> 4, (int) entityplayer.locZ >> 4);
         // Always enforce spawn safety for all game modes (survival/creative/hardcore).
-        this.enforceSafeSpawnPosition(worldserver, entityplayer);
+        this.movePlayerToCurrentColumnSurface(worldserver, entityplayer);
 
         // CraftBukkit start
         Player player = this.cserver.getPlayer(entityplayer);
@@ -490,6 +517,7 @@ public class ServerConfigurationManager {
         //        PlayerTracker.getInstance().removePlayer(entityplayer.name);
         //Project POSEIDON End
 
+        this.movePlayerToCurrentColumnSurface(this.server.getWorldServer(entityplayer.dimension), entityplayer);
         this.savePlayerData(entityplayer);
         this.server.getWorldServer(entityplayer.dimension).kill(entityplayer);
         this.players.remove(entityplayer);
@@ -687,7 +715,7 @@ public class ServerConfigurationManager {
         // Notify client to enable/disable special terrain rendering based on overworld terrain type on world change.
         try {
             int terrainType = worldserver.worldData != null ? worldserver.worldData.getTerrainType() : 0;
-            // Apply only when attaching to overworld
+            boolean skyTerrainType = this.hasSkyTerrainType(worldserver);
             if (worldserver.worldProvider != null && !(worldserver.worldProvider instanceof WorldProviderHell)) {
                 if (isAlphaVisualTerrain(terrainType)) {
                     // Mirror login behavior for Alpha: deferred alpha enable before first chunk.
@@ -706,10 +734,14 @@ public class ServerConfigurationManager {
                     // CLASSIC uses the same renderer path as INFDEV.
                     entityplayer1.netServerHandler.sendPacket(new Packet70Bed(21));
                     entityplayer1.netServerHandler.sendPacket(new Packet70Bed(8));
+                } else if (skyTerrainType) {
+                    entityplayer1.netServerHandler.sendPacket(new Packet70Bed(6));
                 } else {
                     // Explicitly disable terrain override
                     entityplayer1.netServerHandler.sendPacket(new Packet70Bed(9));
                 }
+            } else if (skyTerrainType) {
+                entityplayer1.netServerHandler.sendPacket(new Packet70Bed(6));
             }
         } catch (Throwable ignore) {}
         this.getPlayerManager(entityplayer1.dimension).addPlayer(entityplayer1);
@@ -1226,6 +1258,22 @@ public class ServerConfigurationManager {
             && !(worldserver.worldProvider instanceof WorldProviderHell);
     }
 
+    private boolean hasSkyTerrainType(WorldServer worldserver) {
+        if (worldserver == null) {
+            return false;
+        }
+        if (worldserver.worldData != null && worldserver.worldData.getTerrainType() == 3) {
+            return true;
+        }
+        if (worldserver.worldProvider instanceof WorldProviderHell) {
+            try {
+                WorldServer overworld = this.server.getWorldServer(0);
+                return overworld != null && overworld.worldData != null && overworld.worldData.getTerrainType() == 3;
+            } catch (Throwable ignore) {}
+        }
+        return false;
+    }
+
     private boolean isWithinRespawnRadius(ChunkCoordinates center, ChunkCoordinates point, int radius) {
         if (center == null || point == null) {
             return false;
@@ -1329,7 +1377,7 @@ public class ServerConfigurationManager {
         }
 
         int x = MathHelper.floor(entityplayer.locX);
-        int y = MathHelper.floor(entityplayer.locY);
+        int y = MathHelper.floor(entityplayer.boundingBox.b + 0.001D);
         int z = MathHelper.floor(entityplayer.locZ);
 
         if (y <= 1) {

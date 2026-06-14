@@ -24,6 +24,11 @@ public class Chunk {
     public boolean p;
     public boolean q;
     public long r;
+    public NBTTagList regionCoreOriginalStatePalette;
+    public byte[] regionCoreOriginalStateData;
+    public byte regionCoreOriginalStateBits;
+    public boolean regionCoreOriginalStateHasBits;
+    public boolean regionCoreUsedFallbackProjection;
 
     public Chunk(World world, int i, int j) {
         this.tileEntities = new HashMap();

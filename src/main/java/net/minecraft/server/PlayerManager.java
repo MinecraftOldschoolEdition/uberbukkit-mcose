@@ -174,7 +174,7 @@ public class PlayerManager {
     public boolean a(EntityPlayer entityplayer, int i, int j) {
         PlayerInstance playerchunk = this.a(i, j, false);
 
-        return playerchunk == null ? false : PlayerInstance.b(playerchunk).contains(entityplayer) && !entityplayer.chunkCoordIntPairQueue.contains(PlayerInstance.a(playerchunk));
+        return playerchunk == null ? false : PlayerInstance.b(playerchunk).contains(entityplayer) && entityplayer.hasChunkDelivered(PlayerInstance.a(playerchunk));
     }
 
     public int getFurthestViewableBlock() {

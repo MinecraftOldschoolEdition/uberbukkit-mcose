@@ -28,11 +28,11 @@ public class NetLoginHandler extends NetHandler {
     public static Logger a = Logger.getLogger("Minecraft");
     private static Random d = new Random();
     public NetworkManager networkManager;
-    public boolean c = false;
+    public volatile boolean c = false;
     private MinecraftServer server;
     private int f = 0;
     private String g = null;
-    private Packet1Login h = null;
+    private volatile Packet1Login h = null;
     private String serverId = "";
     private ConnectionType connectionType;
     private boolean usingReleaseToBeta = false; //Poseidon -> Release2Beta support
@@ -67,9 +67,10 @@ public class NetLoginHandler extends NetHandler {
     // CraftBukkit end
 
     public void a() {
-        if (this.h != null) {
-            this.b(this.h);
+        Packet1Login pendingLogin = this.h;
+        if (pendingLogin != null) {
             this.h = null;
+            this.b(pendingLogin);
         }
 
         if (this.f++ == 600) {
@@ -266,7 +267,8 @@ public class NetLoginHandler extends NetHandler {
             // Poseidon parity: signal client to enable special visuals on overworld attach.
             try {
                 int actualTerrainType = (worldserver.worldData != null ? worldserver.worldData.getTerrainType() : 0);
-                if (worldserver.worldProvider.dimension == 0) {
+                boolean skyTerrainType = hasSkyTerrainType(worldserver);
+                if (worldserver.worldProvider.dimension == 0 || skyTerrainType) {
                     if (isAlphaVisualTerrain(actualTerrainType)) {
                         // ALPHA / ALPHA_SNOW visuals
                         netserverhandler.sendPacket(new Packet70Bed(5));
@@ -280,7 +282,7 @@ public class NetLoginHandler extends NetHandler {
                     } else if (actualTerrainType == 6) {
                         // CLASSIC visuals use the INFDEV renderer path.
                         netserverhandler.sendPacket(new Packet70Bed(21));
-                    } else if (actualTerrainType == 3) {
+                    } else if (skyTerrainType) {
                         // SKY visuals
                         netserverhandler.sendPacket(new Packet70Bed(6));
                     }
@@ -305,9 +307,9 @@ public class NetLoginHandler extends NetHandler {
                 } else {
                     netserverhandler.sendPacket(new Packet70Bed(4)); // survival HUD
                 }
-                // If SKY terrain, also send the SKY overlay refresh as Poseidon does in /gamemode
-                if (worldserver.worldData != null && worldserver.worldData.getTerrainType() == 3) {
-                    netserverhandler.sendPacket(new Packet70Bed(2));
+                // If SKY terrain, refresh the client-side terrain type after containers/gamemode sync.
+                if (hasSkyTerrainType(worldserver)) {
+                    netserverhandler.sendPacket(new Packet70Bed(6));
                 }
                 // uberbukkit: signal client to enable ladder-gap mechanics on modded clients
                 netserverhandler.sendPacket(new Packet70Bed(7));
@@ -445,6 +447,22 @@ public class NetLoginHandler extends NetHandler {
 
     private static boolean isInfdevVisualTerrain(int terrainType) {
         return terrainType == 6 || terrainType == 7;
+    }
+
+    private boolean hasSkyTerrainType(WorldServer worldserver) {
+        if (worldserver == null) {
+            return false;
+        }
+        if (worldserver.worldData != null && worldserver.worldData.getTerrainType() == 3) {
+            return true;
+        }
+        if (worldserver.worldProvider instanceof WorldProviderHell) {
+            try {
+                WorldServer overworld = this.server.getWorldServer(0);
+                return overworld != null && overworld.worldData != null && overworld.worldData.getTerrainType() == 3;
+            } catch (Throwable ignore) {}
+        }
+        return false;
     }
 
     private byte getClientDimension(WorldServer worldserver) {

@@ -3,9 +3,9 @@ package net.minecraft.server;
 import net.minecraft.server.registry.PlayerCapabilityRegistryApi;
 
 public abstract class EntityAnimal extends EntityCreature implements IAnimal {
-    private static final double LEASH_PULL_DISTANCE_SQ = 9.0D;
-    private static final double LEASH_BREAK_DISTANCE_SQ = 4096.0D;
-    private static final double FLYING_LEASH_BREAK_DISTANCE_SQ = 16384.0D;
+    private static final double LEASH_FOLLOW_DISTANCE_SQ = 4.0D;
+    private static final double LEASH_ELASTIC_DISTANCE_SQ = 36.0D;
+    private static final double LEASH_SNAP_DISTANCE_SQ = 144.0D;
 
     private static final EntityDataAccessor<Integer> DATA_LEASH_STATE_ID = new EntityDataAccessor<Integer>(19, EntityDataSerializers.INT);
     private static final EntityDataAccessor<String> DATA_LEASH_HOLDER_ID = new EntityDataAccessor<String>(20, EntityDataSerializers.STRING);
@@ -122,26 +122,28 @@ public abstract class EntityAnimal extends EntityCreature implements IAnimal {
             return;
         }
 
+        boolean fleeingWolf = false;
         if (this instanceof EntityWolf) {
             EntityWolf wolf = (EntityWolf) this;
             if (wolf.isSitting()) {
                 wolf.setSitting(false);
             }
+            fleeingWolf = wolf.isLeashFleeing();
         }
 
         double deltaX = leashHolder.locX - this.locX;
         double deltaY = leashHolder.locY + (double) leashHolder.t() - this.locY;
         double deltaZ = leashHolder.locZ - this.locZ;
         double distanceSq = deltaX * deltaX + deltaY * deltaY + deltaZ * deltaZ;
-        double horizontalDistanceSq = deltaX * deltaX + deltaZ * deltaZ;
         boolean holderFlying = this.isLeashHolderFlying(leashHolder);
 
-        if ((holderFlying ? horizontalDistanceSq : distanceSq) > (holderFlying ? FLYING_LEASH_BREAK_DISTANCE_SQ : LEASH_BREAK_DISTANCE_SQ)) {
+        if (distanceSq > LEASH_SNAP_DISTANCE_SQ) {
+            this.world.makeSound(this, "random.break", 1.0F, 1.0F);
             this.clearLeashed(true);
             return;
         }
 
-        if (distanceSq > LEASH_PULL_DISTANCE_SQ) {
+        if (distanceSq > LEASH_ELASTIC_DISTANCE_SQ) {
             float distance = MathHelper.a(distanceSq);
             if (distance > 0.0F) {
                 double horizontalPull = holderFlying ? 0.11D : 0.08D;
@@ -154,9 +156,10 @@ public abstract class EntityAnimal extends EntityCreature implements IAnimal {
                 }
             }
 
-            if (!holderFlying) {
-                this.setPathEntity(this.world.findPath(this, leashHolder, 16.0F));
-            }
+        }
+
+        if (distanceSq > LEASH_FOLLOW_DISTANCE_SQ && !holderFlying && !fleeingWolf) {
+            this.setPathEntity(this.world.findPath(this, leashHolder, 16.0F));
         }
     }
 
@@ -181,19 +184,22 @@ public abstract class EntityAnimal extends EntityCreature implements IAnimal {
         double deltaZ = anchorZ - this.locZ;
         double distanceSq = deltaX * deltaX + deltaY * deltaY + deltaZ * deltaZ;
 
-        if (distanceSq > LEASH_BREAK_DISTANCE_SQ) {
+        if (distanceSq > LEASH_SNAP_DISTANCE_SQ) {
+            this.world.makeSound(this, "random.break", 1.0F, 1.0F);
             this.clearLeashed(true);
             return;
         }
 
-        if (distanceSq > LEASH_PULL_DISTANCE_SQ) {
+        if (distanceSq > LEASH_ELASTIC_DISTANCE_SQ) {
             float distance = MathHelper.a(distanceSq);
             if (distance > 0.0F) {
                 this.motX += deltaX / (double) distance * 0.08D;
                 this.motY += deltaY / (double) distance * 0.06D;
                 this.motZ += deltaZ / (double) distance * 0.08D;
             }
+        }
 
+        if (distanceSq > LEASH_FOLLOW_DISTANCE_SQ) {
             this.setPathEntity(this.world.a(this, this.leashFenceX, this.leashFenceY, this.leashFenceZ, 16.0F));
         }
     }

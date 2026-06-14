@@ -14,6 +14,7 @@ public final class BlockStateCodec {
     private static final String KEY_PROPERTIES = "Properties";
     private static final int BLOCK_COUNT = 16 * 16 * 128;
     private static final int MAX_FALLBACK_LOG_STATES = 16;
+    private static final BlockStateKey[] LEGACY_STATE_CACHE = buildLegacyStateCache();
 
     private BlockStateCodec() {}
 
@@ -31,7 +32,7 @@ public final class BlockStateCodec {
         for (int i = 0; i < BLOCK_COUNT; i++) {
             int blockId = blocks[i] & 255;
             int meta = getNibble(data, i);
-            BlockStateKey state = BlockStateBridge.fromLegacy(blockId, meta);
+            BlockStateKey state = stateForLegacy(blockId, meta);
             stateIndices[i] = palette.getOrCreateId(state);
         }
 
@@ -72,21 +73,37 @@ public final class BlockStateCodec {
 
         int bits = levelTag.hasKey(KEY_BITS) ? (levelTag.c(KEY_BITS) & 255) : bitsForPalette(palette.length);
         byte[] packed = levelTag.j(KEY_DATA);
-        int[] stateIndices = unpack(packed, bits, BLOCK_COUNT);
+
+        BlockStateBridge.LegacyBlockData[] legacyPalette = new BlockStateBridge.LegacyBlockData[palette.length];
+        for (int i = 0; i < palette.length; ++i) {
+            legacyPalette[i] = BlockStateBridge.toLegacy(palette[i]);
+        }
+        BlockStateBridge.LegacyBlockData nullPaletteFallback = BlockStateBridge.toLegacy((BlockStateKey)null);
 
         byte[] blocks = new byte[BLOCK_COUNT];
         byte[] data = new byte[BLOCK_COUNT / 2];
         boolean usedFallback = false;
-        TreeMap<String, Integer> fallbackCounts = new TreeMap<String, Integer>();
-        TreeMap<String, String> firstFallbackCoords = new TreeMap<String, String>();
+        TreeMap<String, Integer> fallbackCounts = null;
+        TreeMap<String, String> firstFallbackCoords = null;
         for (int i = 0; i < BLOCK_COUNT; i++) {
-            int paletteIndex = stateIndices[i];
-            BlockStateKey key = paletteIndex >= 0 && paletteIndex < palette.length ? palette[paletteIndex] : null;
-            BlockStateBridge.LegacyBlockData legacy = BlockStateBridge.toLegacy(key);
+            int paletteIndex = unpackValue(packed, bits, i);
+            BlockStateKey key;
+            BlockStateBridge.LegacyBlockData legacy;
+            if (paletteIndex >= 0 && paletteIndex < legacyPalette.length) {
+                key = palette[paletteIndex];
+                legacy = legacyPalette[paletteIndex];
+            } else {
+                key = null;
+                legacy = nullPaletteFallback;
+            }
             blocks[i] = (byte)(legacy.blockId & 255);
             setNibble(data, i, legacy.metadata);
             if (legacy.fallbackUsed) {
                 usedFallback = true;
+                if (fallbackCounts == null) {
+                    fallbackCounts = new TreeMap<String, Integer>();
+                    firstFallbackCoords = new TreeMap<String, String>();
+                }
                 int localX = i >> 11 & 15;
                 int localZ = i >> 7 & 15;
                 int localY = i & 127;
@@ -123,6 +140,20 @@ public final class BlockStateCodec {
         return new DecodedState(blocks, data, usedFallback);
     }
 
+    private static BlockStateKey[] buildLegacyStateCache() {
+        BlockStateKey[] cache = new BlockStateKey[256 * 16];
+        for (int blockId = 0; blockId < 256; blockId++) {
+            for (int meta = 0; meta < 16; meta++) {
+                cache[(blockId << 4) | meta] = BlockStateBridge.fromLegacy(blockId, meta);
+            }
+        }
+        return cache;
+    }
+
+    private static BlockStateKey stateForLegacy(int blockId, int meta) {
+        return LEGACY_STATE_CACHE[((blockId & 255) << 4) | (meta & 15)];
+    }
+
     private static NBTTagCompound serializeState(BlockStateKey key) {
         NBTTagCompound out = new NBTTagCompound();
         out.setString(KEY_NAME, key.getBlockKey().toString());
@@ -137,11 +168,31 @@ public final class BlockStateCodec {
         return out;
     }
 
+    private static int unpackValue(byte[] packed, int bitsPerValue, int valueIndex) {
+        if (packed == null || bitsPerValue <= 0 || valueIndex < 0) {
+            return 0;
+        }
+
+        long startBit = (long)valueIndex * (long)bitsPerValue;
+        int value = 0;
+        for (int bit = 0; bit < bitsPerValue; bit++) {
+            int bitIndex = (int)(startBit + bit);
+            int byteIndex = bitIndex >> 3;
+            if (byteIndex < 0 || byteIndex >= packed.length) {
+                break;
+            }
+            int bitValue = (packed[byteIndex] >> (bitIndex & 7)) & 1;
+            value |= bitValue << bit;
+        }
+        return value;
+    }
+
     private static BlockStateKey deserializeState(NBTTagCompound tag) {
         String name = tag.getString(KEY_NAME);
         if (name == null || name.length() == 0) {
             name = "minecraft:air";
         }
+        name = BlockStateBridge.normalizeStateName(name);
         BlockStateKey key = new BlockStateKey(new ResourceLocation(name));
         if (!tag.hasKey(KEY_PROPERTIES)) {
             return key;

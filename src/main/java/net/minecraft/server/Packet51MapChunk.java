@@ -1,9 +1,11 @@
 package net.minecraft.server;
 
+import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.zip.DataFormatException;
+import java.util.zip.Deflater;
 import java.util.zip.Inflater;
 
 public class Packet51MapChunk extends Packet {
@@ -62,13 +64,17 @@ public class Packet51MapChunk extends Packet {
         byte[] abyte = new byte[this.h];
 
         datainputstream.readFully(abyte);
-        this.g = new byte[this.d * this.e * this.f * 5 / 2];
+        int expectedSize = this.d * this.e * this.f * 5 / 2;
+        this.g = new byte[expectedSize];
         Inflater inflater = new Inflater();
 
         inflater.setInput(abyte);
 
         try {
-            inflater.inflate(this.g);
+            int inflated = inflater.inflate(this.g);
+            if (inflated != expectedSize || !inflater.finished()) {
+                throw new IOException("Bad compressed chunk data length: " + inflated + "/" + expectedSize);
+            }
         } catch (DataFormatException dataformatexception) {
             throw new IOException("Bad compressed data format");
         } finally {
@@ -77,6 +83,7 @@ public class Packet51MapChunk extends Packet {
     }
 
     public void a(DataOutputStream dataoutputstream) throws IOException { // CraftBukkit - throws IOException
+        this.ensureCompressed();
         dataoutputstream.writeInt(this.a);
         dataoutputstream.writeShort(this.b);
         dataoutputstream.writeInt(this.c);
@@ -93,6 +100,45 @@ public class Packet51MapChunk extends Packet {
 
     public int a() {
         return 17 + this.h;
+    }
+
+    private void ensureCompressed() throws IOException {
+        if (this.g != null && this.h > 0) {
+            return;
+        }
+        if (this.rawData == null) {
+            throw new IOException("Chunk packet missing raw data for compression");
+        }
+
+        this.g = deflateChunkData(this.rawData);
+        this.h = this.g.length;
+    }
+
+    public static byte[] deflateChunkData(byte[] rawData) throws IOException {
+        if (rawData == null) {
+            throw new IOException("Cannot compress null chunk data");
+        }
+
+        Deflater deflater = new Deflater();
+        try {
+            deflater.setInput(rawData);
+            deflater.finish();
+            ByteArrayOutputStream out = new ByteArrayOutputStream(Math.max(64, rawData.length / 2));
+            byte[] buffer = new byte[8192];
+            int emptyWrites = 0;
+            while (!deflater.finished()) {
+                int written = deflater.deflate(buffer);
+                if (written > 0) {
+                    out.write(buffer, 0, written);
+                    emptyWrites = 0;
+                } else if (++emptyWrites > 2) {
+                    throw new IOException("Deflate stalled while compressing chunk data");
+                }
+            }
+            return out.toByteArray();
+        } finally {
+            deflater.end();
+        }
     }
 
     public Packet clone() {

@@ -42,6 +42,10 @@ public class WorldProviderHell extends WorldProvider {
                 terrainType = overworld.worldData.getTerrainType();
             }
         }
+        if (terrainType == 3) {
+            MinecraftServer.log.info("[WorldProviderHell] Selecting NetherSkyLevelSource (overworld terrainType=SKY)");
+            return new ChunkProviderNetherSky(this.a, this.a.getSeed());
+        }
         if (terrainType == 6) {
             MinecraftServer.log.info("[WorldProviderHell] Selecting ClassicHellLevelSource (terrainType=CLASSIC)");
             return new net.minecraft.server.Classic.ChunkProviderHellClassic(this.a, this.a.getSeed());

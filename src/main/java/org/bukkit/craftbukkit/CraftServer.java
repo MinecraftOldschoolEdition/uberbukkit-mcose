@@ -525,8 +525,8 @@ public final class CraftServer implements Server {
             generator = getGenerator(name);
         }
 
-        Convertable converter = new WorldLoaderServer(new File("."));
-        if (converter.isConvertable(name)) {
+        WorldLoaderServer converter = new WorldLoaderServer(new File("."));
+        if (converter.isConvertable(name) || converter.hasLegacyChunkData(name)) {
             getLogger().info("Converting world '" + name + "'");
             converter.convert(name, new ConvertProgressUpdater(console));
         }

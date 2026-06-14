@@ -199,7 +199,7 @@ public final class ChunkCompressionThread {
         return zstd;
     }
 
-    private void compressMapChunkDeflate(Packet51MapChunk packet, Worker worker) {
+    private void compressMapChunkDeflate(Packet51MapChunk packet, Worker worker) throws java.io.IOException {
         if (packet.g != null) {
             return;
         }
@@ -207,24 +207,8 @@ public final class ChunkCompressionThread {
             throw new IllegalStateException("Chunk packet missing rawData for zlib compression");
         }
 
-        int dataSize = packet.rawData.length;
-        if (worker.deflateBuffer.length < dataSize + 100) {
-            worker.deflateBuffer = new byte[dataSize + 100];
-        }
-
-        Deflater deflater = worker.deflater.get();
-        deflater.reset();
-        deflater.setLevel(dataSize < REDUCED_DEFLATE_THRESHOLD ? DEFLATE_LEVEL_PARTS : DEFLATE_LEVEL_CHUNKS);
-        deflater.setInput(packet.rawData);
-        deflater.finish();
-        int size = deflater.deflate(worker.deflateBuffer);
-        if (size == 0) {
-            size = deflater.deflate(worker.deflateBuffer);
-        }
-
-        packet.g = new byte[size];
-        packet.h = size;
-        System.arraycopy(worker.deflateBuffer, 0, packet.g, 0, size);
+        packet.g = Packet51MapChunk.deflateChunkData(packet.rawData);
+        packet.h = packet.g.length;
     }
 
     private void sendToNetworkQueue(EntityPlayer player, Packet packet) {
@@ -232,6 +216,7 @@ public final class ChunkCompressionThread {
             return;
         }
         player.netServerHandler.networkManager.queue(packet);
+        player.markFullChunkDelivered(packet);
     }
 
     private void recordCompressionSample(long durationNanos) {

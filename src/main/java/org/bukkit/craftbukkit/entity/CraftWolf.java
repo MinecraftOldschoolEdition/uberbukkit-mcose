@@ -2,6 +2,7 @@ package org.bukkit.craftbukkit.entity;
 
 import net.minecraft.server.EntityWolf;
 import net.minecraft.server.PathEntity;
+import org.bukkit.DyeColor;
 import org.bukkit.craftbukkit.CraftServer;
 import org.bukkit.entity.AnimalTamer;
 import org.bukkit.entity.Player;
@@ -31,6 +32,17 @@ public class CraftWolf extends CraftAnimals implements Wolf {
         // TODO determine what the following would do - it is affected every time a player makes their wolf sit or stand
         // getHandle().ay = false;
         setPath((PathEntity) null);
+    }
+
+    public DyeColor getCollarColor() {
+        return DyeColor.getByData((byte) getHandle().getCollarColor());
+    }
+
+    public void setCollarColor(DyeColor color) {
+        if (color == null) {
+            throw new IllegalArgumentException("Color cannot be null");
+        }
+        getHandle().setCollarColor(color.getData());
     }
 
     public boolean isTamed() {

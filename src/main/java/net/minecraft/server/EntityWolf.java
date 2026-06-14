@@ -17,6 +17,10 @@ import java.util.UUID;
 // CraftBukkit end
 
 public class EntityWolf extends EntityAnimal {
+    private static final int LEASH_FLEE_DURATION_TICKS = 100;
+    private static final int LEASH_FLEE_REPATH_INTERVAL_TICKS = 10;
+    private static final double LEASH_FLEE_TARGET_DISTANCE = 12.0D;
+
     private static final EntityDataAccessor<Byte> DATA_WOLF_FLAGS_ID = new EntityDataAccessor<Byte>(16, EntityDataSerializers.BYTE);
     private static final EntityDataAccessor<String> DATA_WOLF_OWNER_ID = new EntityDataAccessor<String>(17, EntityDataSerializers.STRING);
     private static final EntityDataAccessor<Integer> DATA_WOLF_HEALTH_ID = new EntityDataAccessor<Integer>(18, EntityDataSerializers.INT);
@@ -30,6 +34,9 @@ public class EntityWolf extends EntityAnimal {
     private boolean g;
     private float h;
     private float i;
+    private Entity leashFleeSource;
+    private int leashFleeTicks;
+    private int leashFleeRepathTicks;
 
     public EntityWolf(World world) {
         super(world);
@@ -84,37 +91,118 @@ public class EntityWolf extends EntityAnimal {
 
     public void b(NBTTagCompound nbttagcompound) {
         super.b(nbttagcompound);
-        nbttagcompound.a("Angry", this.isAngry());
+        boolean persistentAngry = this.isAngry() && !this.isLeashFleeing();
+        nbttagcompound.a("Angry", persistentAngry);
         nbttagcompound.a("Sitting", this.isSitting());
-        nbttagcompound.setString("Owner", this.getOwnerName() == null ? "" : this.getOwnerName());
-        nbttagcompound.setString("OwnerUUID", this.getOwnerUUID() == null ? "" : this.getOwnerUUID());
+        String owner = this.getOwnerName();
+        if (owner == null) {
+            owner = "";
+        }
+        String ownerUuid = this.getOwnerUUID();
+        if (ownerUuid == null) {
+            ownerUuid = "";
+        }
+        nbttagcompound.setString("Owner", owner);
+        nbttagcompound.setString("OwnerUUID", ownerUuid);
         nbttagcompound.a("CollarColor", (byte)this.getCollarColor());
+
+        NBTTagCompound entityData = nbttagcompound.hasKey("entity_data") ? nbttagcompound.k("entity_data") : new NBTTagCompound();
+        entityData.setString("wolf_owner", owner);
+        entityData.setString("wolf_owner_uuid", ownerUuid);
+        entityData.a("wolf_tamed", this.isTamed());
+        entityData.a("wolf_angry", persistentAngry);
+        entityData.a("wolf_sitting", this.isSitting());
+        entityData.a("wolf_health", this.health);
+        entityData.a("wolf_collar_color", this.getCollarColor());
+        nbttagcompound.a("entity_data", entityData);
     }
 
     public void a(NBTTagCompound nbttagcompound) {
         super.a(nbttagcompound);
-        this.setAngry(nbttagcompound.m("Angry"));
-        this.setSitting(nbttagcompound.m("Sitting"));
-        String s = nbttagcompound.getString("Owner");
-        String ownerUuid = nbttagcompound.getString("OwnerUUID");
-        if (ownerUuid == null) {
-            ownerUuid = "";
-        }
-        if (ownerUuid.length() == 0 && isUuidLike(s)) {
-            ownerUuid = s;
-            s = "";
-        }
+        NBTTagCompound entityData = nbttagcompound.hasKey("entity_data") ? nbttagcompound.k("entity_data") : null;
+        if (hasWolfEntityData(entityData)) {
+            String owner = entityData.hasKey("wolf_owner") ? entityData.getString("wolf_owner") : nbttagcompound.getString("Owner");
+            if (owner == null) {
+                owner = "";
+            }
+            String ownerUuid = entityData.hasKey("wolf_owner_uuid") ? entityData.getString("wolf_owner_uuid") : nbttagcompound.getString("OwnerUUID");
+            if (ownerUuid == null) {
+                ownerUuid = "";
+            }
+            if (ownerUuid.length() == 0 && isUuidLike(owner)) {
+                ownerUuid = owner;
+                owner = "";
+            }
 
-        if (s.length() > 0 || ownerUuid.length() > 0) {
-            this.setOwnerName(s);
+            this.setOwnerName(owner);
             this.setOwnerUUID(ownerUuid);
-            this.setTamed(true);
+            boolean tamed = entityData.hasKey("wolf_tamed") ? entityData.m("wolf_tamed") : owner.length() > 0 || ownerUuid.length() > 0;
+            this.setTamed(tamed);
+            this.setAngry(entityData.hasKey("wolf_angry") ? entityData.m("wolf_angry") : nbttagcompound.m("Angry"));
+            this.setSitting(entityData.hasKey("wolf_sitting") ? entityData.m("wolf_sitting") : nbttagcompound.m("Sitting"));
+            if (entityData.hasKey("wolf_health")) {
+                int wolfHealth = entityData.e("wolf_health");
+                this.health = wolfHealth;
+                this.setSyncedWolfHealth(wolfHealth);
+            } else {
+                this.setSyncedWolfHealth(this.health);
+            }
+            int collarColor = entityData.hasKey("wolf_collar_color")
+                    ? entityData.e("wolf_collar_color")
+                    : (nbttagcompound.hasKey("CollarColor") ? nbttagcompound.c("CollarColor") : 14);
+            this.setCollarColor(collarColor);
+        } else {
+            this.setAngry(nbttagcompound.m("Angry"));
+            this.setSitting(nbttagcompound.m("Sitting"));
+            String s = nbttagcompound.getString("Owner");
+            String ownerUuid = nbttagcompound.getString("OwnerUUID");
+            if (ownerUuid == null) {
+                ownerUuid = "";
+            }
+            if (ownerUuid.length() == 0 && isUuidLike(s)) {
+                ownerUuid = s;
+                s = "";
+            }
+
+            if (s.length() > 0 || ownerUuid.length() > 0) {
+                this.setOwnerName(s);
+                this.setOwnerUUID(ownerUuid);
+                this.setTamed(true);
+            }
+            this.setCollarColor(nbttagcompound.hasKey("CollarColor") ? nbttagcompound.c("CollarColor") : 14);
+            this.setSyncedWolfHealth(this.health);
         }
-        this.setCollarColor(nbttagcompound.hasKey("CollarColor") ? nbttagcompound.c("CollarColor") : 14);
+    }
+
+    private static boolean hasWolfEntityData(NBTTagCompound entityData) {
+        return entityData != null
+                && (entityData.hasKey("wolf_owner")
+                || entityData.hasKey("wolf_owner_uuid")
+                || entityData.hasKey("wolf_tamed")
+                || entityData.hasKey("wolf_angry")
+                || entityData.hasKey("wolf_sitting")
+                || entityData.hasKey("wolf_health")
+                || entityData.hasKey("wolf_collar_color"));
     }
 
     protected boolean h_() {
         return !this.isTamed() && super.h_();
+    }
+
+    protected void updateLeashedState() {
+        if (!this.isTamed() && this.isLeashed()) {
+            if (this.isLeashedToFence()) {
+                this.breakLeashFleeLead();
+                return;
+            }
+
+            Entity leashHolder = this.getLeashHolderEntity();
+            if (leashHolder instanceof EntityHuman && (!this.isLeashFleeing() || this.leashFleeSource != leashHolder)) {
+                this.startLeashFlee((EntityHuman) leashHolder);
+            }
+        }
+
+        super.updateLeashedState();
     }
 
     protected String g() {
@@ -144,6 +232,14 @@ public class EntityWolf extends EntityAnimal {
             if (targetPlayer.gameMode == 1) {
                 this.setAngry(false);
                 this.target = null;
+            }
+        }
+
+        if (this.isLeashFleeing()) {
+            this.updateLeashFleeState();
+            if (this.isLeashFleeing()) {
+                super.c_();
+                return;
             }
         }
 
@@ -373,7 +469,150 @@ public class EntityWolf extends EntityAnimal {
     }
 
     protected Entity findTarget() {
-        return this.isAngry() ? this.world.findNearbyPlayer(this, 16.0D) : null;
+        return this.isLeashFleeing() ? null : (this.isAngry() ? this.world.findNearbyPlayer(this, 16.0D) : null);
+    }
+
+    public boolean startLeashFlee(EntityHuman entityhuman) {
+        if (entityhuman == null || this.isTamed()) {
+            return false;
+        }
+
+        this.leashFleeSource = entityhuman;
+        this.leashFleeTicks = LEASH_FLEE_DURATION_TICKS;
+        this.leashFleeRepathTicks = 0;
+        this.target = null;
+        this.setSitting(false);
+        this.setAngry(true);
+        this.setPathEntity((PathEntity) null);
+        this.aE = 1.3F;
+        this.updateLeashFleePath();
+        this.world.makeSound(this, "mob.wolf.growl", this.k(), (this.random.nextFloat() - this.random.nextFloat()) * 0.2F + 1.0F);
+        return true;
+    }
+
+    public boolean isLeashFleeing() {
+        return this.leashFleeTicks > 0;
+    }
+
+    private void updateLeashFleeState() {
+        if (this.isTamed()) {
+            this.stopLeashFlee(true);
+            return;
+        }
+
+        if (!(this.leashFleeSource instanceof EntityHuman) || this.leashFleeSource.dead || !this.isLeashedTo((EntityHuman) this.leashFleeSource)) {
+            this.stopLeashFleeAfterBreak();
+            return;
+        }
+
+        this.target = null;
+        this.setSitting(false);
+        this.setAngry(true);
+        this.aE = 1.3F;
+        if (this.leashFleeRepathTicks-- <= 0 || !this.C()) {
+            this.updateLeashFleePath();
+            this.leashFleeRepathTicks = LEASH_FLEE_REPATH_INTERVAL_TICKS;
+        }
+        this.pushAwayFromLeashSource();
+
+        if (--this.leashFleeTicks <= 0) {
+            this.breakLeashFleeLead();
+        }
+    }
+
+    private void breakLeashFleeLead() {
+        if (this.isLeashed()) {
+            if (this.world != null) {
+                this.world.makeSound(this, "random.break", 1.0F, 1.0F);
+            }
+            this.clearLeashed(true);
+            ItemLead.syncLeashDataToClients(this);
+        }
+
+        this.stopLeashFleeAfterBreak();
+    }
+
+    private void stopLeashFleeAfterBreak() {
+        Entity source = this.leashFleeSource;
+        this.stopLeashFlee(false);
+        if (!this.isTamed()) {
+            this.setAngry(true);
+            if (source instanceof EntityHuman && !source.dead) {
+                this.target = source;
+            }
+        }
+    }
+
+    private void stopLeashFlee(boolean clearAnger) {
+        this.leashFleeSource = null;
+        this.leashFleeTicks = 0;
+        this.leashFleeRepathTicks = 0;
+        this.target = null;
+        this.setPathEntity((PathEntity) null);
+        this.aE = 1.1F;
+        if (clearAnger) {
+            this.setAngry(false);
+        }
+    }
+
+    private void updateLeashFleePath() {
+        if (this.leashFleeSource == null || this.world == null) {
+            return;
+        }
+
+        double awayX = this.locX - this.leashFleeSource.locX;
+        double awayZ = this.locZ - this.leashFleeSource.locZ;
+        double awayLength = MathHelper.a(awayX * awayX + awayZ * awayZ);
+        if (awayLength < 0.001D) {
+            float angle = this.random.nextFloat() * 3.1415927F * 2.0F;
+            awayX = MathHelper.cos(angle);
+            awayZ = MathHelper.sin(angle);
+            awayLength = 1.0D;
+        }
+
+        awayX /= awayLength;
+        awayZ /= awayLength;
+        PathEntity bestPath = null;
+        double bestDistanceSq = -1.0D;
+        for (int i = 0; i < 10; ++i) {
+            double forward = LEASH_FLEE_TARGET_DISTANCE + (double) this.random.nextInt(8);
+            double side = ((double) this.random.nextFloat() - 0.5D) * 10.0D;
+            int x = MathHelper.floor(this.locX + awayX * forward - awayZ * side);
+            int y = MathHelper.floor(this.boundingBox.b + (double) this.random.nextInt(5) - 2.0D);
+            int z = MathHelper.floor(this.locZ + awayZ * forward + awayX * side);
+            PathEntity path = this.world.a(this, x, y, z, 18.0F);
+            if (path != null) {
+                double dx = (double) x - this.leashFleeSource.locX;
+                double dz = (double) z - this.leashFleeSource.locZ;
+                double distanceSq = dx * dx + dz * dz;
+                if (distanceSq > bestDistanceSq) {
+                    bestPath = path;
+                    bestDistanceSq = distanceSq;
+                }
+            }
+        }
+
+        if (bestPath != null) {
+            this.setPathEntity(bestPath);
+        }
+    }
+
+    private void pushAwayFromLeashSource() {
+        if (this.leashFleeSource == null) {
+            return;
+        }
+
+        double awayX = this.locX - this.leashFleeSource.locX;
+        double awayZ = this.locZ - this.leashFleeSource.locZ;
+        double distanceSq = awayX * awayX + awayZ * awayZ;
+        if (distanceSq > 0.0001D) {
+            double distance = (double) MathHelper.a(distanceSq);
+            this.motX += awayX / distance * 0.06D;
+            this.motZ += awayZ / distance * 0.06D;
+            if (this.onGround && this.random.nextInt(8) == 0) {
+                this.motY = 0.25D;
+            }
+        }
     }
 
     protected void a(Entity entity, float f) {
@@ -414,6 +653,14 @@ public class EntityWolf extends EntityAnimal {
         ItemStack itemstack = entityhuman.inventory.getItemInHand();
 
         if (!this.isTamed()) {
+            if (this.isLeashed()) {
+                if (!this.isLeashFleeing() && entityhuman != null) {
+                    this.startLeashFlee(entityhuman);
+                }
+                this.setAngry(true);
+                return false;
+            }
+
             if (itemstack != null && itemstack.id == Item.BONE.id && !this.isAngry()) {
                 --itemstack.count;
                 if (itemstack.count <= 0) {
