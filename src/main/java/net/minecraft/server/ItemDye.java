@@ -36,8 +36,11 @@ public class ItemDye extends Item {
             }
 
             if (i1 == Block.PUMPKIN_STEM.id || i1 == Block.MELON_STEM.id) {
-                if (!world.isStatic) {
-                    ((BlockStem) Block.byId[i1]).d_(world, i, j, k);
+				BlockStem stem = (BlockStem) Block.byId[i1];
+				if (!stem.canGrowWithBonemeal(world, i, j, k)) {
+					return false;
+				}
+				if (!world.isStatic && stem.d_(world, i, j, k)) {
                     --itemstack.count;
                 }
 

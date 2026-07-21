@@ -30,14 +30,14 @@ dependencies {
     implementation("com.mysql:mysql-connector-j:9.2.0")
     implementation("org.avaje:ebean:2.7.3")
     implementation("org.yaml:snakeyaml:1.7")
-    implementation("com.google.guava:guava-collections:r03")
     implementation("org.jetbrains:annotations:20.0.0")
 
     // Bukkit Mods
     implementation("com.google.guava:guava:32.0.1-jre")
-    implementation("org.apache.commons:commons-lang3:3.12.0")
     implementation("com.google.code.gson:gson:2.9.0")
     implementation("io.airlift:aircompressor:2.0.3")
+
+    testImplementation("junit:junit:4.13.2")
 }
 
 // For exposing statics to Java, see BuildParameters.java.peb inside the main/java-templates dir
@@ -69,6 +69,14 @@ tasks.withType<Javadoc>() {
     options.encoding = "UTF-8"
 }
 
+tasks.withType<Test>().configureEach {
+    val isolatedWorkingDirectory = layout.buildDirectory.dir("test-work")
+    doFirst {
+        isolatedWorkingDirectory.get().asFile.mkdirs()
+    }
+    workingDir(isolatedWorkingDirectory)
+}
+
 tasks.named<Jar>("jar").configure {
     manifest {
         from("src/main/resources/META-INF/MANIFEST.MF")
@@ -85,6 +93,10 @@ tasks.shadowJar {
     from(listOf(sourceSets.main.get().output))
 
     exclude("junit/**")
+    // Ebean 2.7's socket cluster transport performs unauthenticated Java
+    // deserialization. Core also forces clustering off at runtime; omit the
+    // transport entirely from distributed server jars as a second boundary.
+    exclude("com/avaje/ebeaninternal/server/cluster/socket/**")
 }
 
 tasks.assemble {

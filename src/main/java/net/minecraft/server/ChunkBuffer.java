@@ -1,8 +1,10 @@
 package net.minecraft.server;
 
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.zip.Deflater;
+import java.util.zip.DeflaterOutputStream;
 
 class ChunkBuffer extends ByteArrayOutputStream {
 
@@ -26,7 +28,7 @@ class ChunkBuffer extends ByteArrayOutputStream {
         this.codec = codec;
     }
 
-    public void close() {
+    public void close() throws IOException {
         byte[] payload = this.buf;
         int payloadLength = this.count;
         byte codecToWrite = this.codec;
@@ -65,6 +67,45 @@ class ChunkBuffer extends ByteArrayOutputStream {
         this.a.a(this.b, this.c, payload, payloadLength, codecToWrite);
     }
 
+    static void writeUncompressed(RegionFile regionFile, int chunkX, int chunkZ, byte[] source, int length, byte preferredCodec) throws IOException {
+        byte[] payload;
+        byte codecToWrite;
+
+        if (preferredCodec == 3) {
+            long zstdStart = System.nanoTime();
+            payload = ZstdRuntime.compressZstd(source, 0, length, 3);
+            if (payload != null) {
+                long duration = System.nanoTime() - zstdStart;
+                if (duration > 0L) {
+                    regionWriteZstdNanosTotal.addAndGet(duration);
+                }
+                regionWriteZstdTotal.incrementAndGet();
+                codecToWrite = 3;
+            } else {
+                regionWriteZstdFallbackTotal.incrementAndGet();
+                long zlibStart = System.nanoTime();
+                payload = compressDeflate(source, length);
+                long duration = System.nanoTime() - zlibStart;
+                if (duration > 0L) {
+                    regionWriteZlibNanosTotal.addAndGet(duration);
+                }
+                regionWriteZlibTotal.incrementAndGet();
+                codecToWrite = 2;
+            }
+        } else {
+            long zlibStart = System.nanoTime();
+            payload = compressDeflate(source, length);
+            long duration = System.nanoTime() - zlibStart;
+            if (duration > 0L) {
+                regionWriteZlibNanosTotal.addAndGet(duration);
+            }
+            regionWriteZlibTotal.incrementAndGet();
+            codecToWrite = 2;
+        }
+
+        regionFile.a(chunkX, chunkZ, payload, payload.length, codecToWrite);
+    }
+
     public static long getRegionWriteZstdTotal() {
         return regionWriteZstdTotal.get();
     }
@@ -85,21 +126,20 @@ class ChunkBuffer extends ByteArrayOutputStream {
         return regionWriteZlibNanosTotal.get();
     }
 
-    private byte[] compressDeflate(byte[] source, int length) {
+    private static byte[] compressDeflate(byte[] source, int length) throws IOException {
+        ByteArrayOutputStream compressed = new ByteArrayOutputStream(Math.min(length + 128, 1048576));
         Deflater deflater = new Deflater();
+        DeflaterOutputStream output = new DeflaterOutputStream(compressed, deflater);
         try {
-            deflater.setInput(source, 0, length);
-            deflater.finish();
-            byte[] out = new byte[length + 128];
-            int written = deflater.deflate(out);
-            if (written <= 0) {
-                return null;
-            }
-            byte[] compressed = new byte[written];
-            System.arraycopy(out, 0, compressed, 0, written);
-            return compressed;
+            output.write(source, 0, length);
+            output.finish();
+            return compressed.toByteArray();
         } finally {
-            deflater.end();
+            try {
+                output.close();
+            } finally {
+                deflater.end();
+            }
         }
     }
 }

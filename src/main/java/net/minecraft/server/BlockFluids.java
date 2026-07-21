@@ -28,14 +28,14 @@ public abstract class BlockFluids extends Block {
     }
 
     protected int g(World world, int i, int j, int k) {
-        return world.getMaterial(i, j, k) != this.material ? -1 : world.getData(i, j, k);
+        return this.getMaterialIfLoaded(world, i, j, k) != this.material ? -1 : this.getDataIfLoaded(world, i, j, k);
     }
 
     protected int b(IBlockAccess iblockaccess, int i, int j, int k) {
-        if (iblockaccess.getMaterial(i, j, k) != this.material) {
+        if (this.getMaterialIfLoaded(iblockaccess, i, j, k) != this.material) {
             return -1;
         } else {
-            int l = iblockaccess.getData(i, j, k);
+            int l = this.getDataIfLoaded(iblockaccess, i, j, k);
 
             if (l >= 8) {
                 l = 0;
@@ -58,9 +58,13 @@ public abstract class BlockFluids extends Block {
     }
 
     public boolean b(IBlockAccess iblockaccess, int i, int j, int k, int l) {
-        Material material = iblockaccess.getMaterial(i, j, k);
+        Material material = this.getMaterialIfLoaded(iblockaccess, i, j, k);
 
-        return material == this.material ? false : (material == Material.ICE ? false : (l == 1 ? true : super.b(iblockaccess, i, j, k, l)));
+        if (material == null) {
+            return false;
+        }
+
+        return material == this.material ? false : (material == Material.ICE ? false : (l == 1 ? true : material.isBuildable()));
     }
 
     public AxisAlignedBB e(World world, int i, int j, int k) {
@@ -103,7 +107,9 @@ public abstract class BlockFluids extends Block {
             int i2;
 
             if (l1 < 0) {
-                if (!iblockaccess.getMaterial(j1, j, k1).isSolid()) {
+                Material material = this.getMaterialIfLoaded(iblockaccess, j1, j, k1);
+
+                if (material != null && !material.isSolid()) {
                     l1 = this.b(iblockaccess, j1, j - 1, k1);
                     if (l1 >= 0) {
                         i2 = l1 - (l - 8);
@@ -116,7 +122,7 @@ public abstract class BlockFluids extends Block {
             }
         }
 
-        if (iblockaccess.getData(i, j, k) >= 8) {
+        if (this.getDataIfLoaded(iblockaccess, i, j, k) >= 8) {
             boolean flag = false;
 
             if (flag || this.b(iblockaccess, i, j, k - 1, 2)) {
@@ -189,28 +195,28 @@ public abstract class BlockFluids extends Block {
             if (this.material == Material.LAVA) {
                 boolean flag = false;
 
-                if (flag || world.getMaterial(i, j, k - 1) == Material.WATER) {
+                if (flag || this.getMaterialIfLoaded(world, i, j, k - 1) == Material.WATER) {
                     flag = true;
                 }
 
-                if (flag || world.getMaterial(i, j, k + 1) == Material.WATER) {
+                if (flag || this.getMaterialIfLoaded(world, i, j, k + 1) == Material.WATER) {
                     flag = true;
                 }
 
-                if (flag || world.getMaterial(i - 1, j, k) == Material.WATER) {
+                if (flag || this.getMaterialIfLoaded(world, i - 1, j, k) == Material.WATER) {
                     flag = true;
                 }
 
-                if (flag || world.getMaterial(i + 1, j, k) == Material.WATER) {
+                if (flag || this.getMaterialIfLoaded(world, i + 1, j, k) == Material.WATER) {
                     flag = true;
                 }
 
-                if (flag || world.getMaterial(i, j + 1, k) == Material.WATER) {
+                if (flag || this.getMaterialIfLoaded(world, i, j + 1, k) == Material.WATER) {
                     flag = true;
                 }
 
                 if (flag) {
-                    int l = world.getData(i, j, k);
+                    int l = this.getDataIfLoaded(world, i, j, k);
 
                     if (l == 0) {
                         world.setTypeId(i, j, k, Block.OBSIDIAN.id);
@@ -222,6 +228,32 @@ public abstract class BlockFluids extends Block {
                 }
             }
         }
+    }
+
+    private Material getMaterialIfLoaded(IBlockAccess iblockaccess, int i, int j, int k) {
+        if (iblockaccess instanceof World) {
+            if (j < 0 || j >= 128) {
+                return Material.AIR;
+            }
+
+            return ((World) iblockaccess).getMaterialIfLoaded(i, j, k);
+        }
+
+        return iblockaccess.getMaterial(i, j, k);
+    }
+
+    private int getDataIfLoaded(IBlockAccess iblockaccess, int i, int j, int k) {
+        if (iblockaccess instanceof World) {
+            if (j < 0 || j >= 128) {
+                return 0;
+            }
+
+            World world = (World) iblockaccess;
+
+            return world.isLoaded(i, j, k) ? world.getDataIfLoaded(i, j, k) : 0;
+        }
+
+        return iblockaccess.getData(i, j, k);
     }
 
     protected void h(World world, int i, int j, int k) {

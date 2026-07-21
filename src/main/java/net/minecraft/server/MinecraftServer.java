@@ -67,7 +67,7 @@ public class MinecraftServer implements Runnable, ICommandListener {
     public String i;
     public int j;
     private List r = new ArrayList();
-    private List s = Collections.synchronizedList(new ArrayList());
+    private Queue s = new java.util.concurrent.ConcurrentLinkedQueue();
     // public EntityTracker[] tracker = new EntityTracker[2]; // CraftBukkit - removed!
     public boolean onlineMode;
     public boolean spawnAnimals;
@@ -441,7 +441,7 @@ public class MinecraftServer implements Runnable, ICommandListener {
             ChunkGenerator gen = this.server.getGenerator(name);
 
             if (j == 0) {
-                System.out.println("[MINECRAFT_SERVER_DEBUG] Preparing Overworld. configuredLevelType: " + this.configuredLevelType + ", level-name: " + s + ", seed: " + i);
+                log.fine("Preparing overworld: levelType=" + this.configuredLevelType + ", level=" + s + ", seed=" + i);
                 IDataManager dataManager = new ServerNBTManager(this.worldContainer, s, true);
                 WorldData worldData = dataManager.c();
                 long seedToUse = i;
@@ -1025,7 +1025,7 @@ public class MinecraftServer implements Runnable, ICommandListener {
                     EntityPlayer entityPlayer = (EntityPlayer) worldserver.players.get(i);
                     if (entityPlayer != null) {
                         entityPlayer.netServerHandler.sendPacket(new Packet4UpdateTime(entityPlayer.getPlayerTime())); // Add support for per player time
-
+                        entityPlayer.netServerHandler.sendCloudTimeSync();
                     }
                 }
                 // CraftBukkit end
@@ -1053,6 +1053,10 @@ public class MinecraftServer implements Runnable, ICommandListener {
 
         profiler.startSection("playerManagerFlush");
         this.serverConfigurationManager.b();
+        profiler.endSection();
+
+        profiler.startSection("incrementalPlayerSave");
+        this.serverConfigurationManager.savePlayersIncrementally();
         profiler.endSection();
 
         // CraftBukkit start
@@ -1202,12 +1206,9 @@ public class MinecraftServer implements Runnable, ICommandListener {
 
     public void b() {
         while (true) {
-            ServerCommand servercommand;
-            synchronized (this.s) {
-                if (this.s.size() == 0) {
-                    break;
-                }
-                servercommand = (ServerCommand) this.s.remove(0);
+            ServerCommand servercommand = (ServerCommand) this.s.poll();
+            if (servercommand == null) {
+                break;
             }
             long queueWaitMs = Math.max(0L, System.currentTimeMillis() - servercommand.enqueueTimeMillis);
 
@@ -1221,10 +1222,7 @@ public class MinecraftServer implements Runnable, ICommandListener {
             long commandStart = System.nanoTime();
             this.server.dispatchCommand(this.console, servercommand); // CraftBukkit
             double commandExecMs = (System.nanoTime() - commandStart) / 1_000_000.0D;
-            int remainingCommands;
-            synchronized (this.s) {
-                remainingCommands = this.s.size();
-            }
+            int remainingCommands = this.s.size();
             ServerProfiler.getInstance().recordCommandLatency(
                 extractCommandRoot(servercommand.command),
                 queueWaitMs,

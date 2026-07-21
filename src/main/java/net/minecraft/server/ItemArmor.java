@@ -30,4 +30,26 @@ public class ItemArmor extends Item {
     private static int a(int i) {
         return Math.max(0, Math.min(bn.length - 1, i));
     }
+
+    @Override
+    public ItemStack a(ItemStack stack, World world, EntityHuman player) {
+        if (stack == null || player == null || player.inventory == null) {
+            return stack;
+        }
+        int armorIndex = ArmorEquipHelper.getArmorInventoryIndex(this.bk);
+        if (armorIndex < 0 || armorIndex >= player.inventory.armor.length) {
+            return stack;
+        }
+
+        ItemStack previouslyEquipped = player.inventory.armor[armorIndex];
+        boolean creative = player.gameMode == 1;
+        player.inventory.armor[armorIndex] = creative ? stack.cloneItemStack() : stack;
+        if (previouslyEquipped != null) {
+            player.inventory.items[player.inventory.itemInHandIndex] = previouslyEquipped;
+        } else if (!creative) {
+            player.inventory.items[player.inventory.itemInHandIndex] = null;
+        }
+        player.inventory.update();
+        return stack;
+    }
 }

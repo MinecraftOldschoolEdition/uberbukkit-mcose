@@ -11,6 +11,7 @@ import java.util.ArrayDeque;
 import java.util.HashMap;
 import java.util.Collections;
 import java.util.Map;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicLongArray;
@@ -69,6 +70,9 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     private double y;
     private double z;
     private boolean checkMovement = true;
+    private static final long MOVEMENT_WARNING_INTERVAL_MS = 5000L;
+    private long lastMovementWarningAt = 0L;
+    private int suppressedMovementWarnings = 0;
     private Map n = new HashMap();
     private boolean usingReleaseToBeta = false; //Project Poseidon - Create Variable
     private ConnectionType connectionType = ConnectionType.NORMAL; //Project Poseidon - Create Variable
@@ -122,6 +126,29 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     private int remoteModProtocolVersion = 0;
     private int negotiatedModFeatures = 0;
     private RegistrySyncSnapshot syncedRegistrySnapshot = null;
+    private final OneShotGate modHelloGate = new OneShotGate();
+    private final OneShotGate registrySyncRequestGate = new OneShotGate();
+    private static final long SKIN_PART_UPDATE_WINDOW_MS = 2000L;
+    private static final int SKIN_PART_UPDATES_PER_WINDOW = 4;
+    private final FixedWindowRateLimiter skinPartUpdateLimiter =
+            new FixedWindowRateLimiter(SKIN_PART_UPDATE_WINDOW_MS, SKIN_PART_UPDATES_PER_WINDOW);
+    private static final long FRIEND_REQUEST_WINDOW_MS = 2000L;
+    private static final int FRIEND_REQUESTS_PER_WINDOW = 8;
+    private final FixedWindowRateLimiter friendRequestLimiter =
+            new FixedWindowRateLimiter(FRIEND_REQUEST_WINDOW_MS, FRIEND_REQUESTS_PER_WINDOW);
+    private static final long CHAT_ROOM_ACTION_WINDOW_MS = 2000L;
+    private static final int CHAT_ROOM_ACTIONS_PER_WINDOW = 4;
+    private final FixedWindowRateLimiter chatRoomActionLimiter =
+            new FixedWindowRateLimiter(CHAT_ROOM_ACTION_WINDOW_MS, CHAT_ROOM_ACTIONS_PER_WINDOW);
+    private static final long AUTOCOMPLETE_REQUEST_WINDOW_MS = 2000L;
+    private static final int AUTOCOMPLETE_REQUESTS_PER_WINDOW = 4;
+    // Packet203 and the MCOSE custom-payload protocol intentionally share one
+    // budget so alternating transports cannot bypass the limiter.
+    private final FixedWindowRateLimiter autocompleteRequestLimiter =
+            new FixedWindowRateLimiter(AUTOCOMPLETE_REQUEST_WINDOW_MS, AUTOCOMPLETE_REQUESTS_PER_WINDOW);
+    private static final long MAP_LOCK_AUTHORIZATION_MS = 10000L;
+    private final MapLockAuthorization mapLockAuthorization =
+            new MapLockAuthorization(MAP_LOCK_AUTHORIZATION_MS);
     
     private final String msgPlayerLeave;
     private static final long INVENTORY_SHORTCUT_PRIME_MS = 350L;
@@ -164,6 +191,26 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     public boolean supportsSkinPartSync() {
         return this.modProtocolNegotiated
             && (this.negotiatedModFeatures & ModProtocol.FEATURE_SKIN_PARTS_SYNC) != 0;
+    }
+
+    public boolean supportsCloudTimeSync() {
+        return this.modProtocolNegotiated
+            && (this.negotiatedModFeatures & ModProtocol.FEATURE_CLOUD_TIME_SYNC) != 0;
+    }
+
+    public boolean supportsContainerInputs() {
+        return this.modProtocolNegotiated
+            && (this.negotiatedModFeatures & ModProtocol.FEATURE_CONTAINER_INPUTS) != 0;
+    }
+
+    public void sendCloudTimeSync() {
+        if (!this.supportsCloudTimeSync() || this.player == null || this.player.world == null) {
+            return;
+        }
+
+        this.sendPacket(new Packet250CustomPayload(
+            ModProtocol.CHANNEL_CLOUD_TIME,
+            ModProtocol.createCloudTimePayload(this.player.world.getBlockTickTime())));
     }
 
     public static long getParallelVoiceConsumedTotal() {
@@ -356,11 +403,51 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     private final CraftServer server;
     private int lastTick = MinecraftServer.currentTick;
     private int lastDropTick = MinecraftServer.currentTick;
+    private int lastBookTick = MinecraftServer.currentTick - 20;
     private int dropCount = 0;
     private int movementPacketTick = MinecraftServer.currentTick;
     private int movementPacketsThisTick = 0;
     private static final int PLACE_DISTANCE_SQUARED = 6 * 6;
     private static final long RIGHT_CLICK_DUPLICATE_SUPPRESS_MS = 35L;
+    private static final long LIMITED_INTERACTION_WINDOW_MS = 30L;
+    // Historical Spigot/Paper semantics: one initial packet plus four followups.
+    private static final int LIMITED_INTERACTION_FOLLOWUPS = 4;
+    private int limitedInteractionPackets = 0;
+    private long lastLimitedInteractionPacket = -1L;
+
+    /**
+     * Spigot/Paper interaction limiter. Block-use and arm-animation packets share
+     * one small burst budget so alternating packet types cannot bypass the cap.
+     */
+    private boolean checkInteractionLimit(long timestamp) {
+        long elapsed = timestamp - this.lastLimitedInteractionPacket;
+        if (this.lastLimitedInteractionPacket != -1L
+                && elapsed >= 0L
+                && elapsed < LIMITED_INTERACTION_WINDOW_MS
+                && this.limitedInteractionPackets++ >= LIMITED_INTERACTION_FOLLOWUPS) {
+            return false;
+        }
+
+        if (this.lastLimitedInteractionPacket == -1L
+                || elapsed < 0L
+                || elapsed >= LIMITED_INTERACTION_WINDOW_MS) {
+            this.lastLimitedInteractionPacket = timestamp;
+            this.limitedInteractionPackets = 0;
+        }
+
+        return true;
+    }
+
+    private boolean checkBookEditRate() {
+        int currentTick = MinecraftServer.currentTick;
+        long elapsed = (long) currentTick - (long) this.lastBookTick;
+        if (elapsed >= 0L && elapsed < 20L) {
+            this.disconnect("Book edited too quickly!");
+            return false;
+        }
+        this.lastBookTick = currentTick;
+        return true;
+    }
 
     // Get position of last block hit for BlockDamageLevel.STOPPED
     private double lastPosX = Double.MAX_VALUE;
@@ -410,6 +497,12 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
 
         // uberbukkit - play breaking sound & animation for others
         if (this.mineExpire >= System.currentTimeMillis()) {
+            if (this.lastDigX == null || this.lastDigY == null || this.lastDigZ == null
+                    || !this.player.world.isLoaded(this.lastDigX.intValue(), this.lastDigY.intValue(), this.lastDigZ.intValue())) {
+                this.mineExpire = 0L;
+                this.lastMine = 0L;
+                return;
+            }
             if (this.lastMine + 200L < System.currentTimeMillis()) {
                 return;
             }
@@ -422,7 +515,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             // prevent overflow (lol)
             delaySound = 0;
 
-            int id = this.player.world.getTypeId(lastDigX, lastDigY, lastDigZ);
+            int id = this.player.world.getTypeIdIfLoaded(lastDigX, lastDigY, lastDigZ);
             if (id == 0) return;
 
             Block block = Block.byId[id];
@@ -492,10 +585,19 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     }
 
     public void a(Packet27 packet27) {
+        if (!isFinite(packet27.c()) || !isFinite(packet27.e()) || !isFinite(packet27.d()) || !isFinite(packet27.f())) {
+            disconnectInvalidMovementPacket();
+            return;
+        }
+
         // poseidon
         PacketReceivedEvent event = new PacketReceivedEvent(server.getPlayer(player), packet27);
         server.getPluginManager().callEvent(event);
         if (event.isCancelled()) return;
+        if (!isFinite(packet27.c()) || !isFinite(packet27.e()) || !isFinite(packet27.d()) || !isFinite(packet27.f())) {
+            disconnectInvalidMovementPacket();
+            return;
+        }
 
         this.player.a(packet27.c(), packet27.e(), packet27.g(), packet27.h(), packet27.d(), packet27.f());
     }
@@ -540,11 +642,15 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     }
 
     public void a(Packet10Flying packet10flying) {
+        if (!isValidMovementPacket(packet10flying)) {
+            disconnectInvalidMovementPacket();
+            return;
+        }
+
         // poseidon
         PacketReceivedEvent pevent = new PacketReceivedEvent(server.getPlayer(player), packet10flying);
         server.getPluginManager().callEvent(pevent);
         if (pevent.isCancelled()) return;
-
         if (!isValidMovementPacket(packet10flying)) {
             disconnectInvalidMovementPacket();
             return;
@@ -588,7 +694,10 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         }
 
         // Prevent 40 event-calls for less than a single pixel of movement >.>
-        double delta = Math.pow(this.lastPosX - to.getX(), 2) + Math.pow(this.lastPosY - to.getY(), 2) + Math.pow(this.lastPosZ - to.getZ(), 2);
+        double lastDeltaX = this.lastPosX - to.getX();
+        double lastDeltaY = this.lastPosY - to.getY();
+        double lastDeltaZ = this.lastPosZ - to.getZ();
+        double delta = lastDeltaX * lastDeltaX + lastDeltaY * lastDeltaY + lastDeltaZ * lastDeltaZ;
         float deltaAngle = Math.abs(this.lastYaw - to.getYaw()) + Math.abs(this.lastPitch - to.getPitch());
 
         if ((delta > 1f / 256 || deltaAngle > 10f) && (this.checkMovement && !this.player.dead)) {
@@ -753,7 +862,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
                     double movementBurstMultiplier = Math.max(1.0D, (double) (movementPacketsThisTick - 5));
                     double speedCheckDistance = (double) PoseidonConfig.getInstance().getConfigOption("world.settings.speed-hack-check.distance", 100.0D) * movementBurstMultiplier;
                     if (d8 - d14 > speedCheckDistance && this.checkMovement) { // CraftBukkit - Added this.checkMovement condition to solve this check being triggered by teleports
-                    a.warning(this.player.name + " moved too quickly! " + d4 + "," + d6 + "," + d7 + " (" + d4 + ", " + d6 + ", " + d7 + ")");
+                    this.logMovementWarning("moved too quickly (delta=" + d4 + "," + d6 + "," + d7 + ")");
                     if ((boolean) PoseidonConfig.getInstance().getConfigOption("world.settings.speed-hack-check.teleport", true)) {
                         this.a(this.x, this.y, this.z, this.player.yaw, this.player.pitch);
                     } else {
@@ -764,9 +873,10 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             }
 
             float f4 = 0.0625F;
-            boolean flag = worldserver.getEntities(this.player, this.player.boundingBox.clone().shrink((double) f4, (double) f4, (double) f4)).size() == 0;
+            AxisAlignedBB oldCollisionBox = this.player.boundingBox.clone().shrink((double) f4, (double) f4, (double) f4);
 
             this.player.move(d4, d6, d7);
+            boolean moveHitCollision = d1 != this.player.locX || d2 != this.player.locY || d3 != this.player.locZ;
             d4 = d1 - this.player.locX;
             d6 = d2 - this.player.locY;
             if (d6 > -0.5D && d6 < 0.5D) {
@@ -790,9 +900,8 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             
             if (d8 > movementTolerance && !this.player.isSleeping()) {
                 flag1 = true;
-                a.warning(this.player.name + " moved wrongly!");
-                System.out.println("Got position " + d1 + ", " + d2 + ", " + d3);
-                System.out.println("Expected " + this.player.locX + ", " + this.player.locY + ", " + this.player.locZ);
+                this.logMovementWarning("moved wrongly (received=" + d1 + "," + d2 + "," + d3
+                        + ", resolved=" + this.player.locX + "," + this.player.locY + "," + this.player.locZ + ")");
             }
 
             // Alpha parity: apply small upward impulse when pushing into ladders (supports ladder gaps)
@@ -801,15 +910,22 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
                 d2Adjusted = this.player.locY + 0.2D;
             }
             this.player.setLocation(d1, d2Adjusted, d3, f2, f3);
-            boolean flag2 = worldserver.getEntities(this.player, this.player.boundingBox.clone().shrink((double) f4, (double) f4, (double) f4)).size() == 0;
+            boolean shouldCheckMovementCollision = !this.player.isSleeping() && !isCreativeOrCanFly;
+            boolean teleportBack = false;
+            if (shouldCheckMovementCollision) {
+                if (flag1) {
+                    teleportBack = !worldserver.hasCollision(this.player, oldCollisionBox);
+                } else if (moveHitCollision) {
+                    AxisAlignedBB newCollisionBox = this.player.boundingBox.clone().shrink((double) f4, (double) f4, (double) f4);
+                    teleportBack = worldserver.hasNewCollision(this.player, oldCollisionBox, newCollisionBox);
+                }
+            }
 
             // MCOSE: Skip teleport-back for creative/flying players to allow smooth landings
-            if (flag && (flag1 || !flag2) && !this.player.isSleeping() && !isCreativeOrCanFly) {
+            if (teleportBack) {
                 this.a(this.x, this.y, this.z, f2, f3);
                 return;
             }
-
-            AxisAlignedBB axisalignedbb = this.player.boundingBox.clone().b((double) f4, (double) f4, (double) f4).a(0.0D, -0.55D, 0.0D);
 
             // uberbukkit
             boolean bool = false;
@@ -819,7 +935,16 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             }
 
             // Treat ladders (including ladder gaps via EntityLiving.p()) as valid support to avoid false fly checks
-            boolean supported = worldserver.b(axisalignedbb) || this.player.p();
+            AxisAlignedBB playerBox = this.player.boundingBox;
+            double supportExpand = (double) f4;
+            boolean supported = worldserver.hasBlockInBox(
+                playerBox.a - supportExpand,
+                playerBox.b - supportExpand - 0.55D,
+                playerBox.c - supportExpand,
+                playerBox.d + supportExpand,
+                playerBox.e + supportExpand,
+                playerBox.f + supportExpand
+            ) || this.player.p();
             if (!this.minecraftServer.allowFlight && !supported && !bool) {
                 boolean creativeBypass = this.player != null && this.player instanceof EntityPlayer && ((EntityPlayer) this.player).gameMode == 1;
                 // Consider real downward motion as falling, not hovering/flying.
@@ -859,6 +984,22 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         this.teleport(to);
     }
 
+    private void logMovementWarning(String detail) {
+        long now = System.currentTimeMillis();
+        if (now - this.lastMovementWarningAt < MOVEMENT_WARNING_INTERVAL_MS) {
+            ++this.suppressedMovementWarnings;
+            return;
+        }
+
+        String playerName = this.player != null && this.player.name != null ? this.player.name : "<unknown>";
+        String suppressed = this.suppressedMovementWarnings > 0
+                ? " (" + this.suppressedMovementWarnings + " similar movement warnings suppressed)"
+                : "";
+        a.warning(playerName + " " + detail + suppressed);
+        this.lastMovementWarningAt = now;
+        this.suppressedMovementWarnings = 0;
+    }
+
     public void teleport(Location dest) {
         double d0, d1, d2;
         float f, f1;
@@ -896,6 +1037,11 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
 
     // uberbukkit
     public void a(Packet21PickupSpawn packet21) {
+        if (!isValidLegacyDropRequest(packet21, this.networkManager.pvn)) {
+            this.disconnect("Invalid item drop packet");
+            return;
+        }
+
         // copy from craftbukkit
         if (this.lastDropTick != MinecraftServer.currentTick) {
             this.dropCount = 0;
@@ -906,29 +1052,43 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             if (this.dropCount >= 20) {
                 a.warning(this.player.name + " dropped their items too quickly!");
                 this.disconnect("You dropped your items too quickly (Hacking?)");
+                return;
             }
         }
         // drop itemstack
         ItemStack hand = this.player.inventory.items[this.player.inventory.itemInHandIndex];
         ItemStack todrop = null;
 
-        if (hand != null && hand.id == packet21.h && hand.count >= packet21.i && packet21.i == 1) {
+        if (hand != null && hand.id == packet21.h && hand.count >= 1) {
             todrop = hand.cloneItemStack();
-            todrop.count = packet21.i;
-            hand.count -= packet21.i;
+            todrop.count = 1;
+            --hand.count;
         } else {
             ArrayList<ItemStack> list = this.player.packet5.queue.getQueue();
             for (ItemStack stack : list) {
-                if (stack.id == packet21.h && stack.count >= packet21.i) {
+                if (stack.id == packet21.h && stack.count >= 1) {
                     todrop = stack.cloneItemStack();
-                    todrop.count = packet21.i;
-                    this.player.packet5.queue.removeStackFromQueue(todrop);
-                    break;
+                    todrop.count = 1;
+                    if (this.player.packet5.queue.hasInQueue(todrop)) {
+                        break;
+                    }
+                    todrop = null;
                 }
             }
         }
-        this.player.a(todrop, false);
+        if (todrop != null) {
+            this.player.a(todrop, false);
+        }
         //this.player.F();
+    }
+
+    static boolean isValidLegacyDropRequest(Packet21PickupSpawn packet, int protocolVersion) {
+        return packet != null
+                && protocolVersion <= 6
+                && packet.i == 1
+                && packet.h >= 0
+                && packet.h < Item.byId.length
+                && Item.byId[packet.h] != null;
     }
 
     public boolean tryHandleParallelChat(Packet3Chat packet3chat) {
@@ -1314,7 +1474,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         } while (!target.compareAndSet(prev, candidate));
     }
 
-	private boolean canUseVoiceChat() {
+	boolean canUseVoiceChat() {
 		// Voice chat is enabled by default for all players
 		// Admins can disable it for specific players using permission plugins
 		// by negating the uberbukkit.voice.chat permission (set to false)
@@ -1331,7 +1491,22 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     }
 
     public void handle66ChatRoomAction(Packet66ChatRoomAction packet66) {
+        if (!isValidChatRoomAction(packet66, this.modProtocolNegotiated)
+                || !this.chatRoomActionLimiter.tryAcquire(System.currentTimeMillis())) {
+            return;
+        }
         this.minecraftServer.chatRoomManager.handleAction(this.player, packet66);
+    }
+
+    static boolean isValidChatRoomAction(Packet66ChatRoomAction packet, boolean modProtocolNegotiated) {
+        return modProtocolNegotiated
+                && packet != null
+                && packet.action >= Packet66ChatRoomAction.ACTION_CREATE
+                && packet.action <= Packet66ChatRoomAction.ACTION_SET_VOICE_ROUTE
+                && packet.roomName != null
+                && packet.roomName.length() <= 64
+                && packet.targetName != null
+                && packet.targetName.length() <= 64;
     }
 
     public long mineExpire = 0;
@@ -1355,11 +1530,57 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         return itemInHand != null && itemInHand.getItem() instanceof ItemSword;
     }
 
+    private static boolean isValidBlockDigShape(Packet14BlockDig packet) {
+        return packet != null
+                && packet.e >= 0
+                && packet.e <= 5
+                && ((packet.e != 0 && packet.e != 1 && packet.e != 3 && packet.e != 5)
+                || (packet.face >= 0 && packet.face <= 5));
+    }
+
+    private static boolean isValidBlockPlaceShape(Packet15Place packet) {
+        if (packet == null || (packet.face != 255 && (packet.face < 0 || packet.face > 5))) {
+            return false;
+        }
+        if (packet.itemstack == null) {
+            return true;
+        }
+        return packet.itemstack.id >= 0
+                && packet.itemstack.id < Item.byId.length
+                && Item.byId[packet.itemstack.id] != null
+                && packet.itemstack.count > 0;
+    }
+
+    private static boolean isValidAnimationShape(Packet18ArmAnimation packet) {
+        return packet != null && (packet.b == 1 || packet.b == 104 || packet.b == 105);
+    }
+
+    private boolean isDigTargetUsable(WorldServer world, int x, int y, int z, double maximumDistanceSquared) {
+        if (x < -32000000 || x >= 32000000 || z < -32000000 || z > 32000000 || y < 0 || y >= 128) {
+            return false;
+        }
+
+        double deltaX = this.player.locX - ((double) x + 0.5D);
+        double deltaY = this.player.locY - ((double) y + 0.5D);
+        double deltaZ = this.player.locZ - ((double) z + 0.5D);
+        return deltaX * deltaX + deltaY * deltaY + deltaZ * deltaZ <= maximumDistanceSquared
+                && world.isLoaded(x, y, z);
+    }
+
     public void a(Packet14BlockDig packet14blockdig) {
+        if (!isValidBlockDigShape(packet14blockdig)) {
+            this.disconnect("Invalid block dig packet");
+            return;
+        }
+
         // poseidon
         PacketReceivedEvent event = new PacketReceivedEvent(server.getPlayer(player), packet14blockdig);
         server.getPluginManager().callEvent(event);
         if (event.isCancelled()) return;
+        if (!isValidBlockDigShape(packet14blockdig)) {
+            this.disconnect("Invalid block dig packet");
+            return;
+        }
 
         if (this.player.dead) return; // CraftBukkit
         if (uk.betacraft.uberbukkit.AdminRegistry.isFrozen(this.player.name)) {
@@ -1367,17 +1588,43 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             return;
         }
 
+        WorldServer worldserver = this.minecraftServer.getWorldServer(this.player.dimension);
+        if (packet14blockdig.e == 5) {
+            // MCOSE uses action 5 as the creative pick-block prelude. Packet107
+            // performs the actual server-authorized slot sync; this packet is a
+            // validated no-op and must never mutate dig state or load a chunk.
+            if (this.player.gameMode != 1) {
+                this.disconnect("Invalid creative pick-block packet");
+                return;
+            }
+            if (!this.isDigTargetUsable(worldserver, packet14blockdig.a, packet14blockdig.b, packet14blockdig.c, 36.0D)) {
+                return;
+            }
+            return;
+        }
+
+        if (packet14blockdig.e == 0 || packet14blockdig.e == 1 || packet14blockdig.e == 3) {
+            double maximumDistanceSquared = packet14blockdig.e == 3 ? 256.0D : 36.0D;
+            if (!this.isDigTargetUsable(worldserver, packet14blockdig.a, packet14blockdig.b, packet14blockdig.c, maximumDistanceSquared)) {
+                return;
+            }
+        } else if (packet14blockdig.e == 2) {
+            if (this.lastDigX == null || this.lastDigY == null || this.lastDigZ == null
+                    || !this.isDigTargetUsable(worldserver, this.lastDigX.intValue(), this.lastDigY.intValue(), this.lastDigZ.intValue(), 36.0D)) {
+                this.mineExpire = 0L;
+                this.lastMine = 0L;
+                return;
+            }
+        }
+
         if (this.isCreativeSwordDig(packet14blockdig)) {
             if (packet14blockdig.e == 0 || packet14blockdig.e == 1 || packet14blockdig.e == 3) {
-                WorldServer worldserver = this.minecraftServer.getWorldServer(this.player.dimension);
                 this.sendPacket(new Packet53BlockChange(packet14blockdig.a, packet14blockdig.b, packet14blockdig.c, worldserver));
             }
             this.mineExpire = 0;
             this.lastMine = 0;
             return;
         }
-
-        WorldServer worldserver = this.minecraftServer.getWorldServer(this.player.dimension);
 
         if (packet14blockdig.e == 4) {
             // CraftBukkit start
@@ -1397,7 +1644,6 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             this.player.F();
         } else {
             boolean flag = worldserver.weirdIsOpCache = worldserver.dimension != 0 || this.minecraftServer.serverConfigurationManager.isOp(this.player.name); // CraftBukkit
-            boolean flag1 = false;
 
             // uberbukkit
 
@@ -1414,29 +1660,6 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             Integer j = packet14blockdig.b;
             Integer k = packet14blockdig.c;
 
-            if (packet14blockdig.e == 0) {
-                flag1 = true;
-            }
-
-            if (packet14blockdig.e == 1 && this.networkManager.pvn <= 8) {
-                flag1 = true;
-            }
-
-            if (packet14blockdig.e == 2 && this.networkManager.pvn >= 9) {
-                flag1 = true;
-            }
-
-            if (flag1) {
-                double d0 = this.player.locX - ((double) i + 0.5D);
-                double d1 = this.player.locY - ((double) j + 0.5D);
-                double d2 = this.player.locZ - ((double) k + 0.5D);
-                double d3 = d0 * d0 + d1 * d1 + d2 * d2;
-
-                if (d3 > 36.0D) {
-                    return;
-                }
-            }
-
             ChunkCoordinates chunkcoordinates = worldserver.getSpawn();
             int l = (int) MathHelper.abs((float) (i - chunkcoordinates.x));
             int i1 = (int) MathHelper.abs((float) (k - chunkcoordinates.z));
@@ -1448,11 +1671,14 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             if (this.networkManager.pvn <= 8) {
                 // CraftBukkit start
                 CraftPlayer player = getPlayer();
-                CraftBlock block = (CraftBlock) player.getWorld().getBlockAt(i, j, k);
+                int lookupX = packet14blockdig.e == 2 ? this.lastDigX.intValue() : i.intValue();
+                int lookupY = packet14blockdig.e == 2 ? this.lastDigY.intValue() : j.intValue();
+                int lookupZ = packet14blockdig.e == 2 ? this.lastDigZ.intValue() : k.intValue();
+                CraftBlock block = (CraftBlock) player.getWorld().getBlockAt(lookupX, lookupY, lookupZ);
                 int blockId = block.getTypeId();
                 float damage = 0;
                 if (Block.byId[blockId] != null) {
-                    damage = BlockMiningRegistryApi.getBreakProgressPerTick(player.getHandle(), worldserver, i, j, k); //Get amount of damage going to block
+                    damage = BlockMiningRegistryApi.getBreakProgressPerTick(player.getHandle(), worldserver, lookupX, lookupY, lookupZ); //Get amount of damage going to block
                 }
                 // CraftBukkit end
 
@@ -1486,7 +1712,6 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
                 } else if (packet14blockdig.e == 2) {
                     // CraftBukkit start - Get last block that the player hit
                     // Otherwise the block is a Bedrock @(0,0,0)
-                    block = (CraftBlock) player.getWorld().getBlockAt(lastDigX, lastDigY, lastDigZ);
                     BlockDamageEvent breakEvent = new BlockDamageEvent(player, block, player.getItemInHand(), damage >= 1.0F);
                     server.getPluginManager().callEvent(breakEvent);
                     if (!breakEvent.isCancelled()) {
@@ -1551,8 +1776,10 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
                     this.mineExpire = 0;
                     this.lastMine = 0;
 
-                    if (worldserver.getTypeId(lastDigX, lastDigY, lastDigZ) != 0) {
-                        this.player.netServerHandler.sendPacket(new Packet53BlockChange(lastDigX, lastDigY, lastDigZ, worldserver));
+                    int savedType = worldserver.getTypeIdIfLoaded(lastDigX, lastDigY, lastDigZ);
+                    if (savedType != 0) {
+                        int savedData = worldserver.getDataIfLoaded(lastDigX, lastDigY, lastDigZ);
+                        this.player.netServerHandler.sendPacket(new Packet53BlockChange(lastDigX, lastDigY, lastDigZ, savedType, savedData));
                     }
                 } else if (packet14blockdig.e == 3) {
                     double d4 = this.player.locX - ((double) i + 0.5D);
@@ -1566,16 +1793,25 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
                 }
             }
 
-            // uberbukkit - reset last positions when stops digging
-            lastDigX = i;
-            lastDigY = j;
-            lastDigZ = k;
+            // Only coordinate-bearing dig actions may update the saved target.
+            // Stop/drop packets contain placeholder coordinates on several legacy
+            // protocol versions and must not poison the next stop-dig operation.
+            if (packet14blockdig.e == 0 || (packet14blockdig.e == 1 && this.networkManager.pvn <= 8)) {
+                lastDigX = i;
+                lastDigY = j;
+                lastDigZ = k;
+            }
 
             worldserver.weirdIsOpCache = false;
         }
     }
 
     public void a(Packet15Place packet15place) {
+        if (!isValidBlockPlaceShape(packet15place)) {
+            this.disconnect("Invalid block place packet");
+            return;
+        }
+        if (!this.checkInteractionLimit(packet15place.timestamp)) return;
 //        System.out.println("Packet15 received");
 //        System.out.println("a: " + packet15place.a);
 //        System.out.println("b: " + packet15place.b);
@@ -1586,6 +1822,10 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         PacketReceivedEvent pevent = new PacketReceivedEvent(server.getPlayer(player), packet15place);
         server.getPluginManager().callEvent(pevent);
         if (pevent.isCancelled()) return;
+        if (!isValidBlockPlaceShape(packet15place)) {
+            this.disconnect("Invalid block place packet");
+            return;
+        }
 
         WorldServer worldserver = this.minecraftServer.getWorldServer(this.player.dimension);
 
@@ -1662,7 +1902,10 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
 
             // CraftBukkit start - Check if we can actually do something over this large a distance
             Location eyeLoc = this.getPlayer().getEyeLocation();
-            if (Math.pow(eyeLoc.getX() - i, 2) + Math.pow(eyeLoc.getY() - j, 2) + Math.pow(eyeLoc.getZ() - k, 2) > PLACE_DISTANCE_SQUARED) {
+            double placeDeltaX = eyeLoc.getX() - i;
+            double placeDeltaY = eyeLoc.getY() - j;
+            double placeDeltaZ = eyeLoc.getZ() - k;
+            if (placeDeltaX * placeDeltaX + placeDeltaY * placeDeltaY + placeDeltaZ * placeDeltaZ > PLACE_DISTANCE_SQUARED) {
                 return;
             }
             flag = true; // spawn protection moved to ItemBlock!!!
@@ -1900,6 +2143,13 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     }
 
     public void a(Packet16BlockItemSwitch packet16blockitemswitch) {
+        if (this.networkManager.pvn >= 7
+                && !isValidHotbarIndex(packet16blockitemswitch.itemInHandIndex)) {
+            a.warning(this.player.name + " tried to set an invalid carried item");
+            this.disconnect("Invalid hotbar selection (Hacking?)");
+            return;
+        }
+
         // poseidon
         PacketReceivedEvent pevent = new PacketReceivedEvent(server.getPlayer(player), packet16blockitemswitch);
         server.getPluginManager().callEvent(pevent);
@@ -1908,7 +2158,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         if (this.player.dead) return; // CraftBukkit
 
         if (this.networkManager.pvn >= 7) {
-            if (packet16blockitemswitch.itemInHandIndex >= 0 && packet16blockitemswitch.itemInHandIndex <= InventoryPlayer.e()) {
+            if (isValidHotbarIndex(packet16blockitemswitch.itemInHandIndex)) {
                 // CraftBukkit start
                 PlayerItemHeldEvent event = new PlayerItemHeldEvent(this.getPlayer(), this.player.inventory.itemInHandIndex, packet16blockitemswitch.itemInHandIndex);
                 this.server.getPluginManager().callEvent(event);
@@ -1929,6 +2179,10 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
                 }
             }
         }
+    }
+
+    static boolean isValidHotbarIndex(int index) {
+        return index >= 0 && index < InventoryPlayer.e();
     }
 
     private Packet translateEntityPacketToV2(Packet packet) {
@@ -2092,10 +2346,20 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     }
 
     public void a(Packet18ArmAnimation packet18armanimation) {
+        if (!isValidAnimationShape(packet18armanimation)) {
+            this.disconnect("Invalid animation packet");
+            return;
+        }
+        if (packet18armanimation.b == 1 && !this.checkInteractionLimit(packet18armanimation.timestamp)) return;
+
         // poseidon
         PacketReceivedEvent pevent = new PacketReceivedEvent(server.getPlayer(player), packet18armanimation);
         server.getPluginManager().callEvent(pevent);
         if (pevent.isCancelled()) return;
+        if (!isValidAnimationShape(packet18armanimation)) {
+            this.disconnect("Invalid animation packet");
+            return;
+        }
 
         // CraftBukkit start
         if (this.player.dead) return;
@@ -2196,10 +2460,11 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     // Creative inventory slot sync (client -> server)
     public void handleCreativeSlot(Packet107CreativeSetSlot packet) {
         if (this.player == null) return;
-        // Allow from true creative OR trusted modded clients (pvn >= 12) for pick-block support
-        boolean allow = (this.player.gameMode == 1) || (this.networkManager != null && this.networkManager.pvn >= 12);
-        if (!allow) return;
+        // Creative inventory contents must be authorized by server-side game mode.
+        // A protocol version is client-controlled and cannot grant item creation rights.
+        if (this.player.gameMode != 1) return;
         ItemStack stack = sanitizeCreativeStack(packet.itemStack);
+        if (packet.itemStack != null && stack == null) return;
         if (packet.slot == -1) {
             if (stack != null) {
                 int max = Math.min(64, stack.getMaxStackSize());
@@ -2236,14 +2501,16 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         }
 
         if (stack.getItem() != null) {
-            return stack;
+            int max = Math.min(64, stack.getMaxStackSize());
+            return stack.count >= 1 && stack.count <= max ? stack : null;
         }
 
         // Compatibility shim: legacy clients/palettes may still send fence gate as 150.
         if (stack.id == 150 && Block.FENCE_GATE != null && Item.byId[Block.FENCE_GATE.id] != null) {
             stack.id = Block.FENCE_GATE.id;
             if (stack.getItem() != null) {
-                return stack;
+                int max = Math.min(64, stack.getMaxStackSize());
+                return stack.count >= 1 && stack.count <= max ? stack : null;
             }
         }
 
@@ -2265,7 +2532,6 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             ArrayList<ItemStack> queue = this.player.packet5.queue.dropAllQueue();
             Player bukkitEntity = (Player) this.player.getBukkitEntity();
             for (ItemStack item : queue) {
-                System.out.println("Drop queue id: " + item.id + ", dmg: " + item.damage + ", cnt: " + item.count);
                 HashMap<Integer, org.bukkit.inventory.ItemStack> map = bukkitEntity.getInventory().addItem(new CraftItemStack(item));
                 // drop what couldn't fit in the inventory
                 for (org.bukkit.inventory.ItemStack stack : map.values()) {
@@ -2372,17 +2638,11 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         server.getPluginManager().callEvent(event);
         if (event.isCancelled()) return;
 
-        System.out.println("[Respawn] Player " + this.player.name + " requesting respawn. Health=" + this.player.health + 
-            ", Hardcore=" + this.player.isHardcoreMode() + ", GameMode=" + this.player.gameMode);
-
         if (this.player.dead || this.player.health <= 0) {
             // Hardcore mode: check if player is still banned
             if (this.player.isHardcoreMode()) {
                 // Check if player is currently banned - if NOT banned, they were unbanned by admin
                 boolean isBanned = this.minecraftServer.serverConfigurationManager.banByName.contains(this.player.name.toLowerCase());
-                
-                System.out.println("[Hardcore Respawn] Player " + this.player.name + " - isBanned=" + isBanned + 
-                    ", banList contains: " + this.minecraftServer.serverConfigurationManager.banByName);
                 
                 if (isBanned) {
                     // Still banned - kick them
@@ -2393,7 +2653,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
                 
                 // Player was unbanned - allow them to respawn but KEEP them in hardcore mode
                 // They should still be playing hardcore and will be banned again if they die
-                System.out.println("[Hardcore] Player " + this.player.name + " was unbanned - allowing respawn (staying in hardcore mode)");
+                a.info("[Hardcore] " + this.player.name + " was unbanned and may respawn in hardcore mode");
             }
 
             try {
@@ -2429,12 +2689,35 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     }
 
     public void a(Packet102WindowClick packet102windowclick) {
+        if (this.player.dead) return; // CraftBukkit
+        Container validatedContainer = this.player.activeContainer;
+        if (validatedContainer == null
+                || validatedContainer.windowId != packet102windowclick.a
+                || !validatedContainer.c(this.player)) {
+            return;
+        }
+
+        int slotCount = validatedContainer.e.size();
+        if (!this.isValidInventoryClick(packet102windowclick, slotCount)) {
+            this.disconnect("Invalid inventory click packet");
+            return;
+        }
+
         // poseidon
         PacketReceivedEvent event = new PacketReceivedEvent(server.getPlayer(player), packet102windowclick);
         server.getPluginManager().callEvent(event);
         if (event.isCancelled()) return;
 
-        if (this.player.dead) return; // CraftBukkit
+        if (this.player.activeContainer != validatedContainer
+                || validatedContainer.windowId != packet102windowclick.a
+                || !validatedContainer.c(this.player)) {
+            return;
+        }
+        slotCount = validatedContainer.e.size();
+        if (!this.isValidInventoryClick(packet102windowclick, slotCount)) {
+            this.disconnect("Invalid inventory click packet");
+            return;
+        }
 
         if (this.player.activeContainer.windowId == packet102windowclick.a && this.player.activeContainer.c(this.player)) {
             if (this.player.activeContainer.isPositioned() && !Patches.CONTAINER_DISTANCE.check(this.player, this.player.activeContainer.getPosition())) {
@@ -2453,7 +2736,11 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             }
             this.updateInventoryShortcutPrime(packet102windowclick, shortcutEvent != null);
 
-            ItemStack itemstack = this.player.activeContainer.a(packet102windowclick.b, packet102windowclick.c, packet102windowclick.f, this.player);
+            ItemStack itemstack = this.player.activeContainer.a(
+                packet102windowclick.b,
+                packet102windowclick.getMouseButton(),
+                packet102windowclick.getContainerInput(),
+                this.player);
 
             if (ItemStack.equals(packet102windowclick.e, itemstack)) {
                 this.player.netServerHandler.sendPacket(new Packet106Transaction(packet102windowclick.a, packet102windowclick.d, true));
@@ -2476,10 +2763,77 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         }
     }
 
+    private boolean isValidInventoryClick(Packet102WindowClick packet, int slotCount) {
+        if (packet == null || (packet.b != -999 && (packet.b < 0 || packet.b >= slotCount))) {
+            return false;
+        }
+        if (packet.hasExtendedContainerInput() && !this.supportsContainerInputs()) {
+            return false;
+        }
+        int input = packet.getContainerInput();
+        int button = packet.getMouseButton();
+        if (!ContainerInput.isValid(input)) {
+            return false;
+        }
+        if (packet.hasExtendedContainerInput() && input < ContainerInput.SWAP) {
+            return false;
+        }
+        switch (input) {
+            case ContainerInput.PICKUP:
+            case ContainerInput.QUICK_MOVE:
+                return button == 0 || button == 1;
+            case ContainerInput.THROW:
+            case ContainerInput.PICKUP_ALL:
+                return packet.b >= 0 && (button == 0 || button == 1);
+            case ContainerInput.SWAP:
+                return packet.b >= 0 && button >= 0 && button < 9;
+            case ContainerInput.CLONE:
+                return packet.b >= 0 && button >= 0 && button <= 2;
+            case ContainerInput.QUICK_CRAFT:
+                int header = ContainerInput.getQuickCraftHeader(button);
+                int type = ContainerInput.getQuickCraftType(button);
+                return header >= 0 && header <= 2 && type >= 0 && type <= 2
+                    && (header == 1 ? packet.b >= 0 : packet.b == -999);
+            default:
+                return false;
+        }
+    }
+
     private InventoryShortcutEvent detectInventoryShortcut(Packet102WindowClick packet102windowclick) {
         if (this.player == null || this.player.activeContainer == null) {
             this.clearInventoryShortcutPrime();
             return null;
+        }
+        if (packet102windowclick.hasExtendedContainerInput()) {
+            InventoryShortcutEvent.Action explicitAction = null;
+            int hotbarIndex = -1;
+            int input = packet102windowclick.getContainerInput();
+            int button = packet102windowclick.getMouseButton();
+            if (input == ContainerInput.SWAP) {
+                explicitAction = InventoryShortcutEvent.Action.HOTBAR_SWAP;
+                hotbarIndex = button;
+            } else if (input == ContainerInput.THROW) {
+                explicitAction = button == 0
+                    ? InventoryShortcutEvent.Action.DROP_SINGLE
+                    : InventoryShortcutEvent.Action.DROP_STACK;
+            }
+            if (explicitAction == null) {
+                this.clearInventoryShortcutPrime();
+                return null;
+            }
+            Slot hoveredSlot = packet102windowclick.b >= 0
+                    && packet102windowclick.b < this.player.activeContainer.e.size()
+                ? (Slot) this.player.activeContainer.e.get(packet102windowclick.b) : null;
+            return new InventoryShortcutEvent(
+                this.player,
+                this.player.activeContainer,
+                hoveredSlot,
+                explicitAction,
+                -1,
+                hotbarIndex,
+                false,
+                false
+            );
         }
         if (this.primedInventorySlot < 0 || this.primedInventoryWindowId != packet102windowclick.a) {
             return null;
@@ -2537,7 +2891,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     }
 
     private void updateInventoryShortcutPrime(Packet102WindowClick packet102windowclick, boolean shortcutResolved) {
-        if (shortcutResolved) {
+        if (shortcutResolved || packet102windowclick.hasExtendedContainerInput()) {
             this.clearInventoryShortcutPrime();
             return;
         }
@@ -2580,99 +2934,109 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     }
 
     public void a(Packet130UpdateSign packet130updatesign) {
-        // poseidon
-        PacketReceivedEvent pevent = new PacketReceivedEvent(server.getPlayer(player), packet130updatesign);
-        server.getPluginManager().callEvent(pevent);
-        if (pevent.isCancelled()) return;
-
-        if (this.player.dead) return; // CraftBukkit
+        if (packet130updatesign == null || this.player == null || this.player.dead
+                || packet130updatesign.y < 0 || packet130updatesign.y >= 128) {
+            return;
+        }
 
         WorldServer worldserver = this.minecraftServer.getWorldServer(this.player.dimension);
+        int x = packet130updatesign.x;
+        int y = packet130updatesign.y;
+        int z = packet130updatesign.z;
 
-        if (worldserver.isLoaded(packet130updatesign.x, packet130updatesign.y, packet130updatesign.z)) {
-            TileEntity tileentity = worldserver.getTileEntity(packet130updatesign.x, packet130updatesign.y, packet130updatesign.z);
+        if (!worldserver.isLoaded(x, y, z)
+                || !isSignEditInRange(this.player.locX, this.player.locY, this.player.locZ, x, y, z)) {
+            return;
+        }
 
-            if (tileentity instanceof TileEntitySign) {
-                TileEntitySign tileentitysign = (TileEntitySign) tileentity;
+        TileEntity tileentity = worldserver.getTileEntity(x, y, z);
+        if (!(tileentity instanceof TileEntitySign)) {
+            return;
+        }
 
-                if (!tileentitysign.a()) {
-                    this.minecraftServer.c("Player " + this.player.name + " just tried to change non-editable sign");
-                    // CraftBukkit
-                    this.sendPacket(new Packet130UpdateSign(packet130updatesign.x, packet130updatesign.y, packet130updatesign.z, tileentitysign.lines));
-                    return;
-                }
+        TileEntitySign sign = (TileEntitySign) tileentity;
+        if (!sign.finishEditing(this.player.name)) {
+            this.sendPacket(sign.f());
+            return;
+        }
+
+        // Poseidon: only plugins see packets that have passed the ownership,
+        // proximity and one-shot checks above.
+        PacketReceivedEvent pevent = new PacketReceivedEvent(server.getPlayer(player), packet130updatesign);
+        server.getPluginManager().callEvent(pevent);
+        if (pevent.isCancelled()) {
+            this.sendPacket(sign.f());
+            return;
+        }
+
+        // A packet listener must not be able to redirect an authorized edit to
+        // a different tile entity.
+        if (packet130updatesign.x != x || packet130updatesign.y != y || packet130updatesign.z != z) {
+            this.sendPacket(sign.f());
+            return;
+        }
+
+        String[] requestedLines = new String[4];
+        for (int line = 0; line < requestedLines.length; ++line) {
+            requestedLines[line] = sanitizeSignLine(packet130updatesign.lines != null
+                    && line < packet130updatesign.lines.length ? packet130updatesign.lines[line] : null);
+        }
+
+        // CraftBukkit start
+        Player bukkitPlayer = this.server.getPlayer(this.player);
+        SignChangeEvent event = new SignChangeEvent((CraftBlock) bukkitPlayer.getWorld().getBlockAt(x, y, z), bukkitPlayer, requestedLines);
+        this.server.getPluginManager().callEvent(event);
+
+        if (!event.isCancelled()) {
+            for (int line = 0; line < sign.lines.length; ++line) {
+                sign.lines[line] = sanitizeSignLine(event.getLine(line));
             }
+            sign.update(); // Marks the already-loaded owning chunk dirty.
+            worldserver.notify(x, y, z);
+        } else {
+            this.sendPacket(sign.f());
+        }
+        // CraftBukkit end
+    }
 
-            int i;
-            int j;
+    static boolean isSignEditInRange(double playerX, double playerY, double playerZ, int x, int y, int z) {
+        if (!isFinite(playerX) || !isFinite(playerY) || !isFinite(playerZ)) {
+            return false;
+        }
 
-            for (j = 0; j < 4; ++j) {
-                boolean flag = true;
+        double dx = playerX - ((double) x + 0.5D);
+        double dy = playerY - ((double) y + 0.5D);
+        double dz = playerZ - ((double) z + 0.5D);
+        return dx * dx + dy * dy + dz * dz <= 64.0D;
+    }
 
-                if (packet130updatesign.lines[j].length() > 15) {
-                    flag = false;
-                } else {
-                    for (i = 0; i < packet130updatesign.lines[j].length(); ++i) {
-                        char c = packet130updatesign.lines[j].charAt(i);
-                        // Allow the section sign (§) for color codes, and color code characters (0-9, a-f, k-o, r)
-                        if (c == '\u00A7') {
-                            // Color code prefix - allowed
-                            continue;
-                        }
-                        if (i > 0 && packet130updatesign.lines[j].charAt(i - 1) == '\u00A7') {
-                            // This is a color code character following § - allowed
-                            continue;
-                        }
-                        if (!FontAllowedCharacters.isAllowedCharacter(c)) {
-                            flag = false;
-                        }
-                    }
+    static String sanitizeSignLine(String line) {
+        if (line == null || line.length() > 15) {
+            return "!?";
+        }
+
+        for (int i = 0; i < line.length(); ++i) {
+            char c = line.charAt(i);
+            // Preserve MCOSE's supported sign color codes.
+            if (c == '\u00A7') {
+                if (i + 1 >= line.length() || !isSignColorCode(line.charAt(i + 1))) {
+                    return "!?";
                 }
-
-                if (!flag) {
-                    packet130updatesign.lines[j] = "!?";
-                }
+                continue;
             }
-
-            if (tileentity instanceof TileEntitySign) {
-                j = packet130updatesign.x;
-                int k = packet130updatesign.y;
-
-                i = packet130updatesign.z;
-                TileEntitySign tileentitysign1 = (TileEntitySign) tileentity;
-
-                // CraftBukkit start
-                Player player = this.server.getPlayer(this.player);
-                SignChangeEvent event = new SignChangeEvent((CraftBlock) player.getWorld().getBlockAt(j, k, i), this.server.getPlayer(this.player), packet130updatesign.lines);
-                this.server.getPluginManager().callEvent(event);
-
-                if (!event.isCancelled()) {
-                    for (int l = 0; l < 4; ++l) {
-                        tileentitysign1.lines[l] = event.getLine(l);
-                    }
-                    tileentitysign1.a(false);
-                }
-                // CraftBukkit end
-
-                tileentitysign1.update();
-                try {
-                    if (worldserver.chunkProvider instanceof ChunkProviderServer) {
-                        ChunkProviderServer chunkproviderserver = (ChunkProviderServer) worldserver.chunkProvider;
-                        Chunk chunk = worldserver.getChunkAtWorldCoords(j, i);
-
-                        if (chunk != null) {
-                            chunk.f();
-                            chunkproviderserver.saveChunk(chunk);
-                            worldserver.saveLevel();
-                        }
-                    }
-                } catch (Exception exception) {
-                    a.warning("Failed to persist sign at " + j + "," + k + "," + i + ": " + exception.getMessage());
-                    exception.printStackTrace();
-                }
-                worldserver.notify(j, k, i);
+            if (!FontAllowedCharacters.isAllowedCharacter(c)) {
+                return "!?";
             }
         }
+        return line;
+    }
+
+    private static boolean isSignColorCode(char code) {
+        char normalized = Character.toLowerCase(code);
+        return normalized >= '0' && normalized <= '9'
+                || normalized >= 'a' && normalized <= 'f'
+                || normalized >= 'k' && normalized <= 'o'
+                || normalized == 'r';
     }
 
     public boolean c() {
@@ -2685,17 +3049,31 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
      */
     @Override
     public void a(Packet131 packet131) {
-        if (packet131.c != null && packet131.c.length >= 1) {
-            // Type 2 = lock map request
-            if (packet131.c[0] == 2) {
-                int mapId = packet131.b; // Now supports int mapId for extended format
-                WorldMap worldmap = (WorldMap) this.player.world.a(WorldMap.class, "map_" + mapId);
-                if (worldmap != null && !worldmap.locked) {
-                    worldmap.locked = true;
-                    worldmap.a(); // Mark dirty to save
-                }
-            }
+        if (this.player == null || !isValidMapLockRequest(packet131)
+                || !this.mapLockAuthorization.consume(packet131.b, System.currentTimeMillis())) {
+            return;
         }
+
+        // Authorization happens before the lookup so an attacker cannot use
+        // arbitrary IDs to induce save-data file probes.
+        WorldMap worldmap = (WorldMap) this.player.world.a(WorldMap.class, "map_" + packet131.b);
+        if (worldmap != null && !worldmap.locked) {
+            worldmap.locked = true;
+            worldmap.a(); // Mark dirty to save
+        }
+    }
+
+    static boolean isValidMapLockRequest(Packet131 packet) {
+        return packet != null
+                && packet.a == (short) Item.MAP.id
+                && packet.b >= 0
+                && packet.c != null
+                && packet.c.length == 1
+                && packet.c[0] == 2;
+    }
+
+    void authorizeMapLock(int mapId) {
+        this.mapLockAuthorization.grant(mapId, System.currentTimeMillis());
     }
     
     /**
@@ -2715,6 +3093,9 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         }
 
         if (ModProtocol.CHANNEL_HELLO.equals(packet250custompayload.channel)) {
+            if (!this.modHelloGate.tryAcquire()) {
+                return;
+            }
             ModProtocol.HelloInfo helloInfo = ModProtocol.readHelloInfo(packet250custompayload.data);
             this.remoteModProtocolVersion = helloInfo.version;
             this.negotiatedModFeatures = 0;
@@ -2740,12 +3121,16 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
                 this.sendPacket(new Packet250CustomPayload(
                         ModProtocol.CHANNEL_HELLO_ACK,
                         ModProtocol.createHelloAckPayload(ackVersion, this.negotiatedModFeatures)));
+                this.sendCloudTimeSync();
                 this.sendSkinPartSnapshotToClient();
             }
             return;
         }
 
         if (ModProtocol.CHANNEL_REGISTRY_REQUEST.equals(packet250custompayload.channel)) {
+            if (!this.registrySyncRequestGate.tryAcquire()) {
+                return;
+            }
             if (!this.modProtocolNegotiated) {
                 return;
             }
@@ -2773,8 +3158,11 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             return;
         }
         
-        // Try friends verification handler first (for MCOSE|F* channels)
-        if (packet250custompayload.channel.startsWith("MCOSE|F")) {
+        // Friend claims, verification and lookups share one per-player budget.
+        if (FriendsVerificationHandler.isClientRequestChannel(packet250custompayload.channel)) {
+            if (!this.friendRequestLimiter.tryAcquire(System.currentTimeMillis())) {
+                return;
+            }
             if (minecraftServer.friendsVerificationHandler.handlePacket(this.player, packet250custompayload)) {
                 return; // Handled
             }
@@ -2816,8 +3204,16 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
 
         ModProtocol.SkinPartsInfo skinPartsInfo = ModProtocol.readSkinPartsPayload(packet == null ? null : packet.data);
         int modelPartMask = skinPartsInfo.modelPartMask & 0x7F;
+        if (!isSkinPartMaskChange(this.player.getSkinModelPartMask(), modelPartMask)
+                || !this.skinPartUpdateLimiter.tryAcquire(System.currentTimeMillis())) {
+            return;
+        }
         this.player.setSkinModelPartMask(modelPartMask);
         this.broadcastSkinPartMask(this.player.name, modelPartMask);
+    }
+
+    static boolean isSkinPartMaskChange(int currentMask, int requestedMask) {
+        return (currentMask & 0x7F) != (requestedMask & 0x7F);
     }
 
     private void sendSkinPartSnapshotToClient() {
@@ -2885,7 +3281,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
                 new java.io.ByteArrayInputStream(packet.data));
             this.clientVersion = PacketLimits.readUtf(dis, PacketLimits.MAX_VERSION_CHARS, "client version");
             
-            a.info("[MCOSE] " + this.player.name + " connected with client version " + this.clientVersion);
+            a.fine("[MCOSE] " + this.player.name + " connected with client version " + this.clientVersion);
             
             // Check version compatibility
             if (!ModVersion.isCompatible(this.clientVersion, minimumVersion)) {
@@ -2930,6 +3326,9 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
 
     private void handleCommandAutocompleteRequest(Packet250CustomPayload packet) {
         if (packet == null || packet.data == null || packet.data.length == 0) {
+            return;
+        }
+        if (!this.autocompleteRequestLimiter.tryAcquire(System.currentTimeMillis())) {
             return;
         }
 
@@ -2992,7 +3391,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             // Mark as received to stop checking, but with null version
             receivedVersionPacket = true;
             this.clientVersion = "vanilla";
-            a.info("[MCOSE] " + this.player.name + " did not send version packet - assuming vanilla client");
+            a.fine("[MCOSE] " + this.player.name + " did not send version packet - assuming vanilla client");
             // Don't kick vanilla clients - they just won't have MCOSE features
         }
     }
@@ -3054,6 +3453,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     private void handleBookEdit(Packet250CustomPayload packet) {
         try {
             if (packet.data == null || packet.data.length == 0) {
+                this.disconnect("Invalid book data");
                 return;
             }
             
@@ -3061,36 +3461,48 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             if (heldItem == null || heldItem.id != Item.WRITABLE_BOOK.id) {
                 return;
             }
+            // The MCOSE client sends a stale BEdit immediately after BSign while
+            // closing the GUI. Check the held item first so that harmless second
+            // packet is ignored instead of disconnecting a legitimate signer.
+            if (!this.checkBookEditRate()) {
+                return;
+            }
             
             // Read NBT data from packet
             java.io.DataInputStream dis = new java.io.DataInputStream(
                 new java.io.ByteArrayInputStream(packet.data));
             NBTBase nbt = NBTBase.b(dis, NBTReadLimiter.packet());
-            
-            if (nbt instanceof NBTTagCompound) {
-                NBTTagCompound bookData = (NBTTagCompound) nbt;
-                
-                // Validate and apply the book data
-                if (bookData.hasKey("pages")) {
-                    NBTTagList pages = bookData.l("pages");
-                    
-                    if (isValidBookPages(pages)) {
-                        // Set or create the tag on the item
-                        if (heldItem.tag == null) {
-                            heldItem.tag = new NBTTagCompound();
-                        }
-                        heldItem.tag.a("pages", pages);
-                        
-                        // Mark inventory as dirty for persistence
-                        this.player.inventory.update();
-                        
-                        // Sync inventory back to client so they see the saved book
-                        this.player.updateInventory(this.player.activeContainer);
-                    }
-                }
+            if (!(nbt instanceof NBTTagCompound) || dis.available() != 0) {
+                this.disconnect("Invalid book data");
+                return;
             }
+
+            NBTTagCompound bookData = (NBTTagCompound) nbt;
+            if (!bookData.hasKey("pages")) {
+                this.disconnect("Invalid book data");
+                return;
+            }
+
+            NBTTagList pages = bookData.l("pages");
+            if (!isValidBookPages(pages)) {
+                this.disconnect("Invalid book data");
+                return;
+            }
+
+            // Set or create the tag on the item
+            if (heldItem.tag == null) {
+                heldItem.tag = new NBTTagCompound();
+            }
+            heldItem.tag.a("pages", pages);
+
+            // Mark inventory as dirty for persistence
+            this.player.inventory.update();
+
+            // Sync inventory back to client so they see the saved book
+            this.player.updateInventory(this.player.activeContainer);
         } catch (Exception e) {
-            System.err.println("[NetServerHandler] Error handling book edit: " + e.getMessage());
+            a.warning("[NetServerHandler] Invalid book edit from " + this.player.name + ": " + e.getMessage());
+            this.disconnect("Invalid book data");
         }
     }
     
@@ -3101,6 +3513,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     private void handleBookSign(Packet250CustomPayload packet) {
         try {
             if (packet.data == null || packet.data.length == 0) {
+                this.disconnect("Invalid book data");
                 return;
             }
             
@@ -3108,55 +3521,65 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             if (heldItem == null || heldItem.id != Item.WRITABLE_BOOK.id) {
                 return;
             }
+            if (!this.checkBookEditRate()) {
+                return;
+            }
             
             // Read NBT data from packet
             java.io.DataInputStream dis = new java.io.DataInputStream(
                 new java.io.ByteArrayInputStream(packet.data));
             NBTBase nbt = NBTBase.b(dis, NBTReadLimiter.packet());
-            
-            if (nbt instanceof NBTTagCompound) {
-                NBTTagCompound bookData = (NBTTagCompound) nbt;
-                
-                // Validate the book data
-                if (bookData.hasKey("pages") && bookData.hasKey("title") && bookData.hasKey("author")) {
-                    String title = bookData.getString("title");
-                    String author = bookData.getString("author");
-                    NBTTagList pages = bookData.l("pages");
-                    
-                    if (title.length() > PacketLimits.MAX_BOOK_TITLE_CHARS) {
-                        title = title.substring(0, PacketLimits.MAX_BOOK_TITLE_CHARS);
-                    }
-                    
-                    // Validate author (should match player name)
-                    if (!author.equals(this.player.name)) {
-                        author = this.player.name;
-                    }
-                    
-                    if (isValidBookPages(pages)) {
-                        // Convert to written book
-                        heldItem.id = Item.WRITTEN_BOOK.id;
-                        
-                        // Set or create the tag on the item
-                        if (heldItem.tag == null) {
-                            heldItem.tag = new NBTTagCompound();
-                        }
-                        heldItem.tag.a("pages", pages);
-                        heldItem.tag.setString("title", title);
-                        heldItem.tag.setString("author", author);
-                        
-                        // Mark inventory as dirty for persistence
-                        this.player.inventory.update();
-                        
-                        // Sync inventory back to client so they see the signed book
-                        this.player.updateInventory(this.player.activeContainer);
-                        
-                        a.info("[MCOSE] Player " + this.player.name + " signed book: \"" + title + "\"");
-                    }
-                }
+            if (!(nbt instanceof NBTTagCompound) || dis.available() != 0) {
+                this.disconnect("Invalid book data");
+                return;
             }
+
+            NBTTagCompound bookData = (NBTTagCompound) nbt;
+            if (!bookData.hasKey("pages") || !bookData.hasKey("title") || !bookData.hasKey("author")) {
+                this.disconnect("Invalid book data");
+                return;
+            }
+
+            String title = bookData.getString("title");
+            String author = bookData.getString("author");
+            NBTTagList pages = bookData.l("pages");
+
+            if (title.length() == 0 || title.length() > PacketLimits.MAX_BOOK_TITLE_CHARS) {
+                this.disconnect("Invalid book data");
+                return;
+            }
+
+            // Validate author (should match player name)
+            if (!author.equals(this.player.name)) {
+                author = this.player.name;
+            }
+
+            if (!isValidBookPages(pages)) {
+                this.disconnect("Invalid book data");
+                return;
+            }
+
+            // Convert to written book
+            heldItem.id = Item.WRITTEN_BOOK.id;
+
+            // Set or create the tag on the item
+            if (heldItem.tag == null) {
+                heldItem.tag = new NBTTagCompound();
+            }
+            heldItem.tag.a("pages", pages);
+            heldItem.tag.setString("title", title);
+            heldItem.tag.setString("author", author);
+
+            // Mark inventory as dirty for persistence
+            this.player.inventory.update();
+
+            // Sync inventory back to client so they see the signed book
+            this.player.updateInventory(this.player.activeContainer);
+
+            a.fine("[MCOSE] Player " + this.player.name + " signed book: \"" + title + "\"");
         } catch (Exception e) {
-            System.err.println("[NetServerHandler] Error handling book sign: " + e.getMessage());
-            e.printStackTrace();
+            a.warning("[NetServerHandler] Invalid book signing from " + this.player.name + ": " + e.getMessage());
+            this.disconnect("Invalid book data");
         }
     }
     
@@ -3239,6 +3662,9 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         if (packet203tabcomplete.text == null || packet203tabcomplete.text.isEmpty()) {
             return;
         }
+        if (!this.autocompleteRequestLimiter.tryAcquire(System.currentTimeMillis())) {
+            return;
+        }
 
         if (!(this.server.getCommandMap() instanceof org.bukkit.command.SimpleCommandMap)) {
             return;
@@ -3284,6 +3710,19 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         if (pages == null || pages.c() > PacketLimits.MAX_BOOK_PAGES) {
             return false;
         }
+
+        PoseidonConfig config = PoseidonConfig.getInstance();
+        int maxPageBytes = Math.max(1, config.getInt("settings.book-size.page-max", 2560));
+        double multiplier;
+        try {
+            multiplier = config.getConfigDouble("settings.book-size.total-multiplier").doubleValue();
+        } catch (RuntimeException invalidConfig) {
+            multiplier = 0.98D;
+        }
+        multiplier = Math.max(0.3D, Math.min(1.0D, multiplier));
+        long totalBytes = 0L;
+        long allowedBytes = (long) maxPageBytes;
+
         for (int i = 0; i < pages.c(); ++i) {
             NBTBase page = pages.a(i);
             if (!(page instanceof NBTTagString)) {
@@ -3293,8 +3732,99 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             if (text == null || text.length() > PacketLimits.MAX_BOOK_PAGE_CHARS) {
                 return false;
             }
+
+            int byteLength = text.getBytes(StandardCharsets.UTF_8).length;
+            totalBytes += byteLength;
+            int multibyteCharacters = 0;
+            if (byteLength != text.length()) {
+                for (int character = 0; character < text.length(); ++character) {
+                    if (text.charAt(character) > 127) {
+                        ++multibyteCharacters;
+                    }
+                }
+            }
+
+            double pageRatio = Math.max(0.1D, Math.min(1.0D, (double) text.length() / 255.0D));
+            allowedBytes += (long) ((double) maxPageBytes * pageRatio * multiplier);
+            if (multibyteCharacters > 1) {
+                allowedBytes -= multibyteCharacters;
+            }
         }
-        return true;
+        return totalBytes <= allowedBytes;
+    }
+
+    static final class FixedWindowRateLimiter {
+        private final long windowMillis;
+        private final int maximumActions;
+        private boolean initialized;
+        private long windowStart;
+        private int actionCount;
+
+        FixedWindowRateLimiter(long windowMillis, int maximumActions) {
+            if (windowMillis <= 0L || maximumActions <= 0) {
+                throw new IllegalArgumentException("Rate-limit window and action count must be positive");
+            }
+            this.windowMillis = windowMillis;
+            this.maximumActions = maximumActions;
+        }
+
+        boolean tryAcquire(long now) {
+            if (!this.initialized || now < this.windowStart || now - this.windowStart >= this.windowMillis) {
+                this.initialized = true;
+                this.windowStart = now;
+                this.actionCount = 1;
+                return true;
+            }
+
+            if (this.actionCount >= this.maximumActions) {
+                return false;
+            }
+            ++this.actionCount;
+            return true;
+        }
+    }
+
+    static final class MapLockAuthorization {
+        private final long lifetimeMillis;
+        private boolean active;
+        private int mapId = -1;
+        private long grantedAt;
+
+        MapLockAuthorization(long lifetimeMillis) {
+            if (lifetimeMillis <= 0L) {
+                throw new IllegalArgumentException("Authorization lifetime must be positive");
+            }
+            this.lifetimeMillis = lifetimeMillis;
+        }
+
+        void grant(int mapId, long now) {
+            this.active = mapId >= 0;
+            this.mapId = this.active ? mapId : -1;
+            this.grantedAt = now;
+        }
+
+        boolean consume(int requestedMapId, long now) {
+            boolean allowed = this.active
+                    && requestedMapId == this.mapId
+                    && now >= this.grantedAt
+                    && now - this.grantedAt <= this.lifetimeMillis;
+            this.active = false;
+            this.mapId = -1;
+            this.grantedAt = 0L;
+            return allowed;
+        }
+    }
+
+    static final class OneShotGate {
+        private boolean acquired;
+
+        synchronized boolean tryAcquire() {
+            if (this.acquired) {
+                return false;
+            }
+            this.acquired = true;
+            return true;
+        }
     }
 
     private static final class QueuedTcpVoicePacket {

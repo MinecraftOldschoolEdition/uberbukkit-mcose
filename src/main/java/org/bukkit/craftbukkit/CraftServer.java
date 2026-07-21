@@ -236,6 +236,11 @@ public final class CraftServer implements Server {
     }
 
     public Player getPlayer(final String name) {
+        Player exact = this.getPlayerExact(name);
+        if (exact != null) {
+            return exact;
+        }
+
         Player[] players = getOnlinePlayers();
 
         Player found = null;
@@ -257,27 +262,16 @@ public final class CraftServer implements Server {
     //Project Poseidon Start
     @Override
     public Player getPlayer(final UUID uuid) {
-        for (Player p : Bukkit.getOnlinePlayers()) {
-            if (p.getUniqueId().equals(uuid)) {
-                return p;
-            }
-        }
-        return null;
+        EntityPlayer entityplayer = this.server.getPlayerByUUID(uuid);
+        return entityplayer != null && entityplayer.netServerHandler != null ? entityplayer.netServerHandler.getPlayer() : null;
     }
 
     //Project Poseidon End
 
 
     public Player getPlayerExact(String name) {
-        String lname = name.toLowerCase();
-
-        for (Player player : getOnlinePlayers()) {
-            if (player.getName().equalsIgnoreCase(lname)) {
-                return player;
-            }
-        }
-
-        return null;
+        EntityPlayer entityplayer = this.server.getPlayerByExactName(name);
+        return entityplayer != null && entityplayer.netServerHandler != null ? entityplayer.netServerHandler.getPlayer() : null;
     }
 
     public int broadcastMessage(String message) {
@@ -623,6 +617,7 @@ public final class CraftServer implements Server {
         if (save) {
             handle.save(true, (IProgressUpdate) null);
             handle.saveLevel();
+            RegionFileCache.a();
             WorldSaveEvent event = new WorldSaveEvent(handle.getWorld());
             getPluginManager().callEvent(event);
         }

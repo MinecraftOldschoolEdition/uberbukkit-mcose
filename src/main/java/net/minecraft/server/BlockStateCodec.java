@@ -10,6 +10,8 @@ public final class BlockStateCodec {
     public static final String KEY_PALETTE = "StatePalette";
     public static final String KEY_DATA = "StateData";
     public static final String KEY_BITS = "StateBits";
+    public static final String KEY_VERSION = "StateVersion";
+    public static final int CURRENT_VERSION = 2;
     private static final String KEY_NAME = "Name";
     private static final String KEY_PROPERTIES = "Properties";
     private static final int BLOCK_COUNT = 16 * 16 * 128;
@@ -48,6 +50,57 @@ public final class BlockStateCodec {
         levelTag.a(KEY_PALETTE, (NBTBase)paletteTag);
         levelTag.a(KEY_DATA, packed);
         levelTag.a(KEY_BITS, (byte)bits);
+        levelTag.a(KEY_VERSION, CURRENT_VERSION);
+        return true;
+    }
+
+    /**
+     * Upgrades an older RegionCore palette in place without projecting unknown
+     * namespaced states through the legacy runtime arrays. Known compatibility
+     * states are rewritten once; unknown/modded states retain their original
+     * names and properties.
+     */
+    public static boolean canonicalizeStatePalette(NBTTagCompound levelTag) {
+        if (!hasStateData(levelTag)) {
+            return false;
+        }
+
+        int storedVersion = levelTag.hasKey(KEY_VERSION) ? levelTag.e(KEY_VERSION) : 0;
+        if (storedVersion >= CURRENT_VERSION) {
+            return false;
+        }
+
+        NBTTagList paletteTag = levelTag.l(KEY_PALETTE);
+        if (paletteTag == null || paletteTag.c() <= 0) {
+            return false;
+        }
+
+        NBTTagList canonicalPalette = new NBTTagList();
+        boolean paletteChanged = false;
+        for (int i = 0; i < paletteTag.c(); ++i) {
+            NBTBase entry = paletteTag.a(i);
+            NBTBase replacement = entry;
+            if (entry instanceof NBTTagCompound) {
+                BlockStateKey original = deserializeState((NBTTagCompound)entry);
+                String namespace = original.getBlockKey().getNamespace();
+                if ("minecraft".equalsIgnoreCase(namespace) || "legacy".equalsIgnoreCase(namespace)) {
+                    BlockStateBridge.LegacyBlockData legacy = BlockStateBridge.toLegacy(original);
+                    if (!legacy.fallbackUsed) {
+                        BlockStateKey canonical = BlockStateBridge.fromLegacy(legacy.blockId, legacy.metadata);
+                        if (!canonical.equals(original)) {
+                            replacement = serializeState(canonical);
+                            paletteChanged = true;
+                        }
+                    }
+                }
+            }
+            canonicalPalette.a(replacement);
+        }
+
+        if (paletteChanged) {
+            levelTag.a(KEY_PALETTE, (NBTBase)canonicalPalette);
+        }
+        levelTag.a(KEY_VERSION, CURRENT_VERSION);
         return true;
     }
 
@@ -121,7 +174,7 @@ public final class BlockStateCodec {
             for (Integer count : fallbackCounts.values()) {
                 totalFallbacks += count.intValue();
             }
-            System.err.println("[RegionCore] Nearest legacy state fallback summary: " + totalFallbacks + " blocks across " + fallbackCounts.size() + " state keys");
+            MinecraftServer.log.fine("[RegionCore] Nearest legacy state fallback summary: " + totalFallbacks + " blocks across " + fallbackCounts.size() + " state keys");
             int logged = 0;
             for (Map.Entry<String, Integer> entry : fallbackCounts.entrySet()) {
                 if (logged >= MAX_FALLBACK_LOG_STATES) {
@@ -129,11 +182,11 @@ public final class BlockStateCodec {
                 }
                 String stateName = entry.getKey();
                 String coords = firstFallbackCoords.get(stateName);
-                System.err.println("[RegionCore]   " + stateName + " x" + entry.getValue() + " firstAt " + coords);
+                MinecraftServer.log.fine("[RegionCore]   " + stateName + " x" + entry.getValue() + " firstAt " + coords);
                 logged++;
             }
             if (fallbackCounts.size() > MAX_FALLBACK_LOG_STATES) {
-                System.err.println("[RegionCore]   ... " + (fallbackCounts.size() - MAX_FALLBACK_LOG_STATES) + " additional state keys omitted");
+                MinecraftServer.log.fine("[RegionCore]   ... " + (fallbackCounts.size() - MAX_FALLBACK_LOG_STATES) + " additional state keys omitted");
             }
         }
 
@@ -152,6 +205,18 @@ public final class BlockStateCodec {
 
     private static BlockStateKey stateForLegacy(int blockId, int meta) {
         return LEGACY_STATE_CACHE[((blockId & 255) << 4) | (meta & 15)];
+    }
+
+    public static NBTTagCompound writeBlockStateTag(BlockStateKey key) {
+        return serializeState(key == null
+                ? new BlockStateKey(new ResourceLocation("minecraft:air"))
+                : key);
+    }
+
+    public static BlockStateKey readBlockStateTag(NBTTagCompound tag) {
+        return tag == null
+                ? new BlockStateKey(new ResourceLocation("minecraft:air"))
+                : deserializeState(tag);
     }
 
     private static NBTTagCompound serializeState(BlockStateKey key) {

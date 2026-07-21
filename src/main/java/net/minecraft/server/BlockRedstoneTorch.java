@@ -3,28 +3,32 @@ package net.minecraft.server;
 import com.legacyminecraft.poseidon.PoseidonConfig;
 import org.bukkit.event.block.BlockRedstoneEvent;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.ArrayDeque;
 import java.util.Random;
 
 public class BlockRedstoneTorch extends BlockTorch {
 
     private boolean isOn = false;
-    private static List b = new ArrayList();
 
     public int a(int i, int j) {
         return i == 1 ? Block.REDSTONE_WIRE.a(i, j) : super.a(i, j);
     }
 
     private boolean a(World world, int i, int j, int k, boolean flag) {
+        ArrayDeque toggles = world.redstoneUpdateInfos;
+
+        if (toggles == null) {
+            toggles = world.redstoneUpdateInfos = new ArrayDeque();
+        }
+
         if (flag) {
-            b.add(new RedstoneUpdateInfo(i, j, k, world.getTime()));
+            toggles.add(new RedstoneUpdateInfo(i, j, k, world.getTime()));
         }
 
         int l = 0;
 
-        for (int i1 = 0; i1 < b.size(); ++i1) {
-            RedstoneUpdateInfo redstoneupdateinfo = (RedstoneUpdateInfo) b.get(i1);
+        for (Object object : toggles) {
+            RedstoneUpdateInfo redstoneupdateinfo = (RedstoneUpdateInfo) object;
 
             if (redstoneupdateinfo.a == i && redstoneupdateinfo.b == j && redstoneupdateinfo.c == k) {
                 ++l;
@@ -91,9 +95,14 @@ public class BlockRedstoneTorch extends BlockTorch {
 
     public void a(World world, int i, int j, int k, Random random) {
         boolean flag = this.g(world, i, j, k);
+        ArrayDeque toggles = world.redstoneUpdateInfos;
 
-        while (b.size() > 0 && world.getTime() - ((RedstoneUpdateInfo) b.get(0)).d > 100L) {
-            b.remove(0);
+        if (toggles != null) {
+            RedstoneUpdateInfo redstoneupdateinfo;
+
+            while ((redstoneupdateinfo = (RedstoneUpdateInfo) toggles.peek()) != null && world.getTime() - redstoneupdateinfo.d > 100L) {
+                toggles.poll();
+            }
         }
 
         // CraftBukkit start

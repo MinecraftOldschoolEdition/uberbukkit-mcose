@@ -9,19 +9,23 @@ public class BlockMushroomCap extends Block {
     }
 
     public int a(int side, int meta) {
-        // Ported from client: uses base texture minus 16 and minus type for cap sides
-        if (meta >= 1 && meta <= 9 && side == 1) return this.textureId - 16 - this.type;
-        if (meta >= 1 && meta <= 3 && side == 2) return this.textureId - 16 - this.type;
-        if (meta >= 7 && meta <= 9 && side == 3) return this.textureId - 16 - this.type;
-        if ((meta == 1 || meta == 4 || meta == 7) && side == 4) return this.textureId - 16 - this.type;
-        if ((meta == 3 || meta == 6 || meta == 9) && side == 5) return this.textureId - 16 - this.type;
-        if (meta == 14) return this.textureId - 16 - this.type;
-        return this.textureId;
+        int inside = this.textureId;
+        int stem = this.textureId - 1;
+        int outside = this.textureId - 16 - this.type;
+
+        if (meta == 10) return side == 0 || side == 1 ? inside : stem;
+        if (meta == 15) return stem;
+        if (meta == 14) return outside;
+        if (meta >= 1 && meta <= 9 && side == 1) return outside;
+        if (meta >= 1 && meta <= 3 && side == 2) return outside;
+        if (meta >= 7 && meta <= 9 && side == 3) return outside;
+        if ((meta == 1 || meta == 4 || meta == 7) && side == 4) return outside;
+        if ((meta == 3 || meta == 6 || meta == 9) && side == 5) return outside;
+        return inside;
     }
 
     public int a(int side) {
         return this.textureId;
     }
 }
-
 

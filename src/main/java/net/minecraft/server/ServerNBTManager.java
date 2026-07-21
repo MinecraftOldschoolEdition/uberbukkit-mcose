@@ -46,6 +46,6 @@ public class ServerNBTManager extends PlayerNBTManager {
     }
 
     public void e() {
-        RegionFileCache.a();
+        RegionFileCache.flushOnSave();
     }
 }

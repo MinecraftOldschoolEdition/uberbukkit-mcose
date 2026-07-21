@@ -13,9 +13,14 @@ public class TileEntityPiston extends TileEntity {
     private boolean j;
     private float k;
     private float l;
+    private long lastTicked = Long.MIN_VALUE;
     private static List m = new ArrayList();
 
     public TileEntityPiston() {
+    }
+
+    public boolean isTickable() {
+        return true;
     }
 
     public TileEntityPiston(int i, int j, int k, boolean flag, boolean flag1) {
@@ -40,6 +45,10 @@ public class TileEntityPiston extends TileEntity {
 
     public int d() {
         return this.c;
+    }
+
+    public boolean wasTickedAt(long tick) {
+        return this.lastTicked == tick;
     }
 
     public float a(float f) {
@@ -83,7 +92,11 @@ public class TileEntityPiston extends TileEntity {
             this.world.o(this.x, this.y, this.z);
             this.h();
             if (this.world.getTypeId(this.x, this.y, this.z) == Block.PISTON_MOVING.id) {
-                this.world.setTypeIdAndData(this.x, this.y, this.z, this.a, this.b);
+                if (this.j) {
+                    this.world.setTypeId(this.x, this.y, this.z, 0);
+                } else {
+                    this.world.setTypeIdAndData(this.x, this.y, this.z, this.a, this.b);
+                }
             }
         }
     }
@@ -91,10 +104,10 @@ public class TileEntityPiston extends TileEntity {
     public void g_() {
         // CraftBukkit
         if (this.world == null) return;
-        this.l = this.k;
-        if (this.l >= 1.0F) {
-            this.a(1.0F, 0.25F);
-            this.world.o(this.x, this.y, this.z);
+		this.lastTicked = this.world.getBlockTickTime();
+		this.l = this.k;
+		if (this.l >= 1.0F) {
+			this.world.o(this.x, this.y, this.z);
             this.h();
             if (this.world.getTypeId(this.x, this.y, this.z) == Block.PISTON_MOVING.id) {
                 this.world.setTypeIdAndData(this.x, this.y, this.z, this.a, this.b);
@@ -113,19 +126,29 @@ public class TileEntityPiston extends TileEntity {
 
     public void a(NBTTagCompound nbttagcompound) {
         super.a(nbttagcompound);
-        this.a = nbttagcompound.e("blockId");
-        this.b = nbttagcompound.e("blockData");
+        if (nbttagcompound.hasKey("blockState")) {
+            BlockStateKey movedState = BlockStateCodec.readBlockStateTag(nbttagcompound.k("blockState"));
+            BlockStateBridge.LegacyBlockData legacy = BlockStateBridge.toLegacy(movedState);
+            this.a = legacy.blockId;
+            this.b = legacy.metadata;
+        } else {
+            this.a = nbttagcompound.e("blockId");
+            this.b = nbttagcompound.e("blockData");
+        }
         this.c = nbttagcompound.e("facing");
         this.l = this.k = nbttagcompound.g("progress");
         this.i = nbttagcompound.m("extending");
+        this.j = nbttagcompound.m("source");
     }
 
     public void b(NBTTagCompound nbttagcompound) {
         super.b(nbttagcompound);
-        nbttagcompound.a("blockId", this.a);
-        nbttagcompound.a("blockData", this.b);
+        nbttagcompound.a("blockState", BlockStateCodec.writeBlockStateTag(
+                BlockStateBridge.fromLegacy(this.a, this.b)
+        ));
         nbttagcompound.a("facing", this.c);
         nbttagcompound.a("progress", this.l);
         nbttagcompound.a("extending", this.i);
+        nbttagcompound.a("source", this.j);
     }
 }

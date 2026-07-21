@@ -7,9 +7,11 @@ import net.minecraft.server.ItemCloth;
 import net.minecraft.server.ItemCoal;
 import net.minecraft.server.ItemDye;
 import net.minecraft.server.ItemLog;
+import net.minecraft.server.ItemLeaves;
 import net.minecraft.server.ItemRecord;
 import net.minecraft.server.ItemSapling;
 import net.minecraft.server.ItemStack;
+import net.minecraft.server.ItemStep;
 import net.minecraft.server.ItemStoneBrick;
 import net.minecraft.server.Holder;
 import net.minecraft.server.IdMap;
@@ -114,6 +116,54 @@ public final class ItemRegistry {
         ensureScanned();
         if (stack.usesData() && stack.getData() >= 0) {
             int damage = stack.getData();
+
+            if (item instanceof ItemDye && damage < ItemDye.a.length) {
+                String color = RegistryKeyPolicy.toSnakeCase(ItemDye.a[damage]);
+                if ("lightblue".equals(color)) color = "light_blue";
+                if ("silver".equals(color)) color = "light_gray";
+                ResourceLocation key = new ResourceLocation("minecraft", color + "_dye");
+                if (byKey.get(key) == item) return key;
+            }
+
+            if (item instanceof ItemCloth) {
+                String[] colors = new String[]{
+                        "white", "orange", "magenta", "light_blue", "yellow", "lime", "pink", "gray",
+                        "light_gray", "cyan", "purple", "blue", "brown", "green", "red", "black"
+                };
+                if (damage < colors.length) {
+                    ResourceLocation key = new ResourceLocation("minecraft", colors[damage] + "_wool");
+                    if (byKey.get(key) == item) return key;
+                }
+            }
+
+            String[] woodTypes = new String[]{"oak", "spruce", "birch"};
+            if (damage < woodTypes.length) {
+                String suffix = item instanceof ItemLog ? "_log"
+                        : item instanceof ItemLeaves ? "_leaves"
+                        : item instanceof ItemSapling ? "_sapling"
+                        : null;
+                if (suffix != null) {
+                    ResourceLocation key = new ResourceLocation("minecraft", woodTypes[damage] + suffix);
+                    if (byKey.get(key) == item) return key;
+                }
+            }
+
+            if (item instanceof ItemStep) {
+                String[] slabs = new String[]{
+                        "stone_slab", "sandstone_slab", "wooden_slab",
+                        "cobblestone_slab", "brick_slab", "stone_brick_slab"
+                };
+                if (damage < slabs.length) {
+                    ResourceLocation key = new ResourceLocation("minecraft", slabs[damage]);
+                    if (byKey.get(key) == item) return key;
+                }
+            }
+
+            if (item instanceof ItemCoal && damage <= 1) {
+                ResourceLocation key = new ResourceLocation("minecraft", damage == 0 ? "coal" : "charcoal");
+                if (byKey.get(key) == item) return key;
+            }
+
             for (Map.Entry<ResourceLocation, Integer> entry : keyToDamage.entrySet()) {
                 if (entry.getValue().intValue() == damage && byKey.get(entry.getKey()) == item) {
                     return entry.getKey();
@@ -285,6 +335,13 @@ public final class ItemRegistry {
                 key = new ResourceLocation("minecraft", canonicalPath);
             }
 
+            // Placed block-state items can be created before Item's static fields
+            // finish initializing. Never let one take the canonical name reserved
+            // for the later usable inventory item (door, bed, cake, and so on).
+            if (item instanceof ItemBlock && VanillaRegistryKeys.isCanonicalItemKeyForOther(key, item)) {
+                key = new ResourceLocation(key.getNamespace(), key.getPath() + "_block");
+            }
+
             Item existingForKey = byKey.get(key);
             if (existingForKey != null && existingForKey != item) {
                 if (item instanceof ItemRecord) {
@@ -309,6 +366,7 @@ public final class ItemRegistry {
 
             register(key, item, id);
             keyOf.put(item, key);
+            registerHistoricalCollisionAlias(key, item, id);
             registerMetaAliasesFor(key, item);
 
             String[] policyAliases = RegistryKeyPolicy.aliasesForCanonical(key.getPath());
@@ -338,6 +396,9 @@ public final class ItemRegistry {
                     if ("tsuku_no_koibumi".equals(sanitized)) {
                         registerAliasIfFree(new ResourceLocation("minecraft", "record_tsuki_no_koibumi"), item);
                         registerAliasIfFree(new ResourceLocation("minecraft", "music_disc_tsuki_no_koibumi"), item);
+                    } else if ("tsuki_no_koibumi".equals(sanitized)) {
+                        registerAliasIfFree(new ResourceLocation("minecraft", "record_tsuku_no_koibumi"), item);
+                        registerAliasIfFree(new ResourceLocation("minecraft", "music_disc_tsuku_no_koibumi"), item);
                     }
                 }
             }
@@ -346,10 +407,14 @@ public final class ItemRegistry {
                 String[] colors = ItemDye.a;
                 if (colors != null) {
                     for (int dm = 0; dm < colors.length; dm++) {
-                        String color = RegistryKeyPolicy.toSnakeCase(colors[dm]);
-                        if ("lightblue".equals(color)) color = "light_blue";
-                        if ("silver".equals(color)) color = "light_gray";
-                        registerColorMeta(color + "_dye", item, dm);
+                        String legacyColor = RegistryKeyPolicy.toSnakeCase(colors[dm]);
+                        String canonicalColor = legacyColor;
+                        if ("lightblue".equals(canonicalColor)) canonicalColor = "light_blue";
+                        if ("silver".equals(canonicalColor)) canonicalColor = "light_gray";
+                        registerColorMeta(canonicalColor + "_dye", item, dm);
+                        if (!legacyColor.equals(canonicalColor)) {
+                            registerColorMeta(legacyColor + "_dye", item, dm);
+                        }
                     }
                 }
                 registerColorMeta("cocoa_beans", item, 3);
@@ -456,6 +521,9 @@ public final class ItemRegistry {
     private static void registerColorMeta(String name, Item item, int damage) {
         try {
             ResourceLocation rl = new ResourceLocation("minecraft", name);
+            Item existing = byKey.get(rl);
+            if (existing != null && existing != item) return;
+            if (existing == null && VanillaRegistryKeys.isCanonicalItemKeyForOther(rl, item)) return;
             byKey.put(rl, item);
             keyToDamage.put(rl, Integer.valueOf(damage));
             VariantDefaults.put(rl, damage);
@@ -467,10 +535,74 @@ public final class ItemRegistry {
     private static void registerAliasIfFree(ResourceLocation alias, Item item) {
         if (alias == null || item == null) return;
         Item existing = byKey.get(alias);
+        if (existing == item) return;
+        if (VanillaRegistryKeys.isCanonicalItemKeyForOther(alias, item)) return;
+        if (VanillaRegistryKeys.isCanonicalBlockItemKeyForOther(alias, item)) return;
         if (existing == null) {
             byKey.put(alias, item);
             holders.registerIfAbsent(alias, item, getLegacyId(item));
             try { Registries.ITEM.registerIfAbsent(alias, item); } catch (Throwable ignored) {}
+        }
+    }
+
+    private static void registerHistoricalCollisionAlias(ResourceLocation canonicalKey, Item item, int legacyId) {
+        if (canonicalKey == null || item == null) return;
+        if (legacyId == 44 && "stone_slab".equals(canonicalKey.getPath())) {
+            registerAliasIfFree(new ResourceLocation(canonicalKey.getNamespace(), "stone_slab_block"), item);
+            registerAliasIfFree(new ResourceLocation(canonicalKey.getNamespace(), "stone_slab_compat_44"), item);
+            registerAliasIfFree(new ResourceLocation(canonicalKey.getNamespace(), "stone_slab_legacy_44"), item);
+        }
+        if (legacyId == 66 && "rail".equals(canonicalKey.getPath())) {
+            registerAliasIfFree(new ResourceLocation(canonicalKey.getNamespace(), "rails"), item);
+        }
+        if (legacyId == 82 && "clay".equals(canonicalKey.getPath())) {
+            registerAliasIfFree(new ResourceLocation(canonicalKey.getNamespace(), "clay_block"), item);
+        }
+        if (legacyId == 98 && "stone_bricks".equals(canonicalKey.getPath())) {
+            registerAliasIfFree(new ResourceLocation(canonicalKey.getNamespace(), "stone_brick_item"), item);
+        }
+        if (legacyId == 103 && "melon".equals(canonicalKey.getPath())) {
+            registerAliasIfFree(new ResourceLocation(canonicalKey.getNamespace(), "melon_block"), item);
+        }
+        if (legacyId == 273 && "stone_shovel".equals(canonicalKey.getPath())) {
+            registerAliasIfFree(new ResourceLocation(canonicalKey.getNamespace(), "stone_spade"), item);
+        }
+        if (legacyId == 277 && "diamond_shovel".equals(canonicalKey.getPath())) {
+            registerAliasIfFree(new ResourceLocation(canonicalKey.getNamespace(), "diamond_spade"), item);
+        }
+        if (legacyId == 311 && "diamond_chestplate".equals(canonicalKey.getPath())) {
+            registerAliasIfFree(new ResourceLocation(canonicalKey.getNamespace(), "plate_diamond"), item);
+        }
+        if (legacyId == 312 && "diamond_leggings".equals(canonicalKey.getPath())) {
+            registerAliasIfFree(new ResourceLocation(canonicalKey.getNamespace(), "legs_diamond"), item);
+        }
+        if (legacyId == 332 && "snowball".equals(canonicalKey.getPath())) {
+            registerAliasIfFree(new ResourceLocation(canonicalKey.getNamespace(), "snow_ball"), item);
+        }
+        if (legacyId == 336 && "brick".equals(canonicalKey.getPath())) {
+            registerAliasIfFree(new ResourceLocation(canonicalKey.getNamespace(), "clay_brick"), item);
+        }
+        if (hadRegionCoreOnePrimaryCollision(legacyId)) {
+            ResourceLocation oldPrimary = new ResourceLocation(
+                    canonicalKey.getNamespace(),
+                    RegistryKeyPolicy.collisionCompatibilitySuffix(canonicalKey.getPath(), legacyId));
+            registerAliasIfFree(oldPrimary, item);
+        }
+    }
+
+    private static boolean hadRegionCoreOnePrimaryCollision(int legacyId) {
+        switch (legacyId) {
+            case 296: // wheat
+            case 323: // sign
+            case 324: // oak door
+            case 330: // iron door
+            case 338: // sugar cane
+            case 354: // cake
+            case 355: // bed
+            case 356: // repeater
+                return true;
+            default:
+                return false;
         }
     }
 

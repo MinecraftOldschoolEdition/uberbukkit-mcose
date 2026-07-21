@@ -273,6 +273,10 @@ public final class BlockRegistry {
             registerAliasIfFree("unlit_redstone_torch", block, canonicalKey);
             registerAliasIfFree("lit_redstone_torch_off", block, canonicalKey);
             registerAliasIfFree("redstone_torch_off", block, canonicalKey);
+        } else if (legacyId == 66) {
+            registerAliasIfFree("rails", block, canonicalKey);
+        } else if (legacyId == 92) {
+            registerAliasIfFree("cake_block", block, canonicalKey);
         }
     }
 
@@ -281,6 +285,11 @@ public final class BlockRegistry {
         try {
             ResourceLocation alias = new ResourceLocation(RegistryKeyPolicy.DEFAULT_NAMESPACE, aliasPath);
             if (alias.equals(canonicalKey)) return;
+            // A compatibility alias from an earlier legacy ID must never take
+            // a namespaced key reserved as another built-in block's canonical
+            // identity. In particular, DOUBLE_STEP's raw stoneSlab name used
+            // to steal minecraft:stone_slab from STEP (ID 44).
+            if (VanillaRegistryKeys.isCanonicalBlockKeyForOther(alias, block)) return;
             if (!byKey.containsKey(alias)) {
                 byKey.put(alias, block);
                 try { Registries.BLOCK.registerIfAbsent(alias, block); } catch (Throwable ignored) {}

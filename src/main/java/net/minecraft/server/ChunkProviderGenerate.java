@@ -671,7 +671,6 @@ public class ChunkProviderGenerate implements IChunkProvider {
             l2 = this.j.nextInt(128);
             i3 = l + this.j.nextInt(16) + 8;
             if (this.p.getTypeId(k2, l2, i3) == 0 && this.p.p(k2, l2 - 1, i3)) {
-                System.out.println("added a chest!!");
                 this.p.setBlockStateAndData(k2, l2, i3, "minecraft:locked_chest");
             }
         }

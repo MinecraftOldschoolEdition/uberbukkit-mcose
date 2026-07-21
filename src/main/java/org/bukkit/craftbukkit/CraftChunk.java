@@ -1,6 +1,6 @@
 package org.bukkit.craftbukkit;
 
-import com.google.common.collect.MapMaker;
+import com.google.common.cache.CacheBuilder;
 import net.minecraft.server.BiomeBase;
 import net.minecraft.server.ChunkPosition;
 import net.minecraft.server.WorldChunkManager;
@@ -18,7 +18,7 @@ import java.util.concurrent.ConcurrentMap;
 
 public class CraftChunk implements Chunk {
     private WeakReference<net.minecraft.server.Chunk> weakChunk;
-    private final ConcurrentMap<Integer, Block> cache = new MapMaker().softValues().makeMap();
+    private final ConcurrentMap<Integer, Block> cache = CacheBuilder.newBuilder().softValues().<Integer, Block>build().asMap();
     private WorldServer worldServer;
     private int x;
     private int z;

@@ -883,12 +883,12 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
     }
 
     public void a(float f, float f1, boolean flag, boolean flag1, float f2, float f3) {
-        this.az = f;
-        this.aA = f1;
+        this.az = MathHelper.clamp(f, -1.0F, 1.0F);
+        this.aA = MathHelper.clamp(f1, -1.0F, 1.0F);
         this.aC = flag;
         this.setSneak(flag1);
-        this.pitch = f2;
-        this.yaw = f3;
+        this.pitch = MathHelper.clamp(f2, -90.0F, 90.0F);
+        this.yaw = MathHelper.wrapDegrees(f3);
     }
 
     public void a(Statistic statistic, int i) {
@@ -929,7 +929,6 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
             ArrayList<ItemStack> queue = this.packet5.queue.dropAllQueue();
             Player bukkitEntity = (Player) this.getBukkitEntity();
             for (ItemStack item : queue) {
-                System.out.println("Drop queue id: " + item.id + ", dmg: " + item.damage + ", cnt: " + item.count);
                 HashMap<Integer, org.bukkit.inventory.ItemStack> map = bukkitEntity.getInventory().addItem(new CraftItemStack(item));
                 // drop what couldn't fit in the inventory
                 for (org.bukkit.inventory.ItemStack stack : map.values()) {

@@ -226,6 +226,7 @@ public class EntityHerobrine extends EntityLiving {
         nearestThreatDistance = Double.MAX_VALUE;
         
         double closeDistance = 10.0; // Retreat if ANY player gets this close
+        double closeDistanceSq = closeDistance * closeDistance;
         
         List<EntityHuman> players = this.world.players;
         for (Object obj : players) {
@@ -234,9 +235,9 @@ public class EntityHerobrine extends EntityLiving {
             
             double dx = this.locX - player.locX;
             double dz = this.locZ - player.locZ;
-            double dist = Math.sqrt(dx * dx + dz * dz);
+            double dist = dx * dx + dz * dz;
             
-            if (dist < closeDistance && dist < nearestThreatDistance) {
+            if (dist < closeDistanceSq && dist < nearestThreatDistance) {
                 nearestThreat = player;
                 nearestThreatDistance = dist;
             }
@@ -1355,15 +1356,16 @@ public class EntityHerobrine extends EntityLiving {
     }
     
     public boolean isVisibleToAnyPlayer() {
+        double visibleDistanceSq = 64.0D * 64.0D;
         for (Object obj : this.world.players) {
             EntityHuman player = (EntityHuman) obj;
             if (player.dead) continue;
             
             double dx = this.locX - player.locX;
             double dz = this.locZ - player.locZ;
-            double dist = Math.sqrt(dx * dx + dz * dz);
+            double distSq = dx * dx + dz * dz;
             
-            if (dist < 64 && isVisibleToPlayer(player)) {
+            if (distSq < visibleDistanceSq && isVisibleToPlayer(player)) {
                 return true;
             }
         }
@@ -1372,15 +1374,16 @@ public class EntityHerobrine extends EntityLiving {
     
     public List<EntityHuman> getPlayersWithinDistance(double distance) {
         List<EntityHuman> nearby = new ArrayList<EntityHuman>();
+        double distanceSq = distance * distance;
         for (Object obj : this.world.players) {
             EntityHuman player = (EntityHuman) obj;
             if (player.dead) continue;
             
             double dx = this.locX - player.locX;
             double dz = this.locZ - player.locZ;
-            double dist = Math.sqrt(dx * dx + dz * dz);
+            double distSq = dx * dx + dz * dz;
             
-            if (dist <= distance) {
+            if (distSq <= distanceSq) {
                 nearby.add(player);
             }
         }

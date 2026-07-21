@@ -133,7 +133,8 @@ public final class InfdevWorldGenBigTree extends WorldGenerator {
             this.height = this.heightLimit - 1;
         }
 
-        int nodesPerLayer = (int)(1.382D + Math.pow(this.leafDensity * (double)this.heightLimit / 13.0D, 2.0D));
+        double leafNodeDensity = this.leafDensity * (double)this.heightLimit / 13.0D;
+        int nodesPerLayer = (int)(1.382D + leafNodeDensity * leafNodeDensity);
         if (nodesPerLayer <= 0) {
             nodesPerLayer = 1;
         }
@@ -163,7 +164,9 @@ public final class InfdevWorldGenBigTree extends WorldGenerator {
                 } else if (Math.abs(offset) >= halfHeight) {
                     radius = 0.0F;
                 } else {
-                    radius = (float)Math.sqrt(Math.pow((double)Math.abs(halfHeight), 2.0D) - Math.pow((double)Math.abs(offset), 2.0D));
+                    double radiusHalfHeight = (double)halfHeight;
+                    double radiusOffset = (double)offset;
+                    radius = (float)Math.sqrt(radiusHalfHeight * radiusHalfHeight - radiusOffset * radiusOffset);
                 }
 
                 radius *= 0.5F;
@@ -183,10 +186,9 @@ public final class InfdevWorldGenBigTree extends WorldGenerator {
                     int[] nodeTop = new int[]{nodeX, leafY + this.leafDistanceLimit, nodeZ};
                     if (this.checkBlockLine(nodeBase, nodeTop) == -1) {
                         int[] branchStart = new int[]{this.basePos[0], this.basePos[1], this.basePos[2]};
-                        double horizDist = Math.sqrt(
-                            Math.pow((double)Math.abs(this.basePos[0] - nodeBase[0]), 2.0D)
-                            + Math.pow((double)Math.abs(this.basePos[2] - nodeBase[2]), 2.0D)
-                        );
+                        double horizDx = (double)(this.basePos[0] - nodeBase[0]);
+                        double horizDz = (double)(this.basePos[2] - nodeBase[2]);
+                        double horizDist = Math.sqrt(horizDx * horizDx + horizDz * horizDz);
                         double branchDrop = horizDist * this.branchSlope;
                         if ((double)nodeBase[1] - branchDrop > (double)branchBaseY) {
                             branchStart[1] = branchBaseY;
@@ -230,10 +232,9 @@ public final class InfdevWorldGenBigTree extends WorldGenerator {
                     pos[axis1] = center[axis1] + off1;
 
                     for (int off2 = -r; off2 <= r; ++off2) {
-                        double dist = Math.sqrt(
-                            Math.pow((double)Math.abs(off1) + 0.5D, 2.0D)
-                            + Math.pow((double)Math.abs(off2) + 0.5D, 2.0D)
-                        );
+                        double distX = (double)Math.abs(off1) + 0.5D;
+                        double distZ = (double)Math.abs(off2) + 0.5D;
+                        double dist = Math.sqrt(distX * distX + distZ * distZ);
                         if (dist > (double)radius) {
                             continue;
                         }

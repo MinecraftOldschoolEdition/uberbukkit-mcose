@@ -7,6 +7,7 @@ import java.util.List;
  */
 public class EntityMapHanging extends Entity {
 
+    private static final int HANGING_CHECK_INTERVAL = 100;
     private int tickCounter;
     /** Direction the map faces: 0=south, 1=west, 2=north, 3=east */
     public int direction;
@@ -19,7 +20,7 @@ public class EntityMapHanging extends Entity {
 
     public EntityMapHanging(World world) {
         super(world);
-        this.tickCounter = 0;
+        this.tickCounter = this.id % HANGING_CHECK_INTERVAL;
         this.direction = 0;
         this.height = 0.0F;
         this.b(0.5F, 0.5F);
@@ -99,7 +100,7 @@ public class EntityMapHanging extends Entity {
 
     public void m_() {
         // Check validity every 100 ticks
-        if (this.tickCounter++ == 100 && !this.world.isStatic) {
+        if (this.tickCounter++ == HANGING_CHECK_INTERVAL && !this.world.isStatic) {
             this.tickCounter = 0;
             if (!this.isValidPosition()) {
                 this.die();
@@ -147,6 +148,12 @@ public class EntityMapHanging extends Entity {
      * The actual locking is done via Packet131 when the player confirms.
      */
     public boolean a(EntityHuman entityhuman) {
+        if (entityhuman instanceof EntityPlayer) {
+            EntityPlayer player = (EntityPlayer) entityhuman;
+            if (player.netServerHandler != null) {
+                player.netServerHandler.authorizeMapLock(this.mapId);
+            }
+        }
         // Don't auto-lock - let the client show the confirmation GUI
         // The lock will be processed via Packet131 when the player confirms
         return false;
@@ -206,4 +213,3 @@ public class EntityMapHanging extends Entity {
         }
     }
 }
-

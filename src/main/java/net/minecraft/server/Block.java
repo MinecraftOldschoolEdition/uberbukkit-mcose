@@ -119,6 +119,8 @@ public class Block {
     public static final Block JUKEBOX = (new BlockJukeBox(84, 74)).c(2.0F).b(10.0F).a(h).a("jukebox").g();
     public static final Block FENCE = (new BlockFence(85, 4)).c(2.0F).b(5.0F).a(e).a("fence").g();
     public static final Block PUMPKIN = (new BlockPumpkin(86, 102, false)).c(1.0F).a(e).a("pumpkin").g();
+    public static final Block PUMPKIN_PLAIN = (new BlockPumpkinPlain(187)).c(1.0F).a(e).a("pumpkin").g();
+    public static final Block CARVED_PUMPKIN = (new BlockCarvedPumpkin(189, 102)).c(1.0F).a(e).a("carvedPumpkin").g();
     public static final Block MELON = (new BlockMelon(103)).c(1.0F).a(e).a("melon");
     public static final Block PUMPKIN_STEM = (new BlockStem(104, PUMPKIN)).c(0.0F).a(e).a("pumpkinStem").g();
     public static final Block MELON_STEM = (new BlockStem(105, MELON)).c(0.0F).a(e).a("melonStem").g();
@@ -136,6 +138,7 @@ public class Block {
     // uberbukkit
     public static final Block LOCKED_CHEST = !UberbukkitConfig.getInstance().getBoolean("worldgen.generate_steveco_chests", false) ? (new BlockLockedChest(95)).c(0.0F).a(1.0F).a(e).a("lockedchest").a(true).g() : (new BlockLockedChest(95)).c(-1.0F).a(1.0F).a(e).a("lockedchest").g();
     public static final Block TRAP_DOOR = (new BlockTrapdoor(96, Material.WOOD)).c(3.0F).a(e).a("trapdoor").n().g();
+    public static final Block FENCE_GATE_COMPAT = (new BlockFenceGate(150, 4)).c(2.0F).b(5.0F).a(e).a("fenceGate").g();
     public static final Block FENCE_GATE = (new BlockFenceGate(188, 4)).c(2.0F).b(5.0F).a(e).a("fenceGate").g();
     public static final Block STONE_BRICK = (new BlockStoneBrick(98)).c(1.5F).b(10.0F).a(h).a("stonebricksmooth");
     public static final Block STONE_BRICK_STAIRS = (new BlockStairs(109, STONE_BRICK)).a("stairsStoneBrickSmooth").g();
@@ -576,6 +579,7 @@ public class Block {
         Item.byId[LONG_GRASS.id] = new ItemLongGrass(LONG_GRASS.id - 256).a("tallgrass");
         Item.byId[SOIL.id] = new ItemSoil(SOIL.id - 256).a("farmland");
         Item.byId[CAKE_BLOCK.id] = new ItemCake(CAKE_BLOCK.id - 256);
+        Item.byId[PUMPKIN.id] = new ItemPumpkinMeta(PUMPKIN.id - 256);
 
         for (int i = 0; i < 256; ++i) {
             if (byId[i] != null && Item.byId[i] == null) {

@@ -37,6 +37,7 @@ public class Pathfinder {
         this.b.a();
         this.b.a(pathpoint);
         PathPoint pathpoint3 = pathpoint;
+        float closestDistanceSq = pathpoint.distanceSquared(pathpoint1);
 
         while (!this.b.c()) {
             PathPoint pathpoint4 = this.b.b();
@@ -45,8 +46,10 @@ public class Pathfinder {
                 return this.a(pathpoint, pathpoint1);
             }
 
-            if (pathpoint4.a(pathpoint1) < pathpoint3.a(pathpoint1)) {
+            float distanceSq = pathpoint4.distanceSquared(pathpoint1);
+            if (distanceSq < closestDistanceSq) {
                 pathpoint3 = pathpoint4;
+                closestDistanceSq = distanceSq;
             }
 
             pathpoint4.i = true;
@@ -80,6 +83,7 @@ public class Pathfinder {
     private int b(Entity entity, PathPoint pathpoint, PathPoint pathpoint1, PathPoint pathpoint2, float f) {
         int i = 0;
         byte b0 = 0;
+        float maxDistanceSq = f * f;
 
         if (this.a(entity, pathpoint.a, pathpoint.b + 1, pathpoint.c, pathpoint1) == 1) {
             b0 = 1;
@@ -90,19 +94,19 @@ public class Pathfinder {
         PathPoint pathpoint5 = this.a(entity, pathpoint.a + 1, pathpoint.b, pathpoint.c, pathpoint1, b0);
         PathPoint pathpoint6 = this.a(entity, pathpoint.a, pathpoint.b, pathpoint.c - 1, pathpoint1, b0);
 
-        if (pathpoint3 != null && !pathpoint3.i && pathpoint3.a(pathpoint2) < f) {
+        if (pathpoint3 != null && !pathpoint3.i && pathpoint3.distanceSquared(pathpoint2) < maxDistanceSq) {
             this.d[i++] = pathpoint3;
         }
 
-        if (pathpoint4 != null && !pathpoint4.i && pathpoint4.a(pathpoint2) < f) {
+        if (pathpoint4 != null && !pathpoint4.i && pathpoint4.distanceSquared(pathpoint2) < maxDistanceSq) {
             this.d[i++] = pathpoint4;
         }
 
-        if (pathpoint5 != null && !pathpoint5.i && pathpoint5.a(pathpoint2) < f) {
+        if (pathpoint5 != null && !pathpoint5.i && pathpoint5.distanceSquared(pathpoint2) < maxDistanceSq) {
             this.d[i++] = pathpoint5;
         }
 
-        if (pathpoint6 != null && !pathpoint6.i && pathpoint6.a(pathpoint2) < f) {
+        if (pathpoint6 != null && !pathpoint6.i && pathpoint6.distanceSquared(pathpoint2) < maxDistanceSq) {
             this.d[i++] = pathpoint6;
         }
 

@@ -64,24 +64,22 @@ public class VoiceChatRoomManager {
 		return routeToRoom == null || routeToRoom.booleanValue();
 	}
 
-	public synchronized List<EntityPlayer> getVoiceRoomRecipients(EntityPlayer speaker) {
-		ChatRoom room = getRoomForPlayer(speaker);
-		if (room == null) {
-			return Collections.emptyList();
-		}
-		List<EntityPlayer> recipients = new ArrayList<EntityPlayer>();
-		List<EntityPlayer> onlinePlayers = this.server.serverConfigurationManager.getOnlinePlayersSnapshot();
-		for (int i = 0; i < onlinePlayers.size(); i++) {
-			EntityPlayer member = onlinePlayers.get(i);
-			if (speaker != null && member == speaker) {
-				continue;
+		public synchronized List<EntityPlayer> getVoiceRoomRecipients(EntityPlayer speaker) {
+			ChatRoom room = getRoomForPlayer(speaker);
+			if (room == null) {
+				return Collections.emptyList();
 			}
-			if (room.members.contains(member.name.toLowerCase(Locale.ROOT))) {
+			List<EntityPlayer> recipients = new ArrayList<EntityPlayer>();
+			for (Iterator iterator = room.members.iterator(); iterator.hasNext();) {
+				String memberName = (String) iterator.next();
+				EntityPlayer member = this.server.serverConfigurationManager.i(memberName);
+				if (member == null || speaker != null && member == speaker) {
+					continue;
+				}
 				recipients.add(member);
 			}
+			return recipients;
 		}
-		return recipients;
-	}
 
 	public synchronized void handleAction(EntityPlayer player, Packet66ChatRoomAction packet) {
 		if(player == null || packet == null) {
@@ -416,19 +414,17 @@ public class VoiceChatRoomManager {
 
 	public synchronized void broadcastVoice(EntityPlayer speaker, Packet64Voice inbound) {
 		ChatRoom room = getRoomForPlayer(speaker);
-		if(room == null) {
-			return;
-		}
-		Packet64Voice outbound = inbound.cloneForForwarding(speaker.id, 0.0F, speaker.name);
-		List<EntityPlayer> onlinePlayers = this.server.serverConfigurationManager.getOnlinePlayersSnapshot();
-		for (int i = 0; i < onlinePlayers.size(); i++) {
-			EntityPlayer member = onlinePlayers.get(i);
-			if(member == speaker) continue;
-			if(room.members.contains(member.name.toLowerCase(Locale.ROOT))) {
+			if(room == null) {
+				return;
+			}
+			Packet64Voice outbound = inbound.cloneForForwarding(speaker.id, 0.0F, speaker.name);
+			for (Iterator iterator = room.members.iterator(); iterator.hasNext();) {
+				String memberName = (String) iterator.next();
+				EntityPlayer member = this.server.serverConfigurationManager.i(memberName);
+				if(member == null || member == speaker) continue;
 				member.netServerHandler.sendPacket(outbound);
 			}
 		}
-	}
 
 	private static final class ChatRoom {
 		private final String name;

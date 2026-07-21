@@ -38,7 +38,8 @@ public class BlockChest extends BlockContainer {
             return false;
         }
 
-        if (blockId == Block.PUMPKIN.id || blockId == Block.JACK_O_LANTERN.id) {
+        if (blockId == Block.PUMPKIN.id || blockId == Block.PUMPKIN_PLAIN.id
+                || blockId == Block.CARVED_PUMPKIN.id || blockId == Block.JACK_O_LANTERN.id) {
             return false;
         }
 

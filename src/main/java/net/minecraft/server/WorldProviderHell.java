@@ -24,25 +24,8 @@ public class WorldProviderHell extends WorldProvider {
     }
 
     public IChunkProvider getChunkProvider() {
-        // For Classic worlds, use Classic-style Nether generation (256x256 with lava borders).
-        // Some stacks duplicate WorldData per dimension; fall back to overworld's terrain type if needed.
-        int terrainType = 0;
-        if (this.a != null && this.a.worldData != null) {
-            terrainType = this.a.worldData.getTerrainType();
-        }
-        if (terrainType != 6 && this.a instanceof WorldServer) {
-            WorldServer overworld = null;
-            try {
-                MinecraftServer srv = ((WorldServer) this.a).server;
-                if (srv != null) {
-                    overworld = srv.getWorldServer(0);
-                }
-            } catch (Throwable ignore) {}
-            if (overworld != null && overworld.worldData != null) {
-                terrainType = overworld.worldData.getTerrainType();
-            }
-        }
-        if (terrainType == 3) {
+        int terrainType = this.getNetherVariantTerrainType();
+        if (isNetherSkyTerrainType(terrainType)) {
             MinecraftServer.log.info("[WorldProviderHell] Selecting NetherSkyLevelSource (overworld terrainType=SKY)");
             return new ChunkProviderNetherSky(this.a, this.a.getSeed());
         }
@@ -52,6 +35,50 @@ public class WorldProviderHell extends WorldProvider {
         }
         MinecraftServer.log.info("[WorldProviderHell] Selecting default Nether generator");
         return new ChunkProviderHell(this.a, this.a.getSeed());
+    }
+
+    public boolean isNetherSkyVariant() {
+        return isNetherSkyTerrainType(this.getNetherVariantTerrainType());
+    }
+
+    public int getNetherVariantTerrainType() {
+        int localTerrainType = this.a != null && this.a.worldData != null
+                ? this.a.worldData.getTerrainType()
+                : 0;
+        Integer overworldTerrainType = null;
+        String configuredLevelType = null;
+
+        if (this.a instanceof WorldServer) {
+            try {
+                MinecraftServer server = ((WorldServer) this.a).server;
+                if (server != null) {
+                    configuredLevelType = server.configuredLevelType;
+                    WorldServer overworld = server.getWorldServer(0);
+                    if (overworld != null && overworld.worldData != null) {
+                        overworldTerrainType = Integer.valueOf(overworld.worldData.getTerrainType());
+                    }
+                }
+            } catch (Throwable ignore) {}
+        }
+
+        return resolveNetherVariantTerrainType(localTerrainType, overworldTerrainType, configuredLevelType);
+    }
+
+    static int resolveNetherVariantTerrainType(int localTerrainType, Integer overworldTerrainType, String configuredLevelType) {
+        if (overworldTerrainType != null) {
+            return overworldTerrainType.intValue();
+        }
+        if (configuredLevelType != null && configuredLevelType.equalsIgnoreCase("SKY")) {
+            return 3;
+        }
+        if (configuredLevelType != null && configuredLevelType.equalsIgnoreCase("CLASSIC")) {
+            return 6;
+        }
+        return localTerrainType;
+    }
+
+    static boolean isNetherSkyTerrainType(int terrainType) {
+        return terrainType == 3;
     }
 
     public boolean canSpawn(int i, int j) {

@@ -8,6 +8,8 @@ import java.util.List;
 
 public class NBTTagList extends NBTBase {
 
+    private static final long ELEMENT_HEAP_OVERHEAD_BYTES = 32L;
+
     private List a = new ArrayList();
     private byte b;
 
@@ -36,8 +38,17 @@ public class NBTTagList extends NBTBase {
         if (i < 0) {
             throw new IOException("Negative TAG_List length: " + i);
         }
-        if (i > 0 && NBTBase.a(this.b) == null) {
-            throw new IOException("Invalid TAG_List element type: " + this.b);
+        if (i > 0) {
+            if (this.b == 0) {
+                throw new IOException("Non-empty TAG_List cannot contain TAG_End elements");
+            }
+            if (NBTBase.a(this.b) == null) {
+                throw new IOException("Invalid TAG_List element type: " + this.b);
+            }
+
+            // Paper/Spigot-style structural accounting. Primitive payload bytes alone
+            // do not represent the heap cost of allocating one object per list entry.
+            limiter.account((long) i * ELEMENT_HEAP_OVERHEAD_BYTES);
         }
 
         this.a = new ArrayList();

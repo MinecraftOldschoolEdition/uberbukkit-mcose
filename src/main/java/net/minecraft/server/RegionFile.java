@@ -8,7 +8,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.RandomAccessFile;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.Locale;
+import java.util.Set;
 
 import java.util.zip.DeflaterOutputStream;
 import java.util.zip.GZIPInputStream;
@@ -51,22 +53,22 @@ public class RegionFile {
             this.c = new RandomAccessFile(file1, "rw");
             int i;
 
-            if (this.c.length() < 4096L) {
-                for (i = 0; i < 1024; ++i) {
-                    this.c.writeInt(0);
+            long originalLength = this.c.length();
+            boolean malformedBackupAttempted = false;
+            if (originalLength > 0L && (originalLength < 8192L || (originalLength & 4095L) != 0L)) {
+                if (!this.backupMalformedRegionFile(originalLength)) {
+                    throw new IOException("Unable to back up malformed region file before repair: " + this.b);
                 }
-
-                for (i = 0; i < 1024; ++i) {
-                    this.c.writeInt(0);
-                }
-
-                this.g += 8192;
+                malformedBackupAttempted = true;
             }
 
-            if ((this.c.length() & 4095L) != 0L) {
-                for (i = 0; (long) i < (this.c.length() & 4095L); ++i) {
-                    this.c.write(0);
-                }
+            if (this.c.length() < 8192L) {
+                this.padToLength(8192L);
+            }
+
+            long remainder = this.c.length() & 4095L;
+            if (remainder != 0L) {
+                this.padToLength(this.c.length() + (4096L - remainder));
             }
 
             i = (int) this.c.length() / 4096;
@@ -83,13 +85,32 @@ public class RegionFile {
             this.c.seek(0L);
 
             int k;
+            Set invalidHeaderEntries = new HashSet();
 
             for (j = 0; j < 1024; ++j) {
                 k = this.c.readInt();
                 this.d[j] = k;
-                if (k != 0 && (k >> 8) + (k & 255) <= this.f.size()) {
-                    for (int l = 0; l < (k & 255); ++l) {
-                        this.f.set((k >> 8) + l, Boolean.valueOf(false));
+                if (k != 0) {
+                    int sector = k >> 8;
+                    int sectorCount = k & 255;
+                    boolean valid = sector >= 2 && sectorCount > 0 && sector + sectorCount <= this.f.size();
+
+                    if (valid) {
+                        for (int l = 0; l < sectorCount; ++l) {
+                            if (!((Boolean) this.f.get(sector + l)).booleanValue()) {
+                                valid = false;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (valid) {
+                        for (int l = 0; l < sectorCount; ++l) {
+                            this.f.set(sector + l, Boolean.valueOf(false));
+                        }
+                    } else {
+                        this.d[j] = 0;
+                        invalidHeaderEntries.add(Integer.valueOf(j));
                     }
                 }
             }
@@ -99,9 +120,25 @@ public class RegionFile {
                 this.e[j] = k;
             }
 
+            if (!invalidHeaderEntries.isEmpty()) {
+                if (!malformedBackupAttempted) {
+                    if (!this.backupMalformedRegionFile(originalLength)) {
+                        throw new IOException("Unable to back up corrupt region header before repair: " + this.b);
+                    }
+                }
+                this.clearInvalidHeaderEntries(invalidHeaderEntries);
+            }
+
             flag = true;
         } catch (IOException ioexception) {
-            ioexception.printStackTrace();
+            try {
+                if (this.c != null) {
+                    this.c.close();
+                }
+            } catch (IOException closeFailure) {
+                ioexception.addSuppressed(closeFailure);
+            }
+            throw new RegionFileInitializationException(this.b, ioexception);
         }
 
         if (flag) {
@@ -189,15 +226,16 @@ public class RegionFile {
                     int l = k >> 8;
                     int i1 = k & 255;
 
-                    if (l + i1 > this.f.size()) {
+                    if (l < 2 || i1 <= 0 || l + i1 > this.f.size()) {
                         this.b("READ", i, j, "invalid sector");
                         return null;
                     } else {
                         this.c.seek((long) (l * 4096));
                         int j1 = this.c.readInt();
 
-                        if (j1 > 4096 * i1) {
-                            this.b("READ", i, j, "invalid length: " + j1 + " > 4096 * " + i1);
+                        int maxLength = 4096 * i1 - 4;
+                        if (j1 <= 0 || j1 > maxLength) {
+                            this.b("READ", i, j, "invalid length: " + j1 + " (max " + maxLength + ")");
                             return null;
                         } else {
                             byte b0 = this.c.readByte();
@@ -206,17 +244,17 @@ public class RegionFile {
 
                             if (b0 == REGION_CODEC_GZIP) {
                                 abyte = new byte[j1 - 1];
-                                this.c.read(abyte);
+                                this.c.readFully(abyte);
                                 datainputstream = new DataInputStream(new GZIPInputStream(new ByteArrayInputStream(abyte)));
                                 return datainputstream;
                             } else if (b0 == REGION_CODEC_ZLIB) {
                                 abyte = new byte[j1 - 1];
-                                this.c.read(abyte);
+                                this.c.readFully(abyte);
                                 datainputstream = new DataInputStream(new InflaterInputStream(new ByteArrayInputStream(abyte)));
                                 return datainputstream;
                             } else if (b0 == REGION_CODEC_ZSTD) {
                                 abyte = new byte[j1 - 1];
-                                this.c.read(abyte);
+                                this.c.readFully(abyte);
                                 InputStream zstdStream = ZstdRuntime.openZstdInputStream(new ByteArrayInputStream(abyte));
                                 if (zstdStream == null) {
                                     this.b("READ", i, j, "zstd unavailable");
@@ -250,12 +288,26 @@ public class RegionFile {
         return new DataOutputStream(new DeflaterOutputStream(chunkBuffer));
     }
 
-    protected synchronized void a(int i, int j, byte[] abyte, int k) {
+    public void writeUncompressed(int i, int j, byte[] serialized, int length) throws IOException {
+        if (this.d(i, j)) {
+            throw new IOException("Chunk coordinates out of region bounds: " + i + "," + j);
+        }
+        if (serialized == null || length < 0 || length > serialized.length) {
+            throw new IOException("Invalid uncompressed chunk payload length: " + length);
+        }
+
+        byte codec = ZstdRuntime.isAvailable() ? REGION_CODEC_ZSTD : REGION_CODEC_ZLIB;
+        ChunkBuffer.writeUncompressed(this, i, j, serialized, length, codec);
+    }
+
+    protected synchronized void a(int i, int j, byte[] abyte, int k) throws IOException {
         this.a(i, j, abyte, k, REGION_CODEC_ZLIB);
     }
 
-    protected synchronized void a(int i, int j, byte[] abyte, int k, byte codec) {
+    protected synchronized void a(int i, int j, byte[] abyte, int k, byte codec) throws IOException {
         try {
+            validateChunkPayload(i, j, abyte, k, codec);
+
             if (this.writeAheadLog != null) {
                 this.logWal(2, "begin " + this.b.getName() + " chunk [" + i + "," + j + "] bytes=" + k);
                 if (!this.walFirstWriteLogged) {
@@ -280,7 +332,7 @@ public class RegionFile {
             }
         } catch (IOException ioexception) {
             this.logWal(1, "write failed " + this.b.getName() + " chunk [" + i + "," + j + "] (" + ioexception.getMessage() + ")");
-            ioexception.printStackTrace();
+            throw ioexception;
         }
     }
 
@@ -297,11 +349,25 @@ public class RegionFile {
         }
     }
 
+    public synchronized void flush() throws IOException {
+        if (this.writeAheadLog != null) {
+            this.flushWal("save");
+        } else {
+            this.c.getFD().sync();
+        }
+    }
+
     private void writeChunk(int i, int j, byte[] abyte, int k, byte codec) throws IOException {
+        validateChunkPayload(i, j, abyte, k, codec);
+
         int l = this.e(i, j);
         int i1 = l >> 8;
         int j1 = l & 255;
         int k1 = (k + 5) / 4096 + 1;
+
+        if (k1 >= 256) {
+            throw new ChunkTooLargeException(i, j, k, k1);
+        }
 
         if (k1 < 256) {
             if (i1 != 0 && j1 == k1) {
@@ -364,6 +430,76 @@ public class RegionFile {
             }
 
             this.b(i, j, (int) (System.currentTimeMillis() / 1000L));
+        }
+    }
+
+    private static void validateChunkPayload(int chunkX, int chunkZ, byte[] payload, int length, byte codec) throws IOException {
+        if (payload == null || length < 0 || length > payload.length) {
+            throw new IOException("Invalid chunk payload length: " + length);
+        }
+        if (codec != REGION_CODEC_GZIP && codec != REGION_CODEC_ZLIB && codec != REGION_CODEC_ZSTD) {
+            throw new IOException("Invalid region codec: " + codec);
+        }
+
+        int sectors = (int) (((long) length + 5L) / 4096L + 1L);
+        if (sectors >= 256) {
+            throw new ChunkTooLargeException(chunkX, chunkZ, length, sectors);
+        }
+    }
+
+    private boolean backupMalformedRegionFile(long originalLength) {
+        File backup = new File(this.b.getPath() + ".malformed-" + System.currentTimeMillis() + ".bak");
+        try {
+            java.nio.file.Files.copy(this.b.toPath(), backup.toPath());
+            System.err.println("Backed up malformed region file " + this.b.getName() + " (" + originalLength + " bytes) to " + backup.getName());
+            return true;
+        } catch (IOException exception) {
+            System.err.println("Failed to back up malformed region file " + this.b.getName() + ": " + exception.getMessage());
+            return false;
+        }
+    }
+
+    private void padToLength(long targetLength) throws IOException {
+        this.c.seek(this.c.length());
+        while (this.c.length() < targetLength) {
+            int bytes = (int) Math.min((long) a.length, targetLength - this.c.length());
+            this.c.write(a, 0, bytes);
+            this.g += bytes;
+        }
+    }
+
+    private void clearInvalidHeaderEntries(Set invalidHeaderEntries) throws IOException {
+        java.util.Iterator iterator = invalidHeaderEntries.iterator();
+        while (iterator.hasNext()) {
+            int index = ((Integer) iterator.next()).intValue();
+            this.c.seek((long) index * 4L);
+            this.c.writeInt(0);
+            this.c.seek(4096L + (long) index * 4L);
+            this.c.writeInt(0);
+            this.e[index] = 0;
+        }
+        this.c.getFD().sync();
+        System.err.println("Cleared " + invalidHeaderEntries.size() + " invalid chunk header entries in " + this.b.getName());
+    }
+
+    static final class ChunkTooLargeException extends IOException {
+        final int chunkX;
+        final int chunkZ;
+        final int payloadBytes;
+        final int sectors;
+
+        ChunkTooLargeException(int chunkX, int chunkZ, int payloadBytes, int sectors) {
+            super("Chunk [" + chunkX + "," + chunkZ + "] is too large for the region format (" + payloadBytes + " bytes, " + sectors + " sectors)");
+            this.chunkX = chunkX;
+            this.chunkZ = chunkZ;
+            this.payloadBytes = payloadBytes;
+            this.sectors = sectors;
+        }
+    }
+
+    static final class RegionFileInitializationException extends RuntimeException {
+        RegionFileInitializationException(File file, IOException cause) {
+            super("Unable to initialize region file " + file, cause);
         }
     }
 

@@ -1,12 +1,15 @@
 package net.minecraft.server;
 
+import com.legacyminecraft.poseidon.PoseidonConfig;
+
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -17,7 +20,12 @@ public class NetworkListenThread {
     private Thread e;
     public volatile boolean b = false;
     private int f = 0;
-    private final List pendingAcceptedLogins = Collections.synchronizedList(new ArrayList());
+    private final Queue pendingAcceptedLogins = new ConcurrentLinkedQueue();
+    private final int maxLoginCompletionsPerTick;
+    private final int maxPendingLogins;
+    private final AtomicInteger pendingLoginReservations = new AtomicInteger();
+    private int loginCompletionTick = Integer.MIN_VALUE;
+    private int loginCompletionsThisTick = 0;
     private final ArrayList g = new ArrayList();
     private final ArrayList h = new ArrayList();
     public MinecraftServer c;
@@ -32,6 +40,10 @@ public class NetworkListenThread {
         // Now bind to the address and port
         this.d.bind(new InetSocketAddress(inetaddress, i), 128);
         this.b = true;
+        int configuredMaxJoinsPerTick = PoseidonConfig.getInstance().getInt("settings.max-joins-per-tick", 5);
+        this.maxLoginCompletionsPerTick = configuredMaxJoinsPerTick <= 0 ? Integer.MAX_VALUE : configuredMaxJoinsPerTick;
+        int configuredMaxPendingLogins = PoseidonConfig.getInstance().getInt("settings.max-pending-logins", 128);
+        this.maxPendingLogins = configuredMaxPendingLogins <= 0 ? Integer.MAX_VALUE : configuredMaxPendingLogins;
         this.e = new NetworkAcceptThread(this, "Listen thread", minecraftserver);
         this.e.start();
     }
@@ -51,12 +63,20 @@ public class NetworkListenThread {
     public void a() {
         this.drainAcceptedLogins();
         int i;
+        if (this.loginCompletionTick != MinecraftServer.currentTick) {
+            this.loginCompletionTick = MinecraftServer.currentTick;
+            this.loginCompletionsThisTick = 0;
+        }
 
         for (i = 0; i < this.g.size(); ++i) {
             NetLoginHandler netloginhandler = (NetLoginHandler) this.g.get(i);
 
             try {
-                netloginhandler.a();
+                boolean allowLoginCompletion = !netloginhandler.hasPendingLoginCompletion()
+                        || this.loginCompletionsThisTick < this.maxLoginCompletionsPerTick;
+                if (netloginhandler.a(allowLoginCompletion)) {
+                    ++this.loginCompletionsThisTick;
+                }
             } catch (Exception exception) {
                 if (netloginhandler == null) {
                     a.log(Level.WARNING, "Looks like someone tried to crash the server, stopped their attempt.");
@@ -70,6 +90,7 @@ public class NetworkListenThread {
 
             if (netloginhandler.c) {
                 this.g.remove(i--);
+                this.releasePendingLogin();
             }
 
             netloginhandler.networkManager.a();
@@ -94,8 +115,30 @@ public class NetworkListenThread {
     }
 
     public int getPendingLoginCount() {
-        synchronized (this.pendingAcceptedLogins) {
-            return this.g.size() + this.pendingAcceptedLogins.size();
+        return this.pendingLoginReservations.get();
+    }
+
+    boolean tryReservePendingLogin() {
+        while (true) {
+            int current = this.pendingLoginReservations.get();
+            if (current >= this.maxPendingLogins) {
+                return false;
+            }
+            if (this.pendingLoginReservations.compareAndSet(current, current + 1)) {
+                return true;
+            }
+        }
+    }
+
+    void releasePendingLogin() {
+        while (true) {
+            int current = this.pendingLoginReservations.get();
+            if (current <= 0) {
+                return;
+            }
+            if (this.pendingLoginReservations.compareAndSet(current, current - 1)) {
+                return;
+            }
         }
     }
 
@@ -116,13 +159,9 @@ public class NetworkListenThread {
     }
 
     private void drainAcceptedLogins() {
-        synchronized (this.pendingAcceptedLogins) {
-            if (this.pendingAcceptedLogins.isEmpty()) {
-                return;
-            }
-
-            this.g.addAll(this.pendingAcceptedLogins);
-            this.pendingAcceptedLogins.clear();
+        NetLoginHandler netloginhandler;
+        while ((netloginhandler = (NetLoginHandler) this.pendingAcceptedLogins.poll()) != null) {
+            this.g.add(netloginhandler);
         }
     }
     

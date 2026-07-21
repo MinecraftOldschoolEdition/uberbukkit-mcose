@@ -67,34 +67,39 @@ public class LongHashtable<V> extends LongHash {
             }
 
             outer[outerIdx] = inner = Arrays_copyOf(inner, i + i);
-            inner[i] = new Entry(key, value);
+            inner[i] = this.cache = new Entry(key, value);
         }
     }
 
     public synchronized V get(long key) {
-        return containsKey(key) ? (V) cache.value : null;
+        Entry entry = this.getEntry(key);
+        return entry == null ? null : (V) entry.value;
     }
 
     public synchronized boolean containsKey(long key) {
-        if (this.cache != null && cache.key == key) return true;
+        return this.getEntry(key) != null;
+    }
+
+    private Entry getEntry(long key) {
+        if (this.cache != null && cache.key == key) return this.cache;
 
         int outerIdx = (int) ((key >> 32) & 255);
         Object[][] outer = this.values[(int) (key & 255)];
-        if (outer == null) return false;
+        if (outer == null) return null;
 
         Object[] inner = outer[outerIdx];
-        if (inner == null) return false;
+        if (inner == null) return null;
 
         for (int i = 0; i < inner.length; i++) {
             Entry e = (Entry) inner[i];
             if (e == null) {
-                return false;
+                return null;
             } else if (e.key == key) {
                 this.cache = e;
-                return true;
+                return e;
             }
         }
-        return false;
+        return null;
     }
 
     public synchronized void remove(long key) {

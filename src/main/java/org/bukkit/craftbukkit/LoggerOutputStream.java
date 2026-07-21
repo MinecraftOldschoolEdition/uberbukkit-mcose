@@ -6,7 +6,6 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class LoggerOutputStream extends ByteArrayOutputStream {
-    private final String separator = System.getProperty("line.separator");
     private final Logger logger;
     private final Level level;
 
@@ -23,7 +22,15 @@ public class LoggerOutputStream extends ByteArrayOutputStream {
             String record = this.toString();
             super.reset();
 
-            if ((record.length() > 0) && (!record.equals(separator))) {
+            int end = record.length();
+            while (end > 0 && (record.charAt(end - 1) == '\n' || record.charAt(end - 1) == '\r')) {
+                --end;
+            }
+            if (end != record.length()) {
+                record = record.substring(0, end);
+            }
+
+            if (record.length() > 0) {
                 logger.logp(level, "", "", record);
             }
         }

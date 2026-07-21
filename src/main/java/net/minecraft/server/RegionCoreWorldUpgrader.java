@@ -46,7 +46,8 @@ public final class RegionCoreWorldUpgrader {
 
         Logger log = logger == null ? MinecraftServer.log : logger;
         log.info("[RegionCore] Upgrading world '" + worldDir.getName() + "' from "
-                + WorldSaveVersions.nameOf(worldVersion) + " to RegionCore...");
+                + WorldSaveVersions.nameOf(worldVersion) + " to "
+                + WorldSaveVersions.nameOf(WorldSaveVersions.currentWriteVersion()) + "...");
 
         int changedDatFiles = 0;
         int changedChunks = 0;
@@ -90,7 +91,7 @@ public final class RegionCoreWorldUpgrader {
             }
         }
 
-        updateLevelVersion(worldDir, WorldSaveVersions.MCREGION_2);
+        updateLevelVersion(worldDir, WorldSaveVersions.currentWriteVersion());
 
         log.info("[RegionCore] Upgrade complete for '" + worldDir.getName()
                 + "' (datFiles=" + changedDatFiles
@@ -507,7 +508,8 @@ public final class RegionCoreWorldUpgrader {
         if (blockId == Block.JUKEBOX.id) {
             return false;
         }
-        if (blockId == Block.PUMPKIN.id || blockId == Block.JACK_O_LANTERN.id) {
+        if (blockId == Block.PUMPKIN.id || blockId == Block.PUMPKIN_PLAIN.id
+                || blockId == Block.CARVED_PUMPKIN.id || blockId == Block.JACK_O_LANTERN.id) {
             return false;
         }
         if (blockId == Block.DISPENSER.id) {
@@ -648,6 +650,9 @@ public final class RegionCoreWorldUpgrader {
         }
 
         if (BlockStateCodec.hasStateData(level)) {
+            if (BlockStateCodec.canonicalizeStatePalette(level)) {
+                changed = true;
+            }
             if (level.hasKey("Blocks")) {
                 level.remove("Blocks");
                 changed = true;

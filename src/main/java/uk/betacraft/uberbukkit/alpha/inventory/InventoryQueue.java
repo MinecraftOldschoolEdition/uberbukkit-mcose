@@ -18,7 +18,7 @@ public class InventoryQueue {
 
     @Override
     public InventoryQueue clone() {
-        return new InventoryQueue(this.queue);
+        return new InventoryQueue(new ArrayList<InventoryItem>(this.queue));
     }
 
     public ArrayList<ItemStack> getQueue() {

@@ -28,6 +28,7 @@ public class WorldData {
     private boolean hardcore = false;
     // Difficulty: 0=peaceful, 1=easy, 2=normal, 3=hard
     private int difficulty = 1;
+    private long totalTime = 0L;
 
     private void loadGameRulesFromCompound(NBTTagCompound gameRules) {
         if (gameRules == null) {
@@ -52,6 +53,7 @@ public class WorldData {
         this.c = nbttagcompound.e("SpawnY");
         this.d = nbttagcompound.e("SpawnZ");
         this.e = nbttagcompound.getLong("Time");
+        this.totalTime = nbttagcompound.hasKey("TotalTime") ? nbttagcompound.getLong("TotalTime") : this.e;
         this.f = nbttagcompound.getLong("LastPlayed");
         this.g = nbttagcompound.getLong("SizeOnDisk");
         this.name = nbttagcompound.getString("LevelName");
@@ -132,6 +134,7 @@ public class WorldData {
         this.alphaSnow = worlddata.alphaSnow;
         this.hardcore = worlddata.hardcore;
         this.difficulty = worlddata.difficulty;
+        this.totalTime = worlddata.totalTime;
         this.doDayNightCycle = worlddata.doDayNightCycle;
         this.tntexplodes = worlddata.tntexplodes;
         this.mobGriefing = worlddata.mobGriefing;
@@ -175,6 +178,7 @@ public class WorldData {
         nbttagcompound.a("SpawnY", this.c);
         nbttagcompound.a("SpawnZ", this.d);
         nbttagcompound.setLong("Time", this.e);
+        nbttagcompound.setLong("TotalTime", this.totalTime);
         nbttagcompound.setLong("SizeOnDisk", this.g);
         nbttagcompound.setLong("LastPlayed", System.currentTimeMillis());
         nbttagcompound.setString("LevelName", this.name);
@@ -255,6 +259,14 @@ public class WorldData {
 
     public void b(long i) {
         this.g = i;
+    }
+
+    public long getTotalTime() {
+        return this.totalTime;
+    }
+
+    public void setTotalTime(long totalTime) {
+        this.totalTime = totalTime;
     }
 
     public void setSpawn(int i, int j, int k) {

@@ -72,14 +72,6 @@ public class BlockPumpkin extends Block {
         world.setData(i, j, k, l);
     }
 
-    public void postBreak(World world, int i, int j, int k, int l) {
-        super.postBreak(world, i, j, k, l);
-        this.removeAdjacentStem(world, i - 1, j, k);
-        this.removeAdjacentStem(world, i + 1, j, k);
-        this.removeAdjacentStem(world, i, j, k - 1);
-        this.removeAdjacentStem(world, i, j, k + 1);
-    }
-
     protected int a_(int i) {
         // Legacy pumpkin block (id 86) stores carved/plain state in metadata:
         // 0..3 = carved (facing), 4+ = plain.
@@ -87,12 +79,6 @@ public class BlockPumpkin extends Block {
             return i > 3 ? 1 : 0;
         }
         return super.a_(i);
-    }
-
-    private void removeAdjacentStem(World world, int i, int j, int k) {
-        if (world.getTypeId(i, j, k) == Block.PUMPKIN_STEM.id) {
-            world.setTypeId(i, j, k, 0);
-        }
     }
 
     // CraftBukkit start

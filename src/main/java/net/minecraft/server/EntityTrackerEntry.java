@@ -40,6 +40,8 @@ public class EntityTrackerEntry {
     private int velocityPacketCooldown = 0;
     public boolean m = false;
     public Set trackedPlayers = new HashSet();
+    boolean hasTrackedChunkKey;
+    long trackedChunkKey;
 
     public EntityTrackerEntry(Entity entity, int i, int j, boolean flag) {
         this.tracker = entity;

@@ -2513,8 +2513,8 @@ public class ServerGUI extends JFrame {
                     acceptsAll(java.util.Arrays.asList("s", "size", "max-players"), "Max players").withRequiredArg().ofType(Integer.class);
                     acceptsAll(java.util.Arrays.asList("d", "date-format"), "Date format").withRequiredArg().ofType(java.text.SimpleDateFormat.class);
                     acceptsAll(java.util.Arrays.asList("log-pattern"), "Log pattern").withRequiredArg().ofType(String.class).defaultsTo("server.log");
-                    acceptsAll(java.util.Arrays.asList("log-limit"), "Log limit").withRequiredArg().ofType(Integer.class).defaultsTo(0);
-                    acceptsAll(java.util.Arrays.asList("log-count"), "Log count").withRequiredArg().ofType(Integer.class).defaultsTo(1);
+                    acceptsAll(java.util.Arrays.asList("log-limit"), "Log limit").withRequiredArg().ofType(Integer.class).defaultsTo(net.minecraft.server.ConsoleLogManager.DEFAULT_LOG_LIMIT);
+                    acceptsAll(java.util.Arrays.asList("log-count"), "Log count").withRequiredArg().ofType(Integer.class).defaultsTo(net.minecraft.server.ConsoleLogManager.DEFAULT_LOG_COUNT);
                     acceptsAll(java.util.Arrays.asList("log-append"), "Log append").withRequiredArg().ofType(Boolean.class).defaultsTo(true);
                     acceptsAll(java.util.Arrays.asList("b", "bukkit-settings"), "Bukkit settings").withRequiredArg().ofType(java.io.File.class).defaultsTo(new java.io.File("bukkit.yml"));
                     acceptsAll(java.util.Arrays.asList("nojline"), "No JLine");

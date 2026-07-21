@@ -21,6 +21,9 @@ class SlotArmor extends Slot {
             return false;
         }
 
-        return itemstack.getItem() instanceof ItemArmor ? ((ItemArmor) itemstack.getItem()).bk == this.d : (itemstack.getItem().id == Block.PUMPKIN.id ? this.d == 0 : false);
+        return itemstack.getItem() instanceof ItemArmor
+                ? ((ItemArmor) itemstack.getItem()).bk == this.d
+                : (itemstack.getItem() instanceof ItemPumpkinMeta
+                        && itemstack.getData() == 0 && this.d == 0);
     }
 }

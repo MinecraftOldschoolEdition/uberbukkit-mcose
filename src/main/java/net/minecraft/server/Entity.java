@@ -120,6 +120,8 @@ public abstract class Entity implements SyncedDataHolder {
     public long lastPlayerAttackerTime; // World tick when player last attacked (for timeout)
     public EntityPlayer fireSource; // Player who set this entity on fire
     public static final long PLAYER_ATTACKER_TIMEOUT = 100; // 5 seconds in ticks
+    public long activatedTick; // UberBukkit - Paper-style entity activation throttling
+    protected int numCollisions; // Paper-style per-entity collision budget
 
     public Entity(World world) {
         this.id = entityCount++;
@@ -436,9 +438,8 @@ public abstract class Entity implements SyncedDataHolder {
 
     public boolean d(double d0, double d1, double d2) {
         AxisAlignedBB axisalignedbb = this.boundingBox.c(d0, d1, d2);
-        List list = this.world.getEntities(this, axisalignedbb);
 
-        return list.size() > 0 ? false : !this.world.c(axisalignedbb);
+        return !this.world.hasCollision(this, axisalignedbb) && !this.world.c(axisalignedbb);
     }
 
     public void move(double d0, double d1, double d2) {
@@ -481,7 +482,7 @@ public abstract class Entity implements SyncedDataHolder {
             if (flag) {
                 double d8;
 
-                for (d8 = 0.05D; d0 != 0.0D && this.world.getEntities(this, this.boundingBox.c(d0, -1.0D, 0.0D)).size() == 0; d5 = d0) {
+                for (d8 = 0.05D; d0 != 0.0D && !this.world.hasCollision(this, this.boundingBox.c(d0, -1.0D, 0.0D)); d5 = d0) {
                     if (d0 < d8 && d0 >= -d8) {
                         d0 = 0.0D;
                     } else if (d0 > 0.0D) {
@@ -491,7 +492,7 @@ public abstract class Entity implements SyncedDataHolder {
                     }
                 }
 
-                for (; d2 != 0.0D && this.world.getEntities(this, this.boundingBox.c(0.0D, -1.0D, d2)).size() == 0; d7 = d2) {
+                for (; d2 != 0.0D && !this.world.hasCollision(this, this.boundingBox.c(0.0D, -1.0D, d2)); d7 = d2) {
                     if (d2 < d8 && d2 >= -d8) {
                         d2 = 0.0D;
                     } else if (d2 > 0.0D) {

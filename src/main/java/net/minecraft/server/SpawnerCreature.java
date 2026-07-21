@@ -1,17 +1,18 @@
 package net.minecraft.server;
 
+import com.legacyminecraft.poseidon.PoseidonConfig;
 import org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason;
 
-import java.util.HashSet;
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Set;
+import java.util.Map;
 
 // CraftBukkit
 
 public final class SpawnerCreature {
 
-    private static Set b = new HashSet();
     protected static final Class[] a = new Class[] { EntitySpider.class, EntityZombie.class, EntitySkeleton.class };
     private static final int SKY_WORLD_SPAWN_CAP_DIVISOR = 512;
     private static final int SKY_WORLD_MONSTER_CAP_BASE = 32;
@@ -20,6 +21,12 @@ public final class SpawnerCreature {
     private static final int SKY_WORLD_NETHER_MONSTER_CAP_PER_PLAYER = 6;
     private static final int SKY_WORLD_CREATURE_CAP_BASE = 8;
     private static final int SKY_WORLD_CREATURE_CAP_PER_PLAYER = 2;
+    private static final int PLAYER_SPAWN_CHUNK_RADIUS = 8;
+    private static final int PLAYER_SPAWN_CHUNK_DIAMETER = PLAYER_SPAWN_CHUNK_RADIUS * 2 + 1;
+    private static final int PLAYER_SPAWN_CHUNK_COUNT = PLAYER_SPAWN_CHUNK_DIAMETER * PLAYER_SPAWN_CHUNK_DIAMETER;
+    private static final double PLAYER_SPAWN_RADIUS_BLOCKS = PLAYER_SPAWN_CHUNK_RADIUS * 16.0D;
+    private static final double PLAYER_SPAWN_RADIUS_SQUARED = PLAYER_SPAWN_RADIUS_BLOCKS * PLAYER_SPAWN_RADIUS_BLOCKS;
+    private static final LongChunkSet b = new LongChunkSet(PLAYER_SPAWN_CHUNK_COUNT);
 
     public SpawnerCreature() {
     }
@@ -50,7 +57,7 @@ public final class SpawnerCreature {
 
                 for (int l = -b0; l <= b0; ++l) {
                     for (int i1 = -b0; i1 <= b0; ++i1) {
-                        b.add(new ChunkCoordIntPair(l + k, i1 + j));
+                        b.add(packChunkKey(l + k, i1 + j));
                     }
                 }
             }
@@ -67,16 +74,37 @@ public final class SpawnerCreature {
             labelTypes:
             for (int j1 = 0; j1 < j; ++j1) {
                 EnumCreatureType enumcreaturetype = aenumcreaturetype[j1];
+                if (!shouldSpawnThisTick(world, enumcreaturetype)) {
+                    continue;
+                }
+
                 int creatureCount = world.a(enumcreaturetype.a());
                 int creatureCap = getCreatureCapForWorld(world, enumcreaturetype, b.size(), playerCount, useSkyWorldMobCaps);
+                boolean usePerPlayerMobSpawns = usesPerPlayerMobSpawns(world);
+                int perPlayerCreatureCap = usePerPlayerMobSpawns ? getPerPlayerCreatureCapForWorld(world, enumcreaturetype, useSkyWorldMobCaps) : 0;
+                Map perPlayerCreatureCounts = usePerPlayerMobSpawns && perPlayerCreatureCap > 0 ? getPerPlayerCreatureCounts(world, enumcreaturetype) : null;
 
                 if ((!enumcreaturetype.d() || flag1) && (enumcreaturetype.d() || flag) && isCreatureUnderCap(creatureCount, creatureCap, useSkyWorldMobCaps)) {
-                    Iterator iterator = b.iterator();
+                    label113:
+                    for (int chunkIndex = 0; chunkIndex < b.size(); ++chunkIndex) {
+                        long chunkKey = b.keyAt(chunkIndex);
+                        int chunkX = unpackChunkX(chunkKey);
+                        int chunkZ = unpackChunkZ(chunkKey);
+                        EntityHuman localSpawnPlayer = null;
 
-                        label113:
-                    while (iterator.hasNext()) {
-                        ChunkCoordIntPair chunkcoordintpair = (ChunkCoordIntPair) iterator.next();
-                        BiomeBase biomebase = world.getWorldChunkManager().a(chunkcoordintpair);
+                        if (!world.isLoaded(chunkX * 16, 64, chunkZ * 16)) {
+                            continue;
+                        }
+
+                        if (usePerPlayerMobSpawns) {
+                            localSpawnPlayer = getNearestPlayerUnderLocalCap(world, chunkX, chunkZ, perPlayerCreatureCounts, perPlayerCreatureCap);
+
+                            if (localSpawnPlayer == null) {
+                                continue;
+                            }
+                        }
+
+                        BiomeBase biomebase = world.getWorldChunkManager().getBiome(chunkX << 4, chunkZ << 4);
                         List list = biomebase.a(enumcreaturetype);
 
                         if (list != null && !list.isEmpty()) {
@@ -103,12 +131,12 @@ public final class SpawnerCreature {
                                 }
                             }
 
-                            ChunkPosition chunkposition = a(world, chunkcoordintpair.x * 16, chunkcoordintpair.z * 16);
-                            int i2 = chunkposition.x;
-                            int j2 = chunkposition.y;
-                            int k2 = chunkposition.z;
+                            int i2 = chunkX * 16 + world.random.nextInt(16);
+                            int j2 = world.random.nextInt(128);
+                            int k2 = chunkZ * 16 + world.random.nextInt(16);
+                            Material spawnMaterial = world.getMaterialIfLoaded(i2, j2, k2);
 
-                            if (!world.e(i2, j2, k2) && world.getMaterial(i2, j2, k2) == enumcreaturetype.c()) {
+                            if (spawnMaterial == enumcreaturetype.c() && !world.isSolidBlockIfLoaded(i2, j2, k2)) {
                                 int l2 = 0;
 
                                 for (int i3 = 0; i3 < 3; ++i3) {
@@ -148,7 +176,10 @@ public final class SpawnerCreature {
                                                         // CraftBukkit - added a reason for spawning this creature
                                                         world.addEntity(entityliving, SpawnReason.NATURAL);
                                                         a(entityliving, world, f, f1, f2);
-                                                        if (useSkyWorldMobCaps) {
+                                                        if (usePerPlayerMobSpawns) {
+                                                            incrementPerPlayerCreatureCount(perPlayerCreatureCounts, localSpawnPlayer);
+                                                        }
+                                                        if (useSkyWorldMobCaps || usePerPlayerMobSpawns) {
                                                             ++creatureCount;
                                                             if (creatureCount >= creatureCap) {
                                                                 i += l2;
@@ -178,6 +209,23 @@ public final class SpawnerCreature {
 
     private static boolean usesSkyWorldMobCaps(World world) {
         return getTerrainType(world) == 3;
+    }
+
+    private static boolean shouldSpawnThisTick(World world, EnumCreatureType creatureType) {
+        int interval = getNaturalSpawnTickRate(creatureType);
+        return interval > 0 && (interval == 1 || world.getBlockTickTime() % interval == 0L);
+    }
+
+    private static int getNaturalSpawnTickRate(EnumCreatureType creatureType) {
+        String configKey = "world.settings.natural-spawn-tick-rate.creature";
+
+        if (creatureType == EnumCreatureType.MONSTER) {
+            configKey = "world.settings.natural-spawn-tick-rate.monster";
+        } else if (creatureType == EnumCreatureType.WATER_CREATURE) {
+            configKey = "world.settings.natural-spawn-tick-rate.water-creature";
+        }
+
+        return PoseidonConfig.getInstance().getInt(configKey, 1);
     }
 
     private static int getTerrainType(World world) {
@@ -239,8 +287,88 @@ public final class SpawnerCreature {
         return useStrictCap ? creatureCount < creatureCap : creatureCount <= creatureCap;
     }
 
+    private static boolean usesPerPlayerMobSpawns(World world) {
+        return world.players.size() > 0 && PoseidonConfig.getInstance().getConfigBoolean("settings.per-player-mob-spawns.enabled", true);
+    }
+
+    private static int getPerPlayerCreatureCapForWorld(World world, EnumCreatureType creatureType, boolean useSkyWorldMobCaps) {
+        return getCreatureCapForWorld(world, creatureType, PLAYER_SPAWN_CHUNK_COUNT, 1, useSkyWorldMobCaps);
+    }
+
+    private static Map getPerPlayerCreatureCounts(World world, EnumCreatureType creatureType) {
+        Map counts = new HashMap();
+
+        for (int i = 0; i < world.players.size(); ++i) {
+            EntityHuman entityhuman = (EntityHuman) world.players.get(i);
+            AxisAlignedBB localSpawnArea = AxisAlignedBB.b(
+                    entityhuman.locX - PLAYER_SPAWN_RADIUS_BLOCKS,
+                    0.0D,
+                    entityhuman.locZ - PLAYER_SPAWN_RADIUS_BLOCKS,
+                    entityhuman.locX + PLAYER_SPAWN_RADIUS_BLOCKS,
+                    128.0D,
+                    entityhuman.locZ + PLAYER_SPAWN_RADIUS_BLOCKS
+            );
+
+            counts.put(entityhuman, Integer.valueOf(world.countEntities(creatureType.a(), localSpawnArea)));
+        }
+
+        return counts;
+    }
+
+    private static EntityHuman getNearestPlayerUnderLocalCap(World world, int chunkX, int chunkZ, Map counts, int cap) {
+        if (counts == null || cap <= 0) {
+            return null;
+        }
+
+        double chunkCenterX = (double) (chunkX * 16 + 8);
+        double chunkCenterZ = (double) (chunkZ * 16 + 8);
+        EntityHuman bestPlayer = null;
+        double bestDistanceSquared = Double.MAX_VALUE;
+
+        for (int i = 0; i < world.players.size(); ++i) {
+            EntityHuman entityhuman = (EntityHuman) world.players.get(i);
+            Integer count = (Integer) counts.get(entityhuman);
+
+            if (count == null || count.intValue() >= cap) {
+                continue;
+            }
+
+            double dx = entityhuman.locX - chunkCenterX;
+            double dz = entityhuman.locZ - chunkCenterZ;
+            double distanceSquared = dx * dx + dz * dz;
+
+            if (distanceSquared <= PLAYER_SPAWN_RADIUS_SQUARED && distanceSquared < bestDistanceSquared) {
+                bestDistanceSquared = distanceSquared;
+                bestPlayer = entityhuman;
+            }
+        }
+
+        return bestPlayer;
+    }
+
+    private static void incrementPerPlayerCreatureCount(Map counts, EntityHuman entityhuman) {
+        if (counts == null || entityhuman == null) {
+            return;
+        }
+
+        Integer count = (Integer) counts.get(entityhuman);
+        counts.put(entityhuman, Integer.valueOf(count == null ? 1 : count.intValue() + 1));
+    }
+
     private static boolean a(EnumCreatureType enumcreaturetype, World world, int i, int j, int k) {
-        return enumcreaturetype.c() == Material.WATER ? world.getMaterial(i, j, k).isLiquid() && !world.e(i, j + 1, k) : world.e(i, j - 1, k) && !world.e(i, j, k) && !world.getMaterial(i, j, k).isLiquid() && !world.e(i, j + 1, k);
+        Material material = world.getMaterialIfLoaded(i, j, k);
+        if (material == null) {
+            return false;
+        }
+
+        if (enumcreaturetype.c() == Material.WATER) {
+            return material.isLiquid() && !world.isSolidBlockIfLoaded(i, j + 1, k);
+        }
+
+        return world.isSolidBlockIfLoaded(i, j - 1, k)
+                && !world.isSolidBlockIfLoaded(i, j, k)
+                && !material.isLiquid()
+                && !world.isSolidBlockIfLoaded(i, j + 1, k);
     }
 
     private static void a(EntityLiving entityliving, World world, float f, float f1, float f2) {
@@ -258,7 +386,6 @@ public final class SpawnerCreature {
 
     public static boolean a(World world, List list) {
         boolean flag = false;
-        Pathfinder pathfinder = new Pathfinder(world);
         Iterator iterator = list.iterator();
 
         while (iterator.hasNext()) {
@@ -307,7 +434,7 @@ public final class SpawnerCreature {
 
                         entityliving.setPositionRotation((double) f, (double) f1, (double) f2, world.random.nextFloat() * 360.0F, 0.0F);
                         if (entityliving.d()) {
-                            PathEntity pathentity = pathfinder.a(entityliving, entityhuman, 32.0F);
+                            PathEntity pathentity = world.findPath(entityliving, entityhuman, 32.0F);
 
                             if (pathentity != null && pathentity.a > 1) {
                                 PathPoint pathpoint = pathentity.c();
@@ -336,5 +463,110 @@ public final class SpawnerCreature {
         }
 
         return flag;
+    }
+
+    private static long packChunkKey(int chunkX, int chunkZ) {
+        return ((long) chunkX << 32) ^ (chunkZ & 4294967295L);
+    }
+
+    private static int unpackChunkX(long chunkKey) {
+        return (int) (chunkKey >> 32);
+    }
+
+    private static int unpackChunkZ(long chunkKey) {
+        return (int) chunkKey;
+    }
+
+    private static final class LongChunkSet {
+        private long[] table;
+        private int[] stamps;
+        private long[] entries;
+        private int stamp = 1;
+        private int size;
+
+        LongChunkSet(int expectedSize) {
+            int tableSize = 1;
+            while (tableSize < expectedSize * 4) {
+                tableSize <<= 1;
+            }
+
+            this.table = new long[tableSize];
+            this.stamps = new int[tableSize];
+            this.entries = new long[Math.max(1, expectedSize)];
+        }
+
+        void clear() {
+            this.size = 0;
+            ++this.stamp;
+            if (this.stamp == 0) {
+                Arrays.fill(this.stamps, 0);
+                this.stamp = 1;
+            }
+        }
+
+        int size() {
+            return this.size;
+        }
+
+        long keyAt(int index) {
+            return this.entries[index];
+        }
+
+        void add(long key) {
+            this.ensureCapacity(this.size + 1);
+
+            int mask = this.table.length - 1;
+            int slot = mix(key) & mask;
+            while (this.stamps[slot] == this.stamp) {
+                if (this.table[slot] == key) {
+                    return;
+                }
+
+                slot = (slot + 1) & mask;
+            }
+
+            this.table[slot] = key;
+            this.stamps[slot] = this.stamp;
+            this.entries[this.size++] = key;
+        }
+
+        private void ensureCapacity(int wantedSize) {
+            if (wantedSize > this.entries.length) {
+                this.entries = Arrays.copyOf(this.entries, Math.max(wantedSize, this.entries.length << 1));
+            }
+
+            if (wantedSize * 2 >= this.table.length) {
+                this.resizeTable(this.table.length << 1);
+            }
+        }
+
+        private void resizeTable(int newSize) {
+            this.table = new long[newSize];
+            this.stamps = new int[newSize];
+
+            for (int i = 0; i < this.size; ++i) {
+                this.addToTable(this.entries[i]);
+            }
+        }
+
+        private void addToTable(long key) {
+            int mask = this.table.length - 1;
+            int slot = mix(key) & mask;
+            while (this.stamps[slot] == this.stamp) {
+                slot = (slot + 1) & mask;
+            }
+
+            this.table[slot] = key;
+            this.stamps[slot] = this.stamp;
+        }
+
+        private static int mix(long key) {
+            key ^= key >>> 33;
+            key *= 0xff51afd7ed558ccdL;
+            key ^= key >>> 33;
+            key *= 0xc4ceb9fe1a85ec53L;
+            key ^= key >>> 33;
+            return (int) key;
+        }
     }
 }

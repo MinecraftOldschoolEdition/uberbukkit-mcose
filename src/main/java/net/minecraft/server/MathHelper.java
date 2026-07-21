@@ -51,6 +51,25 @@ public class MathHelper {
         return d0 > d1 ? d0 : d1;
     }
 
+    public static float wrapDegrees(float value) {
+        if (Float.isNaN(value) || Float.isInfinite(value)) {
+            return 0.0F;
+        }
+
+        value %= 360.0F;
+        if (value >= 180.0F) {
+            value -= 360.0F;
+        }
+        if (value < -180.0F) {
+            value += 360.0F;
+        }
+        return value;
+    }
+
+    public static float clamp(float value, float minimum, float maximum) {
+        return value < minimum ? minimum : (value > maximum ? maximum : value);
+    }
+
     static {
         for (int i = 0; i < 65536; ++i) {
             a[i] = (float) Math.sin((double) i * 3.141592653589793D * 2.0D / 65536.0D);

@@ -27,6 +27,10 @@ public class TileEntityFurnace extends TileEntity implements IInventory {
     public TileEntityFurnace() {
     }
 
+    public boolean isTickable() {
+        return true;
+    }
+
     public int getSize() {
         return this.items.length;
     }

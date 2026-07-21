@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.util.Collections;
@@ -68,7 +69,8 @@ public class VoiceChatUDPServer {
     private final AtomicLong queuedOverflowDropsSinceLastLog = new AtomicLong();
     private final AtomicLong forwardFailuresSinceLastLog = new AtomicLong();
 
-    private final BlockingQueue<ReceivedDatagram> packetQueue = new LinkedBlockingQueue<ReceivedDatagram>();
+    private final BlockingQueue<ReceivedDatagram> packetQueue =
+        new LinkedBlockingQueue<ReceivedDatagram>(MAX_PACKET_QUEUE_SIZE);
 
     // Connected voice clients: secret UUID -> VoiceClient
     private final Map<UUID, VoiceClient> clients = new ConcurrentHashMap<UUID, VoiceClient>();
@@ -106,12 +108,13 @@ public class VoiceChatUDPServer {
         return playerSecrets.get(playerId);
     }
 
-    public void start() throws SocketException {
+    public void start() throws IOException {
         if (running) {
             return;
         }
 
-        socket = new DatagramSocket(port);
+        String configuredBindAddress = server.propertyManager.getString("server-ip", "");
+        socket = new DatagramSocket(resolveBindAddress(configuredBindAddress, port));
         socket.setSoTimeout(100);
         running = true;
 
@@ -132,6 +135,16 @@ public class VoiceChatUDPServer {
         }, "VoiceChat-UDP-Process");
         processThread.setDaemon(true);
         processThread.start();
+    }
+
+    static InetSocketAddress resolveBindAddress(String configuredBindAddress, int port) throws IOException {
+        if (configuredBindAddress != null) {
+            configuredBindAddress = configuredBindAddress.trim();
+        }
+        if (configuredBindAddress == null || configuredBindAddress.length() == 0) {
+            return new InetSocketAddress(port);
+        }
+        return new InetSocketAddress(InetAddress.getByName(configuredBindAddress), port);
     }
 
     public void stop() {
@@ -173,6 +186,7 @@ public class VoiceChatUDPServer {
 
         while (running) {
             try {
+                packet.setLength(buffer.length);
                 socket.receive(packet);
 
                 byte[] data = new byte[packet.getLength()];
@@ -192,13 +206,11 @@ public class VoiceChatUDPServer {
         if (data == null || data.length < 1) {
             return;
         }
-        if (packetQueue.size() >= MAX_PACKET_QUEUE_SIZE) {
+        if (!packetQueue.offer(new ReceivedDatagram(data, address, port, receivedAt))) {
             this.udpQueueOverflowDropsWindow.incrementAndGet();
             recordUdpDropReason("queue-overflow");
             logQueueDrop(receivedAt, packetQueue.size());
-            return;
         }
-        packetQueue.offer(new ReceivedDatagram(data, address, port, receivedAt));
     }
 
     private void processLoop() {
@@ -233,7 +245,8 @@ public class VoiceChatUDPServer {
     }
 
     private void handlePacket(byte[] data, InetAddress address, int port, long receivedAt) {
-        if (data == null || data.length < 1) {
+        if (!isValidClientDatagramFrame(data)) {
+            recordUdpDropReason("malformed-frame");
             return;
         }
 
@@ -258,11 +271,33 @@ public class VoiceChatUDPServer {
         }
     }
 
-    private void handleAuth(byte[] data, InetAddress address, int port, long receivedAt) {
-        if (data.length < 33) {
-            return;
+    static boolean isValidClientDatagramFrame(byte[] data) {
+        if (data == null || data.length < 1) {
+            return false;
         }
 
+        switch (data[0]) {
+            case PACKET_AUTH:
+                return data.length == 33;
+            case PACKET_MIC:
+                if (data.length < 12) {
+                    return false;
+                }
+                int payloadLength = ((data[10] & 0xff) << 8) | (data[11] & 0xff);
+                return payloadLength <= Packet64Voice.MAX_PAYLOAD_SIZE
+                    && data.length == 12 + payloadLength;
+            case PACKET_KEEP_ALIVE:
+                return data.length == 9;
+            case PACKET_STATE:
+                return data.length == 20;
+            case PACKET_CONNECTION_CHECK:
+                return data.length == 10;
+            default:
+                return false;
+        }
+    }
+
+    private void handleAuth(byte[] data, InetAddress address, int port, long receivedAt) {
         try {
             DataInputStream in = new DataInputStream(new ByteArrayInputStream(data, 1, data.length - 1));
             UUID playerId = readUUID(in);
@@ -345,6 +380,17 @@ public class VoiceChatUDPServer {
             if (payloadLength > 0) {
                 in.readFully(audioData);
             }
+            if (in.available() != 0) {
+                logMicDrop(sender, "trailing-data", now);
+                return;
+            }
+
+            // Empty microphone frames are stop markers, but they are still broadcast to
+            // recipients and must consume a packet token to prevent zero-byte flooding.
+            if (isUdpVoiceRateLimited(sender, now, payloadLength)) {
+                logMicDrop(sender, "rate-limited", now);
+                return;
+            }
 
             if (sender.lastSequence >= 0L && sequence <= sender.lastSequence) {
                 logMicDrop(sender, "stale-sequence current=" + sequence + " last=" + sender.lastSequence, now);
@@ -361,6 +407,10 @@ public class VoiceChatUDPServer {
                 logMicDrop(sender, "player-muted", now);
                 return;
             }
+            if (senderPlayer.netServerHandler == null || !senderPlayer.netServerHandler.canUseVoiceChat()) {
+                logMicDrop(sender, "permission-denied", now);
+                return;
+            }
 
             boolean routeRoom = server.chatRoomManager.shouldRouteVoiceToRoom(senderPlayer);
             int recipients;
@@ -373,6 +423,42 @@ public class VoiceChatUDPServer {
         } catch (IOException e) {
             logMicDrop(sender, "malformed-mic-packet:" + e.getMessage(), now);
         }
+    }
+
+    private boolean isUdpVoiceRateLimited(VoiceClient client, long now, int payloadLength) {
+        return isUdpVoiceRateLimited(client, now, payloadLength,
+            server.getVoiceRateMaxPacketsPerSec(), server.getVoiceRateMaxBytesPerSec(), server.getVoiceRateBurstSeconds());
+    }
+
+    static boolean isUdpVoiceRateLimited(VoiceClient client, long now, int payloadLength,
+                                         int configuredPacketsPerSecond, int configuredBytesPerSecond,
+                                         int configuredBurstSeconds) {
+        int packetsPerSecond = Math.max(1, configuredPacketsPerSecond);
+        int bytesPerSecond = Math.max(1, configuredBytesPerSecond);
+        int burstSeconds = Math.max(1, configuredBurstSeconds);
+        double packetCapacity = Math.max(1.0D, (double) packetsPerSecond * (double) burstSeconds);
+        double byteCapacity = Math.max(1.0D, (double) bytesPerSecond * (double) burstSeconds);
+
+        if (client.limiterLastRefillAt <= 0L || now < client.limiterLastRefillAt) {
+            client.packetTokens = packetCapacity;
+            client.byteTokens = byteCapacity;
+            client.limiterLastRefillAt = now;
+        } else {
+            long elapsedMs = now - client.limiterLastRefillAt;
+            if (elapsedMs > 0L) {
+                double elapsedSeconds = elapsedMs / 1000.0D;
+                client.packetTokens = Math.min(packetCapacity, client.packetTokens + elapsedSeconds * packetsPerSecond);
+                client.byteTokens = Math.min(byteCapacity, client.byteTokens + elapsedSeconds * bytesPerSecond);
+                client.limiterLastRefillAt = now;
+            }
+        }
+
+        if (client.packetTokens < 1.0D || client.byteTokens < (double) payloadLength) {
+            return true;
+        }
+        client.packetTokens -= 1.0D;
+        client.byteTokens -= (double) payloadLength;
+        return false;
     }
 
     private int broadcastToRoom(EntityPlayer senderPlayer, long sequence, byte[] audioData, boolean whispering) {
@@ -415,14 +501,10 @@ public class VoiceChatUDPServer {
         double maxDistanceSq = maxDistance * maxDistance;
         int delivered = 0;
 
-        List<EntityPlayer> onlinePlayers = server.serverConfigurationManager.getOnlinePlayersSnapshot();
+        List<EntityPlayer> onlinePlayers = server.serverConfigurationManager.getPlayersInDimensionSnapshot(senderPlayer.dimension);
         for (int i = 0; i < onlinePlayers.size(); i++) {
             EntityPlayer recipientPlayer = onlinePlayers.get(i);
             if (recipientPlayer == null || recipientPlayer == senderPlayer) {
-                continue;
-            }
-
-            if (recipientPlayer == null || recipientPlayer.dimension != senderPlayer.dimension) {
                 continue;
             }
 
@@ -819,14 +901,7 @@ public class VoiceChatUDPServer {
     }
 
     private EntityPlayer findPlayerByUUID(UUID playerId) {
-        List<EntityPlayer> onlinePlayers = server.serverConfigurationManager.getOnlinePlayersSnapshot();
-        for (int i = 0; i < onlinePlayers.size(); i++) {
-            EntityPlayer player = onlinePlayers.get(i);
-            if (player.getMojangUUID() != null && player.getMojangUUID().equals(playerId)) {
-                return player;
-            }
-        }
-        return null;
+        return server.serverConfigurationManager.getPlayerByUUID(playerId);
     }
 
     private static UUID readUUID(DataInputStream in) throws IOException {
@@ -857,7 +932,7 @@ public class VoiceChatUDPServer {
     /**
      * Represents a connected/authenticated voice client.
      */
-    private static class VoiceClient {
+    static class VoiceClient {
         final UUID playerId;
         final String playerName;
         final InetAddress address;
@@ -873,6 +948,9 @@ public class VoiceChatUDPServer {
         long lastSequence = -1L;
         long lastTransmitLogAt = 0L;
         long lastTransmitDropLogAt = 0L;
+        long limiterLastRefillAt = 0L;
+        double packetTokens = 0.0D;
+        double byteTokens = 0.0D;
 
         VoiceClient(UUID playerId, String playerName, InetAddress address, int port, UUID secret) {
             this.playerId = playerId;

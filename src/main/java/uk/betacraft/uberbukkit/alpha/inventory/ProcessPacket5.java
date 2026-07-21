@@ -23,13 +23,23 @@ public class ProcessPacket5 {
         // we have to find out what's being changed: if any item(stack) is being removed, or if any is being added
         // only allow additions of items if there's enough of them in the queue
         // mark removals by adding the removed items into the queue
-        if (player == null || player.inventory == null) return;
+        if (player == null || player.inventory == null || packet == null || packet.items == null) return;
         InventoryQueue unfinalized = this.queue.clone();
 
         // scan inventories for changes
-        ItemStack[] stackarray = packet.a == -1 ? player.inventory.items : (packet.a == -3 ? player.inventory.armor : player.inventory.craft);
+        ItemStack[] stackarray;
+        if (packet.a == -1) {
+            stackarray = player.inventory.items;
+        } else if (packet.a == -2) {
+            stackarray = player.inventory.craft;
+        } else if (packet.a == -3) {
+            stackarray = player.inventory.armor;
+        } else {
+            return;
+        }
+
         //System.out.println("invslot: " + packet.a + ", Size of incoming inv is " + packet.items.length + ", while " + stackarray.length + " is expected");
-        if (packet.items.length < stackarray.length) {
+        if (packet.items.length != stackarray.length || !hasValidStacks(packet.items)) {
             // invalid packet
             return;
         }
@@ -145,5 +155,23 @@ public class ProcessPacket5 {
         } else if (packet.a == -3) {
             this.player.inventory.armor = packet.items;
         }
+    }
+
+    private static boolean hasValidStacks(ItemStack[] stacks) {
+        for (int i = 0; i < stacks.length; ++i) {
+            ItemStack stack = stacks[i];
+            if (stack == null) {
+                continue;
+            }
+
+            if (stack.id < 0 || stack.id >= Item.byId.length || Item.byId[stack.id] == null) {
+                return false;
+            }
+
+            if (stack.count <= 0 || stack.count > Item.byId[stack.id].getMaxStackSize()) {
+                return false;
+            }
+        }
+        return true;
     }
 }

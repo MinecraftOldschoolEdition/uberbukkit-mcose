@@ -26,6 +26,12 @@ public class BlockFlowing extends BlockFluids {
         world.notify(i, j, k);
     }
 
+    protected int g(World world, int i, int j, int k) {
+        Material material = this.getMaterialIfLoaded(world, i, j, k);
+
+        return material != this.material ? -1 : this.getFluidMetadataIfLoaded(world, i, j, k);
+    }
+
     public void a(World world, int i, int j, int k, Random random) {
         // CraftBukkit start
         org.bukkit.World bworld = world.getWorld();
@@ -68,9 +74,11 @@ public class BlockFlowing extends BlockFluids {
             }
 
             if (this.a >= 2 && this.material == Material.WATER) {
-                if (world.getMaterial(i, j - 1, k).isBuildable()) {
+                Material belowMaterial = this.getMaterialIfLoaded(world, i, j - 1, k);
+
+                if (belowMaterial != null && belowMaterial.isBuildable()) {
                     i1 = 0;
-                } else if (world.getMaterial(i, j - 1, k) == this.material && CriticalBlockStateAccess.getFluidMetadata(world, i, j, k) == 0) {
+                } else if (belowMaterial == this.material && this.getFluidMetadataIfLoaded(world, i, j, k) == 0) {
                     i1 = 0;
                 }
             }
@@ -147,13 +155,13 @@ public class BlockFlowing extends BlockFluids {
 
     private void flow(World world, int i, int j, int k, int l) {
         if (this.l(world, i, j, k)) {
-            int i1 = world.getTypeId(i, j, k);
+            int i1 = this.getTypeIdIfLoaded(world, i, j, k);
 
             if (i1 > 0) {
                 if (this.material == Material.LAVA) {
                     this.h(world, i, j, k);
                 } else {
-                    Block.byId[i1].g(world, i, j, k, world.getData(i, j, k));
+                    Block.byId[i1].g(world, i, j, k, this.getDataIfLoaded(world, i, j, k));
                 }
             }
 
@@ -185,7 +193,9 @@ public class BlockFlowing extends BlockFluids {
                     ++i2;
                 }
 
-                if (!this.k(world, l1, j, i2) && (world.getMaterial(l1, j, i2) != this.material || CriticalBlockStateAccess.getFluidMetadata(world, l1, j, i2) != 0)) {
+                Material material = this.getMaterialIfLoaded(world, l1, j, i2);
+
+                if (!this.k(world, l1, j, i2) && (material != this.material || this.getFluidMetadataIfLoaded(world, l1, j, i2) != 0)) {
                     if (!this.k(world, l1, j - 1, i2)) {
                         return l;
                     }
@@ -229,7 +239,9 @@ public class BlockFlowing extends BlockFluids {
                 ++j1;
             }
 
-            if (!this.k(world, i1, j, j1) && (world.getMaterial(i1, j, j1) != this.material || CriticalBlockStateAccess.getFluidMetadata(world, i1, j, j1) != 0)) {
+            Material material = this.getMaterialIfLoaded(world, i1, j, j1);
+
+            if (!this.k(world, i1, j, j1) && (material != this.material || this.getFluidMetadataIfLoaded(world, i1, j, j1) != 0)) {
                 if (!this.k(world, i1, j - 1, j1)) {
                     this.c[l] = 0;
                 } else {
@@ -254,7 +266,11 @@ public class BlockFlowing extends BlockFluids {
     }
 
     private boolean k(World world, int i, int j, int k) {
-        int l = world.getTypeId(i, j, k);
+        if (!this.canProbeWithoutLoading(world, i, j, k)) {
+            return true;
+        }
+
+        int l = this.getTypeIdIfLoaded(world, i, j, k);
 
         if (l != Block.WOODEN_DOOR.id && l != Block.IRON_DOOR_BLOCK.id && l != Block.SIGN_POST.id && l != Block.LADDER.id && l != Block.SUGAR_CANE_BLOCK.id) {
             if (l == 0) {
@@ -288,9 +304,49 @@ public class BlockFlowing extends BlockFluids {
     }
 
     private boolean l(World world, int i, int j, int k) {
-        Material material = world.getMaterial(i, j, k);
+        Material material = this.getMaterialIfLoaded(world, i, j, k);
+
+        if (material == null) {
+            return false;
+        }
 
         return material == this.material ? false : (material == Material.LAVA ? false : !this.k(world, i, j, k));
+    }
+
+    private Material getMaterialIfLoaded(World world, int i, int j, int k) {
+        if (j < 0 || j >= 128) {
+            return Material.AIR;
+        }
+
+        return world.getMaterialIfLoaded(i, j, k);
+    }
+
+    private int getTypeIdIfLoaded(World world, int i, int j, int k) {
+        if (j < 0 || j >= 128) {
+            return 0;
+        }
+
+        return world.isLoaded(i, j, k) ? world.getTypeIdIfLoaded(i, j, k) : -1;
+    }
+
+    private int getDataIfLoaded(World world, int i, int j, int k) {
+        if (j < 0 || j >= 128) {
+            return 0;
+        }
+
+        return world.isLoaded(i, j, k) ? world.getDataIfLoaded(i, j, k) : 0;
+    }
+
+    private int getFluidMetadataIfLoaded(World world, int i, int j, int k) {
+        if (j < 0 || j >= 128 || !world.isLoaded(i, j, k)) {
+            return -1;
+        }
+
+        return CriticalBlockStateAccess.getFluidMetadata(world, i, j, k);
+    }
+
+    private boolean canProbeWithoutLoading(World world, int i, int j, int k) {
+        return j < 0 || j >= 128 || world.isLoaded(i, j, k);
     }
 
     public void c(World world, int i, int j, int k) {

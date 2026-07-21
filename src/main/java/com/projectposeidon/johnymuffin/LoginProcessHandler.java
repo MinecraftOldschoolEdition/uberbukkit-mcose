@@ -5,6 +5,7 @@ import com.legacyminecraft.poseidon.PoseidonPlugin;
 import com.legacyminecraft.poseidon.util.CrackedAllowlist;
 import com.legacyminecraft.poseidon.uuid.ThreadUUIDFetcher;
 import net.minecraft.server.NetLoginHandler;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.Packet1Login;
 import net.minecraft.server.ThreadLoginVerifier;
 import org.bukkit.Bukkit;
@@ -18,6 +19,7 @@ import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.UUID;
+import java.util.concurrent.Future;
 
 public class LoginProcessHandler {
 
@@ -25,9 +27,11 @@ public class LoginProcessHandler {
     private final Packet1Login packet1Login;
     private CraftServer server;
     private boolean onlineMode;
-    private boolean loginCancelled = false;
+    private volatile boolean loginCancelled = false;
     private LoginProcessHandler loginProcessHandler;
-    private boolean loginSuccessful = false;
+    private volatile boolean loginSuccessful = false;
+    private volatile Future<?> authenticationTask;
+    private volatile boolean slowLoginWarningLogged = false;
     private long startTime;
 
     private HashSet<ConnectionPause> connectionPauses = new HashSet<ConnectionPause>();
@@ -44,6 +48,7 @@ public class LoginProcessHandler {
         this.packet1Login = packet1login;
         this.server = server;
         this.onlineMode = onlineMode;
+        this.netLoginHandler.setLoginProcessHandler(this);
 
         this.msgKickAlreadyOnline = PoseidonConfig.getInstance().getConfigString("message.kick.already-online");
 
@@ -58,14 +63,17 @@ public class LoginProcessHandler {
         Bukkit.getScheduler().scheduleAsyncDelayedTask(new PoseidonPlugin(), () -> {
             int currentRunningTime = (int) (System.currentTimeMillis() / 1000L - connectionStartTime);
             if (!loginSuccessful && !loginCancelled) {
-                //This if statement shouldn't be needed, but this is here just in case a players login fails but the appropriate variables aren't changed
-                System.out.println("[Poseidon] The login process for " + packet1Login.name + " is still running. It has been running for " + currentRunningTime + " seconds. The following plugins are still currently pausing the login process: " + getConnectionPauseNames(true));
+                if (currentRunningTime >= 10 && !this.slowLoginWarningLogged) {
+                    this.slowLoginWarningLogged = true;
+                    MinecraftServer.log.warning("[Poseidon] Login for " + packet1Login.name + " has been paused for "
+                            + currentRunningTime + " seconds by: " + getConnectionPauseNames(true));
+                }
 
                 //Cancel the login process if it has been running for more than 20 seconds.
                 if (currentRunningTime >= 20) {
                     cancelLoginProcess("Login Process Handler Timeout");
-                    System.out.println("[Poseidon] LoginProcessHandler for user " + packet1Login.name + " has failed to respond after 20 seconds. And future calls to this class will result in error");
-                    System.out.println("[Poseidon] Plugin Pauses: " + getConnectionPauseNames(true));
+                    MinecraftServer.log.warning("[Poseidon] Login for " + packet1Login.name
+                            + " timed out after 20 seconds; remaining pauses: " + getConnectionPauseNames(true));
                 }
 
                 if (currentRunningTime < 60) {
@@ -84,13 +92,9 @@ public class LoginProcessHandler {
 
         // Account for cracked allowlist
         if (onlineMode && !CrackedAllowlist.get().contains(this.packet1Login.name)) {
-            // Server is running online mode
-            if (usingModernAuth) {
-                // Modern auth completed in NetLoginHandler; skip legacy verification
-                getUserUUID();
-            } else {
-                verifyMojangSession();
-            }
+            // The encryption/key exchange proves protocol possession, not account
+            // ownership. Online-mode users must still pass Mojang hasJoined.
+            verifyMojangSession();
         } else {
             // Server is not running online mode or user is allowlisted as cracked
             getUserUUID();
@@ -112,7 +116,7 @@ public class LoginProcessHandler {
             boolean useGetMethod = PoseidonConfig.getInstance().getString("settings.uuid-fetcher.method.value", "POST").equalsIgnoreCase("GET");
             (new ThreadUUIDFetcher(packet1Login, this, useGetMethod)).start();
         } else {
-            System.out.println("[Poseidon] Fetched UUID from Cache for " + packet1Login.name + " - " + uuid.toString());
+            MinecraftServer.log.fine("[Poseidon] Fetched cached UUID for " + packet1Login.name);
             connectPlayer(uuid);
         }
 
@@ -164,7 +168,27 @@ public class LoginProcessHandler {
 
     private void verifyMojangSession() {
         if (!loginSuccessful & !loginCancelled) {
-            (new ThreadLoginVerifier(this, netLoginHandler, this.packet1Login, this.server)).start(); // CraftBukkit
+            ThreadLoginVerifier verifier = new ThreadLoginVerifier(this, netLoginHandler, this.packet1Login, this.server);
+            Future<?> submitted = ThreadLoginVerifier.submit(verifier);
+            if (submitted == null) {
+                cancelLoginProcess("Authentication service is busy, please try again.");
+                return;
+            }
+            this.authenticationTask = submitted;
+            if (this.loginCancelled || this.netLoginHandler.c) {
+                submitted.cancel(true);
+            }
+        }
+    }
+
+    public boolean isLoginActive() {
+        return !this.loginSuccessful && !this.loginCancelled && this.netLoginHandler != null && !this.netLoginHandler.c;
+    }
+
+    public void cancelAuthenticationTask() {
+        Future<?> task = this.authenticationTask;
+        if (task != null && !task.isDone()) {
+            task.cancel(true);
         }
     }
 
@@ -216,6 +240,7 @@ public class LoginProcessHandler {
     public void cancelLoginProcess(String s) {
         if (!loginCancelled && !loginSuccessful) {
             loginCancelled = true;
+            cancelAuthenticationTask();
             netLoginHandler.disconnect(s);
         }
     }

@@ -73,6 +73,7 @@ public final class VanillaRegistryKeys {
         block("BURNING_FURNACE", "lit_furnace");
         block("SIGN_POST", "oak_sign");
         block("WALL_SIGN", "oak_wall_sign");
+        block("RAILS", "rail");
         block("WOODEN_DOOR", "oak_door");
         block("IRON_DOOR_BLOCK", "iron_door");
         block("STONE_PLATE", "stone_pressure_plate");
@@ -87,14 +88,18 @@ public final class VanillaRegistryKeys {
         block("FENCE", "oak_fence");
         block("SOUL_SAND", "soul_sand");
         block("GLOWSTONE", "glowstone");
-        block("PUMPKIN", "pumpkin");
+        block("PUMPKIN", "pumpkin_state");
+        block("PUMPKIN_PLAIN", "pumpkin");
+        block("CARVED_PUMPKIN", "carved_pumpkin");
         block("JACK_O_LANTERN", "jack_o_lantern");
         block("PUMPKIN_STEM", "pumpkin_stem");
         block("MELON_STEM", "melon_stem");
         block("DIODE_OFF", "repeater");
         block("DIODE_ON", "lit_repeater");
         block("LOCKED_CHEST", "locked_chest");
+        block("CAKE_BLOCK", "cake");
         block("TRAP_DOOR", "oak_trapdoor");
+        block("FENCE_GATE_COMPAT", "oak_fence_gate_compat");
         block("FENCE_GATE", "oak_fence_gate");
         block("STONE_BRICK", "stone_bricks");
         block("STONE_BRICK_STAIRS", "stone_brick_stairs");
@@ -115,6 +120,8 @@ public final class VanillaRegistryKeys {
         item("WOOD_SPADE", "wooden_shovel");
         item("WOOD_PICKAXE", "wooden_pickaxe");
         item("WOOD_AXE", "wooden_axe");
+        item("STONE_SPADE", "stone_shovel");
+        item("DIAMOND_SPADE", "diamond_shovel");
         item("GOLD_SWORD", "golden_sword");
         item("GOLD_SPADE", "golden_shovel");
         item("GOLD_PICKAXE", "golden_pickaxe");
@@ -151,6 +158,8 @@ public final class VanillaRegistryKeys {
         item("MINECART", "minecart");
         item("IRON_DOOR", "iron_door");
         item("MILK_BUCKET", "milk_bucket");
+        item("SNOW_BALL", "snowball");
+        item("CLAY_BRICK", "brick");
         item("CLAY_BALL", "clay_ball");
         item("SUGAR_CANE", "sugar_cane");
         item("STORAGE_MINECART", "chest_minecart");
@@ -160,6 +169,7 @@ public final class VanillaRegistryKeys {
         item("RAW_FISH", "cod");
         item("COOKED_FISH", "cooked_cod");
         item("INK_SACK", "dye");
+        item("STONE_BRICK_ITEM", "stone_bricks");
         item("DIODE", "repeater");
         item("MAP", "map");
         item("WRITABLE_BOOK", "writable_book");
@@ -193,6 +203,19 @@ public final class VanillaRegistryKeys {
         return blockKeys.get(block);
     }
 
+    static boolean isCanonicalBlockKeyForOther(ResourceLocation key, Block block) {
+        if (key == null) {
+            return false;
+        }
+        ensureBlockKeys();
+        for (Map.Entry<Block, ResourceLocation> entry : blockKeys.entrySet()) {
+            if (key.equals(entry.getValue())) {
+                return entry.getKey() != block;
+            }
+        }
+        return isDeclaredCanonicalBlockKey(key);
+    }
+
     public static ResourceLocation itemKey(Item item) {
         if (item == null) {
             return null;
@@ -217,6 +240,32 @@ public final class VanillaRegistryKeys {
         return null;
     }
 
+    static boolean isCanonicalItemKeyForOther(ResourceLocation key, Item item) {
+        if (key == null) {
+            return false;
+        }
+        ensureItemKeys();
+        for (Map.Entry<Item, ResourceLocation> entry : itemKeys.entrySet()) {
+            if (key.equals(entry.getValue())) {
+                return entry.getKey() != item;
+            }
+        }
+        if (item instanceof ItemBlock) {
+            Block block = item.id >= 0 && item.id < Block.byId.length ? Block.byId[item.id] : null;
+            if (isCanonicalBlockKeyForOther(key, block)) {
+                return true;
+            }
+        }
+        return isDeclaredCanonicalItemKey(key);
+    }
+
+    static boolean isCanonicalBlockItemKeyForOther(ResourceLocation key, Item item) {
+        Block block = item instanceof ItemBlock && item.id >= 0 && item.id < Block.byId.length
+                ? Block.byId[item.id]
+                : null;
+        return isCanonicalBlockKeyForOther(key, block);
+    }
+
     public static ResourceLocation entityKey(String legacyName) {
         if (legacyName == null || legacyName.length() == 0) {
             return null;
@@ -228,11 +277,10 @@ public final class VanillaRegistryKeys {
         return minecraft(RegistryKeyPolicy.toSnakeCase(legacyName));
     }
 
-    private static void ensureBlockKeys() {
-        if (blockKeys != null) {
-            return;
+    private static synchronized void ensureBlockKeys() {
+        if (blockKeys == null) {
+            blockKeys = new IdentityHashMap<Block, ResourceLocation>();
         }
-        IdentityHashMap<Block, ResourceLocation> keys = new IdentityHashMap<Block, ResourceLocation>();
         Field[] fields = Block.class.getFields();
         for (int i = 0; i < fields.length; i++) {
             Field field = fields[i];
@@ -241,25 +289,41 @@ public final class VanillaRegistryKeys {
             }
             try {
                 Block block = (Block)field.get(null);
-                if (block == null || keys.containsKey(block)) {
+                if (block == null || blockKeys.containsKey(block)) {
                     continue;
                 }
                 String path = BLOCK_FIELD_OVERRIDES.get(field.getName());
                 if (path == null) {
                     path = RegistryKeyPolicy.canonicalizePath(RegistryKeyPolicy.toSnakeCase(field.getName()));
                 }
-                keys.put(block, minecraft(path));
+                blockKeys.put(block, minecraft(path));
             } catch (Throwable ignored) {
             }
         }
-        blockKeys = keys;
     }
 
-    private static void ensureItemKeys() {
-        if (itemKeys != null) {
-            return;
+    private static boolean isDeclaredCanonicalBlockKey(ResourceLocation key) {
+        Field[] fields = Block.class.getFields();
+        for (int i = 0; i < fields.length; i++) {
+            Field field = fields[i];
+            if (!Modifier.isStatic(field.getModifiers()) || !Block.class.isAssignableFrom(field.getType())) {
+                continue;
+            }
+            String path = BLOCK_FIELD_OVERRIDES.get(field.getName());
+            if (path == null) {
+                path = RegistryKeyPolicy.canonicalizePath(RegistryKeyPolicy.toSnakeCase(field.getName()));
+            }
+            if (key.equals(minecraft(path))) {
+                return true;
+            }
         }
-        IdentityHashMap<Item, ResourceLocation> keys = new IdentityHashMap<Item, ResourceLocation>();
+        return false;
+    }
+
+    private static synchronized void ensureItemKeys() {
+        if (itemKeys == null) {
+            itemKeys = new IdentityHashMap<Item, ResourceLocation>();
+        }
         Field[] fields = Item.class.getFields();
         for (int i = 0; i < fields.length; i++) {
             Field field = fields[i];
@@ -268,18 +332,35 @@ public final class VanillaRegistryKeys {
             }
             try {
                 Item item = (Item)field.get(null);
-                if (item == null || keys.containsKey(item)) {
+                if (item == null || itemKeys.containsKey(item)) {
                     continue;
                 }
                 String path = ITEM_FIELD_OVERRIDES.get(field.getName());
                 if (path == null) {
                     path = RegistryKeyPolicy.canonicalizePath(RegistryKeyPolicy.toSnakeCase(field.getName()));
                 }
-                keys.put(item, minecraft(path));
+                itemKeys.put(item, minecraft(path));
             } catch (Throwable ignored) {
             }
         }
-        itemKeys = keys;
+    }
+
+    private static boolean isDeclaredCanonicalItemKey(ResourceLocation key) {
+        Field[] fields = Item.class.getFields();
+        for (int i = 0; i < fields.length; i++) {
+            Field field = fields[i];
+            if (!Modifier.isStatic(field.getModifiers()) || !Item.class.isAssignableFrom(field.getType())) {
+                continue;
+            }
+            String path = ITEM_FIELD_OVERRIDES.get(field.getName());
+            if (path == null) {
+                path = RegistryKeyPolicy.canonicalizePath(RegistryKeyPolicy.toSnakeCase(field.getName()));
+            }
+            if (key.equals(minecraft(path))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static void block(String fieldName, String path) {

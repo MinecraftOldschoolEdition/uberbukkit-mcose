@@ -2,6 +2,7 @@ package org.bukkit.craftbukkit;
 
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
+import net.minecraft.server.ConsoleLogManager;
 import net.minecraft.server.MinecraftServer;
 import org.bukkit.craftbukkit.gui.ServerGUI;
 
@@ -82,9 +83,9 @@ public class Main {
 
                 acceptsAll(asList("log-pattern"), "Specfies the log filename pattern").withRequiredArg().ofType(String.class).defaultsTo("server.log").describedAs("Log filename");
 
-                acceptsAll(asList("log-limit"), "Limits the maximum size of the log file (0 = unlimited)").withRequiredArg().ofType(Integer.class).defaultsTo(0).describedAs("Max log size");
+                acceptsAll(asList("log-limit"), "Limits each log file's maximum size in bytes (0 = unlimited)").withRequiredArg().ofType(Integer.class).defaultsTo(ConsoleLogManager.DEFAULT_LOG_LIMIT).describedAs("Max log size");
 
-                acceptsAll(asList("log-count"), "Specified how many log files to cycle through").withRequiredArg().ofType(Integer.class).defaultsTo(1).describedAs("Log count");
+                acceptsAll(asList("log-count"), "Specifies how many log files to retain in the rotation").withRequiredArg().ofType(Integer.class).defaultsTo(ConsoleLogManager.DEFAULT_LOG_COUNT).describedAs("Log count");
 
                 acceptsAll(asList("log-append"), "Whether to append to the log file").withRequiredArg().ofType(Boolean.class).defaultsTo(true).describedAs("Log append");
 

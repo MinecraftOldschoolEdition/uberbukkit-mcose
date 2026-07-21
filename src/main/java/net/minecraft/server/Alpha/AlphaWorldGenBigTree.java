@@ -29,7 +29,8 @@ public class AlphaWorldGenBigTree extends WorldGenerator {
 			this.height = this.heightLimit - 1;
 		}
 
-		int var1 = (int)(1.382D + Math.pow(this.leafDensity * (double)this.heightLimit / 13.0D, 2.0D));
+		double leafNodeDensity = this.leafDensity * (double)this.heightLimit / 13.0D;
+		int var1 = (int)(1.382D + leafNodeDensity * leafNodeDensity);
 		if(var1 < 1) {
 			var1 = 1;
 		}
@@ -62,7 +63,9 @@ public class AlphaWorldGenBigTree extends WorldGenerator {
 						int[] var18 = new int[]{var15, var3 + this.leafDistanceLimit, var16};
 						if(this.checkBlockLine(var17, var18) == -1) {
 							int[] var19 = new int[]{this.basePos[0], this.basePos[1], this.basePos[2]};
-							double var20 = Math.sqrt(Math.pow((double)Math.abs(this.basePos[0] - var17[0]), 2.0D) + Math.pow((double)Math.abs(this.basePos[2] - var17[2]), 2.0D));
+							double var20X = (double)(this.basePos[0] - var17[0]);
+							double var20Z = (double)(this.basePos[2] - var17[2]);
+							double var20 = Math.sqrt(var20X * var20X + var20Z * var20Z);
 							double var22 = var20 * this.branchSlope;
 							if((double)var17[1] - var22 > (double)var5) {
 								var19[1] = var5;
@@ -111,7 +114,9 @@ public class AlphaWorldGenBigTree extends WorldGenerator {
 						continue label32;
 					}
 
-					double var15 = Math.sqrt(Math.pow((double)Math.abs(var12) + 0.5D, 2.0D) + Math.pow((double)Math.abs(var13) + 0.5D, 2.0D));
+					double var15X = (double)Math.abs(var12) + 0.5D;
+					double var15Z = (double)Math.abs(var13) + 0.5D;
+					double var15 = Math.sqrt(var15X * var15X + var15Z * var15Z);
 					if(var15 > (double)var4) {
 						++var13;
 					} else {
@@ -142,7 +147,9 @@ public class AlphaWorldGenBigTree extends WorldGenerator {
 			} else if(Math.abs(var3) >= var2) {
 				var4 = 0.0F;
 			} else {
-				var4 = (float)Math.sqrt(Math.pow((double)Math.abs(var2), 2.0D) - Math.pow((double)Math.abs(var3), 2.0D));
+				double var4Radius = (double)var2;
+				double var4Offset = (double)var3;
+				var4 = (float)Math.sqrt(var4Radius * var4Radius - var4Offset * var4Offset);
 			}
 
 			var4 *= 0.5F;

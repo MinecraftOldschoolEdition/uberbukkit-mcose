@@ -8,7 +8,7 @@ import net.minecraft.server.util.ResourceLocation;
  * Modern save codec: namespaced item identity + component patch payload.
  */
 public final class ModernItemStackCodec {
-    private static final int FORMAT_VERSION = 2;
+    private static final int FORMAT_VERSION = 3;
     private static final String KEY_FORMAT = "mcose_stack_format";
     private static final String KEY_ITEM = "item";
     private static final String KEY_COUNT = "count";
@@ -24,6 +24,17 @@ public final class ModernItemStackCodec {
         if (stack == null || out == null) {
             return out;
         }
+
+        // RegionCore owns these fields. Modern saves keep only the namespaced
+        // identity and component payload; numeric fields remain read-only
+        // compatibility inputs for older worlds.
+        out.remove(KEY_ITEM);
+        out.remove(KEY_COMPONENTS);
+        out.remove("id");
+        out.remove("name");
+        out.remove("Count");
+        out.remove("Damage");
+        out.remove("tag");
 
         Holder<Item> holder = stack.getItemHolder();
         ResourceLocation key = holder == null ? null : holder.key();
@@ -50,9 +61,6 @@ public final class ModernItemStackCodec {
         if (patch != null && !patch.isEmpty()) {
             out.a(KEY_COMPONENTS, patch.toNbt());
         }
-
-        // Keep legacy shadow fields so explicit McRegion 1 conversion remains possible.
-        LegacyItemStackCodec.writeLegacyShadow(stack, out);
         return out;
     }
 
@@ -61,6 +69,8 @@ public final class ModernItemStackCodec {
             return null;
         }
 
+        int formatVersion = in.hasKey(KEY_FORMAT) ? in.e(KEY_FORMAT) : 0;
+        boolean allowLegacyFields = formatVersion < FORMAT_VERSION;
         String keyString = in.getString(KEY_ITEM);
         ResourceLocation key = null;
         if (keyString != null && keyString.length() > 0) {
@@ -85,7 +95,7 @@ public final class ModernItemStackCodec {
             }
         }
 
-        if (legacyId < 0 && in.hasKey("id")) {
+        if (legacyId < 0 && allowLegacyFields && in.hasKey("id")) {
             legacyId = in.d("id");
             item = ItemRegistry.getByLegacyId(legacyId);
         }
@@ -95,8 +105,9 @@ public final class ModernItemStackCodec {
             return null;
         }
 
-        int count = in.hasKey(KEY_COUNT) ? in.e(KEY_COUNT) : in.c("Count");
-        int damage = in.hasKey("Damage") ? in.d("Damage") : 0;
+        int count = in.hasKey(KEY_COUNT) ? in.e(KEY_COUNT)
+                : allowLegacyFields && in.hasKey("Count") ? in.c("Count") : 0;
+        int damage = allowLegacyFields && in.hasKey("Damage") ? in.d("Damage") : 0;
 
         ItemStack stack = new ItemStack(legacyId, count, damage);
 
@@ -112,15 +123,16 @@ public final class ModernItemStackCodec {
         if (in.hasKey(KEY_COMPONENTS)) {
             DataComponentPatch patch = DataComponentPatch.fromNbt(in.k(KEY_COMPONENTS));
             stack.applyComponents(patch);
-        } else if (in.hasKey("tag")) {
+        } else if (allowLegacyFields && in.hasKey("tag")) {
             stack.setTag(in.k("tag"));
         }
 
-        if (in.hasKey("tag") && stack.getTag() == null) {
+        if (allowLegacyFields && in.hasKey("tag") && stack.getTag() == null) {
             stack.setTag(in.k("tag"));
         }
 
-        if (!in.hasKey(KEY_COMPONENTS) && in.hasKey("Damage") && (stack.getComponents() == null || stack.getComponents().get(DataComponents.DAMAGE) == null)) {
+        if (allowLegacyFields && !in.hasKey(KEY_COMPONENTS) && in.hasKey("Damage")
+                && (stack.getComponents() == null || stack.getComponents().get(DataComponents.DAMAGE) == null)) {
             stack.setItemDamage(in.d("Damage"));
         }
 

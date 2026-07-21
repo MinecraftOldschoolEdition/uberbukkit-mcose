@@ -60,7 +60,7 @@ public class PoseidonStatisticsAgent {
             while (true && !this.isInterrupted()) {
                 HttpURLConnection connection = null;
                 try {
-                    System.out.println("Submitting Project Poseidon Statistics.");
+                    MinecraftServer.log.fine("Submitting Project Poseidon statistics");
                     final JSONObject ping = getPing();
                     URL url = new URL(postTo);
                     //Create Connection
@@ -81,7 +81,7 @@ public class PoseidonStatisticsAgent {
                     errored = false;
                 } catch (Exception exception) {
                     if (!errored) {
-                        System.out.println("Failed to submit statistics for Project Poseidon. " + exception + " : " + exception.getMessage() + ".");
+                        MinecraftServer.log.warning("Failed to submit Project Poseidon statistics: " + exception.getMessage());
                     }
                     errored = true;
                 } finally {
@@ -92,7 +92,7 @@ public class PoseidonStatisticsAgent {
                     try {
                         Thread.sleep(300000L);
                     } catch (InterruptedException exception) {
-                        System.out.println("Project Poseidon statistics thread has been closed.");
+                        MinecraftServer.log.fine("Project Poseidon statistics thread stopped");
                         break;
                     }
                 }

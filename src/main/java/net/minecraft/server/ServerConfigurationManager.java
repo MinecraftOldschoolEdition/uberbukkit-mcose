@@ -24,7 +24,11 @@ public class ServerConfigurationManager {
     public static Logger a = Logger.getLogger("Minecraft");
     private static final String MCOSE_LAN_OWNER_HANDOFF_FILE = "mcose_lan_owner.dat";
     private static final String MCOSE_LAN_OWNER_RESULT_FILE = "mcose_lan_owner_result.dat";
+    private static final int PLAYER_AUTOSAVE_INTERVAL_TICKS = 6000;
+    private static final int PLAYER_AUTOSAVE_MAX_PER_TICK = 2;
     public List players = new ArrayList();
+    private final Map playersByName = new HashMap();
+    private final Map playersByUUID = new HashMap();
     public MinecraftServer server; // CraftBukkit - private -> public
     // private PlayerManager[] d = new PlayerManager[2]; // CraftBukkit - removed
     public int maxPlayers; // CraftBukkit - private -> public
@@ -41,6 +45,8 @@ public class ServerConfigurationManager {
     public PlayerFileData playerFileData; // CraftBukkit - private - >public
     public boolean o; // Craftbukkit - private -> public
     private String localLanOwnerName = "";
+    private int nextPlayerAutoSaveIndex = 0;
+    private Map playerLastSaveTicks = new HashMap();
 
     // CraftBukkit start
     private CraftServer cserver;
@@ -108,6 +114,51 @@ public class ServerConfigurationManager {
 
     private PlayerManager getPlayerManager(int i) {
         return this.server.getWorldServer(i).manager; // CraftBukkit
+    }
+
+    private static String getPlayerNameKey(String name) {
+        return name == null ? null : name.toLowerCase(Locale.ROOT);
+    }
+
+    private void registerOnlinePlayer(EntityPlayer entityplayer) {
+        if (entityplayer == null) {
+            return;
+        }
+
+        String nameKey = getPlayerNameKey(entityplayer.name);
+        if (nameKey != null) {
+            this.playersByName.put(nameKey, entityplayer);
+        }
+
+        UUID uuid = entityplayer.getMojangUUID();
+        if (uuid != null) {
+            this.playersByUUID.put(uuid, entityplayer);
+        }
+    }
+
+    private void unregisterOnlinePlayer(EntityPlayer entityplayer) {
+        if (entityplayer == null) {
+            return;
+        }
+
+        String nameKey = getPlayerNameKey(entityplayer.name);
+        if (nameKey != null && this.playersByName.get(nameKey) == entityplayer) {
+            this.playersByName.remove(nameKey);
+        }
+
+        UUID uuid = entityplayer.getMojangUUID();
+        if (uuid != null && this.playersByUUID.get(uuid) == entityplayer) {
+            this.playersByUUID.remove(uuid);
+        }
+    }
+
+    public EntityPlayer getPlayerByExactName(String name) {
+        String nameKey = getPlayerNameKey(name);
+        return nameKey == null ? null : (EntityPlayer) this.playersByName.get(nameKey);
+    }
+
+    public EntityPlayer getPlayerByUUID(UUID uuid) {
+        return uuid == null ? null : (EntityPlayer) this.playersByUUID.get(uuid);
     }
 
     public void b(EntityPlayer entityplayer) {
@@ -244,10 +295,24 @@ public class ServerConfigurationManager {
 
         if (this.isLocalLanOwner(entityhuman)) {
             this.saveLocalLanOwnerSnapshot(entityhuman);
+            this.markPlayerSaved(entityhuman);
             return;
         }
 
         this.playerFileData.a(entityhuman);
+        this.markPlayerSaved(entityhuman);
+    }
+
+    private String getPlayerSaveKey(EntityHuman entityhuman) {
+        return entityhuman != null && entityhuman.name != null ? entityhuman.name.toLowerCase() : null;
+    }
+
+    private void markPlayerSaved(EntityHuman entityhuman) {
+        String key = this.getPlayerSaveKey(entityhuman);
+
+        if (key != null) {
+            this.playerLastSaveTicks.put(key, Integer.valueOf(this.server.ticks));
+        }
     }
 
     private boolean isLocalLanOwner(EntityHuman entityhuman) {
@@ -421,6 +486,8 @@ public class ServerConfigurationManager {
 
     public void c(EntityPlayer entityplayer) {
         this.players.add(entityplayer);
+        this.registerOnlinePlayer(entityplayer);
+        this.markPlayerSaved(entityplayer);
         //PlayerTracker.getInstance().addPlayer(entityplayer.name);
         WorldServer worldserver = this.server.getWorldServer(entityplayer.dimension);
 
@@ -521,6 +588,11 @@ public class ServerConfigurationManager {
         this.savePlayerData(entityplayer);
         this.server.getWorldServer(entityplayer.dimension).kill(entityplayer);
         this.players.remove(entityplayer);
+        this.unregisterOnlinePlayer(entityplayer);
+        String saveKey = this.getPlayerSaveKey(entityplayer);
+        if (saveKey != null) {
+            this.playerLastSaveTicks.remove(saveKey);
+        }
         this.getPlayerManager(entityplayer.dimension).removePlayer(entityplayer);
 
         // Notify friends verification handler of player leave
@@ -585,12 +657,9 @@ public class ServerConfigurationManager {
             return null;
         }
 
-        for (int i = 0; i < this.players.size(); ++i) {
-            EntityPlayer entityplayer = (EntityPlayer) this.players.get(i);
-
-            if (entityplayer.name.equalsIgnoreCase(s)) {
-                entityplayer.netServerHandler.disconnect("You logged in from another location");
-            }
+        EntityPlayer onlinePlayer = this.getPlayerByExactName(s);
+        if (onlinePlayer != null) {
+            onlinePlayer.netServerHandler.disconnect("You logged in from another location");
         }
 
         return entity;
@@ -608,6 +677,7 @@ public class ServerConfigurationManager {
         // this.server.getTracker(entityplayer.dimension).untrackEntity(entityplayer); // CraftBukkit
         this.getPlayerManager(entityplayer.dimension).removePlayer(entityplayer);
         this.players.remove(entityplayer);
+        this.unregisterOnlinePlayer(entityplayer);
         //PlayerTracker.getInstance().removePlayer(entityplayer.name); //Project POSEIDON
         this.server.getWorldServer(entityplayer.dimension).removeEntity(entityplayer);
         ChunkCoordinates chunkcoordinates = entityplayer.getBed();
@@ -747,6 +817,7 @@ public class ServerConfigurationManager {
         this.getPlayerManager(entityplayer1.dimension).addPlayer(entityplayer1);
         worldserver.addEntity(entityplayer1);
         this.players.add(entityplayer1);
+        this.registerOnlinePlayer(entityplayer1);
         this.sendOperatorStatus(entityplayer1);
         //PlayerTracker.getInstance().addPlayer(entityplayer1.name); //Project POSEIDON
         this.updateClient(entityplayer1); // CraftBukkit
@@ -819,13 +890,11 @@ public class ServerConfigurationManager {
     }
 
     public void a(Packet packet, int i) {
-        List<EntityPlayer> recipients = this.getOnlinePlayersSnapshot();
+        List<EntityPlayer> recipients = this.getPlayersInDimensionSnapshot(i);
         for (int j = 0; j < recipients.size(); ++j) {
             EntityPlayer entityplayer = recipients.get(j);
 
-            if (entityplayer.dimension == i) {
-                entityplayer.netServerHandler.sendPacket(packet);
-            }
+            entityplayer.netServerHandler.sendPacket(packet);
         }
     }
 
@@ -1073,16 +1142,7 @@ public class ServerConfigurationManager {
     }
 
     public EntityPlayer i(String s) {
-        List<EntityPlayer> recipients = this.getOnlinePlayersSnapshot();
-        for (int i = 0; i < recipients.size(); ++i) {
-            EntityPlayer entityplayer = recipients.get(i);
-
-            if (entityplayer.name.equalsIgnoreCase(s)) {
-                return entityplayer;
-            }
-        }
-
-        return null;
+        return this.getPlayerByExactName(s);
     }
 
     public void a(String s, String s1) {
@@ -1106,9 +1166,21 @@ public class ServerConfigurationManager {
     }
 
     public void sendPacketNearby(EntityHuman entityhuman, double d0, double d1, double d2, double d3, int i, Packet packet) {
-        List<EntityPlayer> recipients = this.getNearbyPlayersSnapshot(entityhuman, d0, d1, d2, d3, i);
+        List<EntityPlayer> recipients = this.getPlayersInDimensionSnapshot(i);
+        double radiusSq = d3 * d3;
+
         for (int j = 0; j < recipients.size(); ++j) {
-            recipients.get(j).netServerHandler.sendPacket(packet);
+            EntityPlayer entityplayer = recipients.get(j);
+            if (entityplayer == null || entityplayer == entityhuman) {
+                continue;
+            }
+
+            double dx = d0 - entityplayer.locX;
+            double dy = d1 - entityplayer.locY;
+            double dz = d2 - entityplayer.locZ;
+            if (dx * dx + dy * dy + dz * dz < radiusSq) {
+                entityplayer.netServerHandler.sendPacket(packet);
+            }
         }
     }
 
@@ -1126,7 +1198,42 @@ public class ServerConfigurationManager {
     }
 
     public List<EntityPlayer> getOnlinePlayersSnapshot() {
-        Object[] raw = this.players.toArray();
+        return this.copyEntityPlayers(this.players);
+    }
+
+    private WorldServer getWorldServerIfLoaded(int dimension) {
+        for (int i = 0; i < this.server.worlds.size(); ++i) {
+            WorldServer world = (WorldServer) this.server.worlds.get(i);
+            if (world != null && world.dimension == dimension) {
+                return world;
+            }
+        }
+
+        return null;
+    }
+
+    public List<EntityPlayer> getPlayersInDimensionSnapshot(int dimension) {
+        WorldServer world = this.getWorldServerIfLoaded(dimension);
+
+        if (world == null) {
+            List<EntityPlayer> online = this.getOnlinePlayersSnapshot();
+            List<EntityPlayer> filtered = new ArrayList<EntityPlayer>();
+
+            for (int i = 0; i < online.size(); ++i) {
+                EntityPlayer entityplayer = online.get(i);
+                if (entityplayer.dimension == dimension) {
+                    filtered.add(entityplayer);
+                }
+            }
+
+            return filtered;
+        }
+
+        return this.copyEntityPlayers(world.players);
+    }
+
+    private List<EntityPlayer> copyEntityPlayers(List source) {
+        Object[] raw = source.toArray();
         List<EntityPlayer> snapshot = new ArrayList<EntityPlayer>(raw.length);
         for (int i = 0; i < raw.length; i++) {
             Object obj = raw[i];
@@ -1143,13 +1250,13 @@ public class ServerConfigurationManager {
                                                        double z,
                                                        double radius,
                                                        int dimension) {
-        List<EntityPlayer> online = this.getOnlinePlayersSnapshot();
+        List<EntityPlayer> online = this.getPlayersInDimensionSnapshot(dimension);
         List<EntityPlayer> nearby = new ArrayList<EntityPlayer>();
         double radiusSq = radius * radius;
 
         for (int i = 0; i < online.size(); i++) {
             EntityPlayer entityplayer = online.get(i);
-            if (entityplayer == null || entityplayer == excluded || entityplayer.dimension != dimension) {
+            if (entityplayer == null || entityplayer == excluded) {
                 continue;
             }
             double dx = x - entityplayer.locX;
@@ -1176,6 +1283,37 @@ public class ServerConfigurationManager {
     public void savePlayers() {
         for (int i = 0; i < this.players.size(); ++i) {
             this.savePlayerData((EntityHuman) this.players.get(i));
+        }
+    }
+
+    public void savePlayersIncrementally() {
+        if (this.playerFileData == null || this.players.isEmpty()) {
+            this.nextPlayerAutoSaveIndex = 0;
+            return;
+        }
+
+        int playerCount = this.players.size();
+        int currentTick = this.server.ticks;
+        int saved = 0;
+
+        for (int checked = 0; checked < playerCount && saved < PLAYER_AUTOSAVE_MAX_PER_TICK; ++checked) {
+            if (this.nextPlayerAutoSaveIndex >= this.players.size()) {
+                this.nextPlayerAutoSaveIndex = 0;
+            }
+
+            EntityHuman entityhuman = (EntityHuman) this.players.get(this.nextPlayerAutoSaveIndex++);
+            String key = this.getPlayerSaveKey(entityhuman);
+
+            if (key == null) {
+                continue;
+            }
+
+            Integer lastSaveTick = (Integer) this.playerLastSaveTicks.get(key);
+
+            if (lastSaveTick == null || currentTick - lastSaveTick.intValue() >= PLAYER_AUTOSAVE_INTERVAL_TICKS) {
+                this.savePlayerData(entityhuman);
+                ++saved;
+            }
         }
     }
 

@@ -8,7 +8,7 @@ import java.io.IOException;
 import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
-import java.util.HashMap;
+import java.util.Base64;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
@@ -47,6 +47,11 @@ public class FriendsVerificationHandler {
     public static final String CHANNEL_CONFIRM = "MCOSE|FCONFIRM"; // Confirmation of mutual friendship
     public static final String CHANNEL_CLAIM = "MCOSE|FCLAIM";    // Register a friend claim
     public static final String CHANNEL_CHECK = "MCOSE|FCHECK";    // Check if friend has claimed us
+
+    static final int MAX_CLAIMS_PER_PLAYER = 256;
+    static final long CLAIM_TTL_MS = 7L * 24L * 60L * 60L * 1000L;
+    private static final long CLAIM_CLEANUP_INTERVAL_MS = 60000L;
+    private static final long MAX_FUTURE_TIMESTAMP_SKEW_MS = 5L * 60L * 1000L;
     
     // Track which players have added which friends (for mutual verification)
     // playerUUID -> Map<friendUUID, claimData>
@@ -57,6 +62,7 @@ public class FriendsVerificationHandler {
     private long lastSaveTime = 0;
     private static final long SAVE_INTERVAL = 60000; // Save every 60 seconds if dirty
     private boolean dirty = false;
+    private long lastCleanupTime = 0L;
     
     public FriendsVerificationHandler(MinecraftServer server) {
         this.server = server;
@@ -77,6 +83,8 @@ public class FriendsVerificationHandler {
         if (!server.onlineMode) {
             return false;
         }
+
+        cleanupExpiredClaimsIfNeeded();
         
         try {
             switch (packet.channel) {
@@ -95,6 +103,13 @@ public class FriendsVerificationHandler {
             log.warning("[FriendsVerify] Error handling packet: " + e.getMessage());
             return false;
         }
+    }
+
+    static boolean isClientRequestChannel(String channel) {
+        return CHANNEL_QUERY.equals(channel)
+                || CHANNEL_VERIFY.equals(channel)
+                || CHANNEL_CLAIM.equals(channel)
+                || CHANNEL_CHECK.equals(channel);
     }
     
     /**
@@ -131,6 +146,9 @@ public class FriendsVerificationHandler {
         String friendUuid = PacketLimits.readUtf(in, PacketLimits.MAX_UUID_CHARS, "friend UUID");
         
         friendUuid = normalizeUuid(friendUuid);
+        if (friendUuid == null || in.available() != 0) {
+            return false;
+        }
         
         // Find the friend on this server
         EntityPlayer friend = findPlayerByUuid(friendUuid);
@@ -164,22 +182,20 @@ public class FriendsVerificationHandler {
         String requesterUuid = normalizeUuid(getPlayerUuid(requester));
         friendUuid = normalizeUuid(friendUuid);
         
-        if (requesterUuid == null) {
+        if (requesterUuid == null || friendUuid == null || requesterUuid.equals(friendUuid)
+                || in.available() != 0 || !isValidClaimProof(signature, publicKey)) {
             return false;
         }
         
         // Store the claim
         FriendClaim claim = new FriendClaim(requesterUuid, friendUuid, requester.name, signature, addedAt, publicKey);
         
-        Map<String, FriendClaim> claims = friendClaims.get(requesterUuid);
-        if (claims == null) {
-            claims = new ConcurrentHashMap<String, FriendClaim>();
-            friendClaims.put(requesterUuid, claims);
+        if (!storeClaim(requesterUuid, friendUuid, claim)) {
+            return false;
         }
-        claims.put(friendUuid, claim);
         dirty = true;
         
-        log.info("[FriendsVerify] Stored claim: " + requester.name + " -> " + friendUuid);
+        log.fine("[FriendsVerify] Stored claim: " + requester.name + " -> " + friendUuid);
         
         // Check if we can verify immediately (friend has also claimed us)
         checkAndNotifyMutual(requesterUuid, friendUuid, requester);
@@ -194,35 +210,32 @@ public class FriendsVerificationHandler {
         DataInputStream in = new DataInputStream(new ByteArrayInputStream(data));
         String friendUuid = PacketLimits.readUtf(in, PacketLimits.MAX_UUID_CHARS, "friend UUID");
         
-        // Check if there's additional claim data
-        String signature = "";
-        long addedAt = System.currentTimeMillis();
-        String publicKey = "";
-        
-        try {
+        // Older clients sent only the UUID. A present proof must be complete
+        // and canonical; partial data is rejected rather than downgraded.
+        String signature = null;
+        long addedAt = 0L;
+        String publicKey = null;
+        boolean hasClaimData = in.available() > 0;
+        if (hasClaimData) {
             signature = PacketLimits.readUtf(in, PacketLimits.MAX_SIGNATURE_CHARS, "friend signature");
             addedAt = in.readLong();
             publicKey = PacketLimits.readUtf(in, PacketLimits.MAX_PUBLIC_KEY_CHARS, "friend public key");
-        } catch (Exception e) {
-            // Old protocol without claim data
         }
         
         friendUuid = normalizeUuid(friendUuid);
         String requesterUuid = normalizeUuid(getPlayerUuid(requester));
         
-        if (requesterUuid == null) {
+        if (requesterUuid == null || friendUuid == null || requesterUuid.equals(friendUuid)
+                || in.available() != 0 || hasClaimData && !isValidClaimProof(signature, publicKey)) {
             return false;
         }
         
         // Store/update the claim if we got claim data
-        if (!signature.isEmpty()) {
+        if (hasClaimData) {
             FriendClaim claim = new FriendClaim(requesterUuid, friendUuid, requester.name, signature, addedAt, publicKey);
-            Map<String, FriendClaim> claims = friendClaims.get(requesterUuid);
-            if (claims == null) {
-                claims = new ConcurrentHashMap<String, FriendClaim>();
-                friendClaims.put(requesterUuid, claims);
+            if (!storeClaim(requesterUuid, friendUuid, claim)) {
+                return false;
             }
-            claims.put(friendUuid, claim);
             dirty = true;
         }
         
@@ -242,7 +255,7 @@ public class FriendsVerificationHandler {
         friendUuid = normalizeUuid(friendUuid);
         String requesterUuid = normalizeUuid(getPlayerUuid(requester));
         
-        if (requesterUuid == null) {
+        if (requesterUuid == null || friendUuid == null || in.available() != 0) {
             return false;
         }
         
@@ -264,6 +277,23 @@ public class FriendsVerificationHandler {
         
         requesterUuid = normalizeUuid(requesterUuid);
         friendUuid = normalizeUuid(friendUuid);
+        if (requesterUuid == null || friendUuid == null || requesterUuid.equals(friendUuid)) {
+            return false;
+        }
+
+        // Legacy menu verification may append its own claim proof. Validate it
+        // for shape but never store it because this socket is unauthenticated.
+        if (in.available() > 0) {
+            String signature = PacketLimits.readUtf(in, PacketLimits.MAX_SIGNATURE_CHARS, "friend signature");
+            in.readLong();
+            String publicKey = PacketLimits.readUtf(in, PacketLimits.MAX_PUBLIC_KEY_CHARS, "friend public key");
+            if (!isValidClaimProof(signature, publicKey)) {
+                return false;
+            }
+        }
+        if (in.available() != 0) {
+            return false;
+        }
         
         // Check if friend has claimed requester
         FriendClaim friendsClaim = getClaimFromTo(friendUuid, requesterUuid);
@@ -291,7 +321,7 @@ public class FriendsVerificationHandler {
         networkManager.queue(response);
         
         if (mutual) {
-            log.info("[FriendsVerify] Unauthenticated mutual verification: " + requesterUuid + " <-> " + friendUuid);
+            log.fine("[FriendsVerify] Unauthenticated mutual verification: " + requesterUuid + " <-> " + friendUuid);
         }
         
         return true;
@@ -317,7 +347,7 @@ public class FriendsVerificationHandler {
         // Notify player B if online
         if (playerB != null && mutual) {
             sendVerificationConfirm(playerB, playerAUuid, playerA.name, true, aClaimsB);
-            log.info("[FriendsVerify] Mutual verification: " + playerA.name + " <-> " + playerB.name);
+            log.fine("[FriendsVerify] Mutual verification: " + playerA.name + " <-> " + playerB.name);
         }
     }
     
@@ -325,9 +355,33 @@ public class FriendsVerificationHandler {
      * Get a claim from one player to another
      */
     private FriendClaim getClaimFromTo(String fromUuid, String toUuid) {
-        Map<String, FriendClaim> claims = friendClaims.get(normalizeUuid(fromUuid));
+        String normalizedFrom = normalizeUuid(fromUuid);
+        String normalizedTo = normalizeUuid(toUuid);
+        if (normalizedFrom == null || normalizedTo == null) {
+            return null;
+        }
+        Map<String, FriendClaim> claims = friendClaims.get(normalizedFrom);
         if (claims == null) return null;
-        return claims.get(normalizeUuid(toUuid));
+        return claims.get(normalizedTo);
+    }
+
+    private boolean storeClaim(String requesterUuid, String friendUuid, FriendClaim claim) {
+        Map<String, FriendClaim> claims = friendClaims.get(requesterUuid);
+        if (claims == null) {
+            claims = new ConcurrentHashMap<String, FriendClaim>();
+            friendClaims.put(requesterUuid, claims);
+        }
+        if (!canStoreClaim(claims, friendUuid)) {
+            return false;
+        }
+        claims.put(friendUuid, claim);
+        return true;
+    }
+
+    static boolean canStoreClaim(Map<String, ?> claims, String friendUuid) {
+        return claims == null
+                || claims.containsKey(friendUuid)
+                || claims.size() < MAX_CLAIMS_PER_PLAYER;
     }
     
     /**
@@ -390,6 +444,7 @@ public class FriendsVerificationHandler {
      */
     public void onPlayerJoin(EntityPlayer player) {
         if (!server.onlineMode) return;
+        cleanupExpiredClaimsIfNeeded();
         
         String playerUuid = normalizeUuid(getPlayerUuid(player));
         if (playerUuid == null) return;
@@ -431,6 +486,9 @@ public class FriendsVerificationHandler {
      */
     private EntityPlayer findPlayerByUuid(String uuid) {
         uuid = normalizeUuid(uuid);
+        if (uuid == null) {
+            return null;
+        }
         for (Object obj : server.serverConfigurationManager.players) {
             if (obj instanceof EntityPlayer) {
                 EntityPlayer p = (EntityPlayer) obj;
@@ -447,6 +505,9 @@ public class FriendsVerificationHandler {
      * Get a player's UUID
      */
     private String getPlayerUuid(EntityPlayer player) {
+        if (player == null) {
+            return null;
+        }
         if (player.uniqueId != null) {
             return player.uniqueId.toString();
         }
@@ -466,9 +527,48 @@ public class FriendsVerificationHandler {
         return null;
     }
     
-    private String normalizeUuid(String uuid) {
-        if (uuid == null) return null;
-        return uuid.replace("-", "").toLowerCase();
+    static String normalizeUuid(String uuid) {
+        if (uuid == null || uuid.length() != 32 && uuid.length() != 36) {
+            return null;
+        }
+
+        StringBuilder normalized = new StringBuilder(32);
+        for (int i = 0; i < uuid.length(); ++i) {
+            char c = uuid.charAt(i);
+            if (uuid.length() == 36 && (i == 8 || i == 13 || i == 18 || i == 23)) {
+                if (c != '-') {
+                    return null;
+                }
+                continue;
+            }
+            if (c >= '0' && c <= '9') {
+                normalized.append(c);
+            } else if (c >= 'a' && c <= 'f') {
+                normalized.append(c);
+            } else if (c >= 'A' && c <= 'F') {
+                normalized.append(Character.toLowerCase(c));
+            } else {
+                return null;
+            }
+        }
+        return normalized.length() == 32 ? normalized.toString() : null;
+    }
+
+    static boolean isValidClaimProof(String signature, String publicKey) {
+        if (signature == null || signature.length() != PacketLimits.MAX_SIGNATURE_CHARS
+                || publicKey == null || publicKey.length() != PacketLimits.MAX_PUBLIC_KEY_CHARS) {
+            return false;
+        }
+        try {
+            byte[] signatureBytes = Base64.getDecoder().decode(signature);
+            byte[] publicKeyBytes = Base64.getDecoder().decode(publicKey);
+            return signatureBytes.length == 64
+                    && publicKeyBytes.length == 32
+                    && signature.equals(Base64.getEncoder().encodeToString(signatureBytes))
+                    && publicKey.equals(Base64.getEncoder().encodeToString(publicKeyBytes));
+        } catch (IllegalArgumentException invalidBase64) {
+            return false;
+        }
     }
     
     public boolean isSupported() {
@@ -479,6 +579,7 @@ public class FriendsVerificationHandler {
      * Save claims periodically
      */
     public void saveClaimsIfNeeded() {
+        cleanupExpiredClaimsIfNeeded();
         if (!dirty) return;
         
         long now = System.currentTimeMillis();
@@ -519,7 +620,7 @@ public class FriendsVerificationHandler {
             
             dirty = false;
             lastSaveTime = System.currentTimeMillis();
-            log.info("[FriendsVerify] Saved " + claimsArray.size() + " friend claims");
+            log.fine("[FriendsVerify] Saved " + claimsArray.size() + " friend claims");
         } catch (Exception e) {
             log.warning("[FriendsVerify] Failed to save claims: " + e.getMessage());
         }
@@ -541,34 +642,33 @@ public class FriendsVerificationHandler {
             if (claimsArray == null) return;
             
             int loaded = 0;
-            long cutoff = System.currentTimeMillis() - (7 * 24 * 60 * 60 * 1000); // 7 days
+            long now = System.currentTimeMillis();
             
             for (Object obj : claimsArray) {
                 JSONObject claimJson = (JSONObject) obj;
                 
                 long timestamp = ((Number) claimJson.getOrDefault("timestamp", 0L)).longValue();
-                if (timestamp < cutoff) continue; // Skip old claims
+                if (isClaimExpired(timestamp, now)) continue;
                 
-                String claimer = (String) claimJson.get("claimer");
-                String friend = (String) claimJson.get("friend");
+                String claimer = normalizeUuid((String) claimJson.get("claimer"));
+                String friend = normalizeUuid((String) claimJson.get("friend"));
                 String name = (String) claimJson.get("name");
                 String signature = (String) claimJson.get("signature");
                 long addedAt = ((Number) claimJson.get("addedAt")).longValue();
                 String publicKey = (String) claimJson.get("publicKey");
+                if (claimer == null || friend == null || claimer.equals(friend)
+                        || !isValidClaimProof(signature, publicKey)) {
+                    continue;
+                }
                 
                 FriendClaim claim = new FriendClaim(claimer, friend, name, signature, addedAt, publicKey);
                 claim.timestamp = timestamp;
-                
-                Map<String, FriendClaim> claims = friendClaims.get(claimer);
-                if (claims == null) {
-                    claims = new ConcurrentHashMap<String, FriendClaim>();
-                    friendClaims.put(claimer, claims);
+                if (storeClaim(claimer, friend, claim)) {
+                    loaded++;
                 }
-                claims.put(friend, claim);
-                loaded++;
             }
             
-            log.info("[FriendsVerify] Loaded " + loaded + " friend claims");
+            log.fine("[FriendsVerify] Loaded " + loaded + " friend claims");
         } catch (Exception e) {
             log.warning("[FriendsVerify] Failed to load claims: " + e.getMessage());
         }
@@ -578,14 +678,41 @@ public class FriendsVerificationHandler {
      * Clean up old claims (older than 7 days)
      */
     public void cleanupOldClaims() {
-        long cutoff = System.currentTimeMillis() - (7 * 24 * 60 * 60 * 1000); // 7 days
-        
-        for (Map<String, FriendClaim> claims : friendClaims.values()) {
-            claims.entrySet().removeIf(entry -> entry.getValue().timestamp < cutoff);
+        long now = System.currentTimeMillis();
+        this.lastCleanupTime = now;
+        cleanupExpiredClaims(now);
+    }
+
+    private void cleanupExpiredClaimsIfNeeded() {
+        long now = System.currentTimeMillis();
+        long elapsed = now - this.lastCleanupTime;
+        if (this.lastCleanupTime != 0L && elapsed >= 0L && elapsed < CLAIM_CLEANUP_INTERVAL_MS) {
+            return;
         }
-        
+        this.lastCleanupTime = now;
+        cleanupExpiredClaims(now);
+    }
+
+    private void cleanupExpiredClaims(long now) {
+        boolean removed = false;
+        for (Map<String, FriendClaim> claims : friendClaims.values()) {
+            int previousSize = claims.size();
+            claims.entrySet().removeIf(entry -> isClaimExpired(entry.getValue().timestamp, now));
+            removed |= claims.size() != previousSize;
+        }
+        int previousPlayers = friendClaims.size();
         friendClaims.entrySet().removeIf(entry -> entry.getValue().isEmpty());
-        dirty = true;
+        removed |= friendClaims.size() != previousPlayers;
+        if (removed) {
+            dirty = true;
+        }
+    }
+
+    static boolean isClaimExpired(long timestamp, long now) {
+        if (timestamp <= 0L || timestamp > now && timestamp - now > MAX_FUTURE_TIMESTAMP_SKEW_MS) {
+            return true;
+        }
+        return timestamp <= now && now - timestamp > CLAIM_TTL_MS;
     }
     
     /**

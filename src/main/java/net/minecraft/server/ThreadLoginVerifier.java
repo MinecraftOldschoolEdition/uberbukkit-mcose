@@ -12,6 +12,11 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 // CraftBukkit start
@@ -22,7 +27,26 @@ public class ThreadLoginVerifier extends Thread {
     private static final int DEFAULT_MAX_ATTEMPTS = 3;
     private static final int DEFAULT_RETRY_DELAY_MS = 250;
     private static final int DEFAULT_MAX_RETRY_DELAY_MS = 1000;
-    private static final boolean DEFAULT_PARALLEL_NO_IP_FALLBACK = true;
+    private static final boolean DEFAULT_PARALLEL_NO_IP_FALLBACK = false;
+    private static final int LOGIN_VERIFIER_THREADS = Math.max(2, Math.min(8, Runtime.getRuntime().availableProcessors()));
+    private static final long SESSION_LOOKUP_TIMEOUT_MS = 5000L;
+
+    private static final ThreadPoolExecutor LOGIN_VERIFIER_POOL = new ThreadPoolExecutor(
+            LOGIN_VERIFIER_THREADS,
+            LOGIN_VERIFIER_THREADS,
+            30L,
+            TimeUnit.SECONDS,
+            new ArrayBlockingQueue<Runnable>(256),
+            new ThreadFactory() {
+                private final AtomicInteger threadNumber = new AtomicInteger(1);
+
+                public Thread newThread(Runnable runnable) {
+                    Thread thread = new Thread(runnable, "LoginVerifier-" + this.threadNumber.getAndIncrement());
+                    thread.setDaemon(true);
+                    return thread;
+                }
+            }
+    );
 
     // Shared bounded pool so many logins can verify in parallel without unbounded thread growth.
     private static final ExecutorService SESSION_LOOKUP_POOL = Executors.newFixedThreadPool(
@@ -56,17 +80,31 @@ public class ThreadLoginVerifier extends Thread {
         this.loginPacket = packet1login;
     }
 
+    public static Future<?> submit(ThreadLoginVerifier verifier) {
+        try {
+            return LOGIN_VERIFIER_POOL.submit(verifier);
+        } catch (RejectedExecutionException rejected) {
+            return null;
+        }
+    }
+
     private String getIP() {
         return ((InetSocketAddress) netLoginHandler.networkManager.getSocketAddress()).getAddress().getHostAddress();
     }
 
     public void run() {
         try {
+            if (!this.loginProcessHandler.isLoginActive()) {
+                return;
+            }
             String serverId = netLoginHandler.getServerID();
             String playerName = loginPacket.name;
             String clientIP = getIP();
 
             String verificationFailure = verifySessionWithRetry(playerName, serverId, clientIP);
+            if (!this.loginProcessHandler.isLoginActive()) {
+                return;
+            }
             if (verificationFailure == null) {
                 loginProcessHandler.userMojangSessionVerified();
                 return;
@@ -87,10 +125,12 @@ public class ThreadLoginVerifier extends Thread {
         boolean parallelNoIpFallback = getConfigBoolean("settings.authentication.session.parallel-no-ip-fallback", DEFAULT_PARALLEL_NO_IP_FALLBACK);
 
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            if (!this.loginProcessHandler.isLoginActive() || Thread.currentThread().isInterrupted()) {
+                break;
+            }
             List<SessionAPI.ModernSessionResponse> responses = queryModernSessionWithFallback(playerName, serverId, clientIP, !isLocalhost && parallelNoIpFallback);
 
             boolean sawRetryableError = false;
-            boolean sawNoContent = false;
 
             for (SessionAPI.ModernSessionResponse response : responses) {
                 if (response == null) {
@@ -100,7 +140,6 @@ public class ThreadLoginVerifier extends Thread {
 
                 int responseCode = response.getResponseCode();
                 if (responseCode == 204) {
-                    sawNoContent = true;
                     continue;
                 }
 
@@ -123,12 +162,6 @@ public class ThreadLoginVerifier extends Thread {
 
                 if (SessionAPI.isRetryableStatusCode(responseCode)) {
                     sawRetryableError = true;
-                }
-            }
-
-            if (sawNoContent) {
-                if (SessionAPI.hasJoined(playerName, serverId)) {
-                    return null;
                 }
             }
 
@@ -167,8 +200,16 @@ public class ThreadLoginVerifier extends Thread {
     private SessionAPI.ModernSessionResponse lookupModernSession(String playerName, String serverId, String clientIP) {
         Future<SessionAPI.ModernSessionResponse> future = SESSION_LOOKUP_POOL.submit(() -> SessionAPI.hasJoinedModern(playerName, serverId, clientIP));
         try {
-            return future.get();
+            return future.get(SESSION_LOOKUP_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        } catch (TimeoutException timeout) {
+            future.cancel(true);
+            return new SessionAPI.ModernSessionResponse(-1, "", "", "");
+        } catch (InterruptedException interrupted) {
+            future.cancel(true);
+            Thread.currentThread().interrupt();
+            return new SessionAPI.ModernSessionResponse(-1, "", "", "");
         } catch (Throwable throwable) {
+            future.cancel(true);
             return new SessionAPI.ModernSessionResponse(-1, "", "", "");
         }
     }

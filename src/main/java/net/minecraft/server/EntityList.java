@@ -7,6 +7,9 @@ public class EntityList {
     private int c = 12;
     private final float d = 0.75F;
     private transient volatile int e;
+    private transient int[] f = new int[16];
+    private transient int g;
+    private transient boolean[] h = new boolean[16];
 
     public EntityList() {
     }
@@ -73,6 +76,7 @@ public class EntityList {
 
             this.a(aentitylistentry1);
             this.a = aentitylistentry1;
+            this.i();
             this.c = (int) ((float) i * this.d);
         }
     }
@@ -137,10 +141,13 @@ public class EntityList {
 
     public void a() {
         ++this.e;
-        EntityListEntry[] aentitylistentry = this.a;
-
-        for (int i = 0; i < aentitylistentry.length; ++i) {
-            aentitylistentry[i] = null;
+        if (this.g > 0) {
+            for (int i = 0; i < this.g; ++i) {
+                int j = this.f[i];
+                this.a[j] = null;
+                this.h[j] = false;
+            }
+            this.g = 0;
         }
 
         this.b = 0;
@@ -149,9 +156,54 @@ public class EntityList {
     private void a(int i, int j, Object object, int k) {
         EntityListEntry entitylistentry = this.a[k];
 
+        if (entitylistentry == null) {
+            this.j(k);
+        }
+
         this.a[k] = new EntityListEntry(i, j, object, entitylistentry);
         if (this.b++ >= this.c) {
             this.h(2 * this.a.length);
+        }
+    }
+
+    private void j(int i) {
+        if (this.h == null || this.h.length < this.a.length) {
+            this.i();
+        }
+        if (this.h[i]) {
+            return;
+        }
+
+        if (this.f == null) {
+            this.f = new int[Math.max(16, this.a.length)];
+        } else if (this.g >= this.f.length) {
+            int[] aint = new int[this.f.length << 1];
+            System.arraycopy(this.f, 0, aint, 0, this.f.length);
+            this.f = aint;
+        }
+
+        this.h[i] = true;
+        this.f[this.g++] = i;
+    }
+
+    private void i() {
+        if (this.f == null || this.f.length < this.a.length) {
+            this.f = new int[this.a.length];
+        }
+        if (this.h == null || this.h.length < this.a.length) {
+            this.h = new boolean[this.a.length];
+        } else {
+            for (int i = 0; i < this.h.length; ++i) {
+                this.h[i] = false;
+            }
+        }
+
+        this.g = 0;
+        for (int i = 0; i < this.a.length; ++i) {
+            if (this.a[i] != null) {
+                this.h[i] = true;
+                this.f[this.g++] = i;
+            }
         }
     }
 

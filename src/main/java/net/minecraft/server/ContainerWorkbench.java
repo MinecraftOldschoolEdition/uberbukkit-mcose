@@ -101,24 +101,9 @@ public class ContainerWorkbench extends Container {
             if (i == 0) {
                 this.a(itemstack1, 10, 46, true);
             } else if (i >= 10 && i < 46) {
-                boolean filledAny = false;
-                for (int j = 1; j <= 9 && itemstack1.count > 0; ++j) {
-                    Slot craftSlot = (Slot) this.e.get(j);
-                    ItemStack craftStack = craftSlot.getItem();
-                    if (craftStack == null) {
-                        craftSlot.c(itemstack1.a(1));
-                        filledAny = true;
-                    } else if (craftStack.id == itemstack1.id
-                            && (!craftStack.usesData() || craftStack.getData() == itemstack1.getData())
-                            && craftStack.count < Math.min(craftStack.getMaxStackSize(), craftSlot.d())) {
-                        ++craftStack.count;
-                        --itemstack1.count;
-                        craftSlot.c();
-                        filledAny = true;
-                    }
-                }
-
-                if (!filledAny) {
+                int beforeCraftGrid = itemstack1.count;
+                this.a(itemstack1, 1, 10, false);
+                if (itemstack1.count == beforeCraftGrid) {
                     if (i >= 10 && i < 37) {
                         this.a(itemstack1, 37, 46, false);
                     } else if (i >= 37 && i < 46) {

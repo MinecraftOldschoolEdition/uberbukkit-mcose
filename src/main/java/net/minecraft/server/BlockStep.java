@@ -4,7 +4,7 @@ import java.util.Random;
 
 public class BlockStep extends Block {
 
-    public static final String[] a = new String[] { "stone", "sand", "wood", "cobble" };
+    public static final String[] a = new String[] { "stone", "sand", "wood", "cobble", "brick", "smoothStoneBrick" };
     private boolean b;
 
     public BlockStep(int i, boolean flag) {
@@ -18,7 +18,12 @@ public class BlockStep extends Block {
     }
 
     public int a(int i, int j) {
-        return j == 0 ? (i <= 1 ? 6 : 5) : (j == 1 ? (i == 0 ? 208 : (i == 1 ? 176 : 192)) : (j == 2 ? 4 : (j == 3 ? 16 : 6)));
+        return j == 0 ? (i <= 1 ? 6 : 5)
+                : (j == 1 ? (i == 0 ? 208 : (i == 1 ? 176 : 192))
+                : (j == 2 ? 4
+                : (j == 3 ? 16
+                : (j == 4 ? Block.BRICK.textureId
+                : (j == 5 ? Block.STONE_BRICK.textureId : 6)))));
     }
 
     public int a(int i) {

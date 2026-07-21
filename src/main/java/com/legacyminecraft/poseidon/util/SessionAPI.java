@@ -1,5 +1,6 @@
 package com.legacyminecraft.poseidon.util;
 
+import net.minecraft.server.MinecraftServer;
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
 
@@ -9,6 +10,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * A wrapper class for the Minecraft session API
@@ -18,9 +20,11 @@ import java.net.URL;
  * @author moderator_man
  */
 public class SessionAPI {
-    public static final String SESSION_BASE = "http://session.minecraft.net/game/";
     public static final String MODERN_SESSION_BASE = "https://sessionserver.mojang.com/session/minecraft/";
     private static final int HTTP_TIMEOUT_MS = 3000;
+    private static final long FAILURE_LOG_INTERVAL_MS = 30000L;
+    private static final AtomicLong LAST_FAILURE_LOG_AT = new AtomicLong(0L);
+    private static final AtomicLong SUPPRESSED_FAILURE_LOGS = new AtomicLong(0L);
 
     public static class ModernSessionResponse {
         private final int responseCode;
@@ -52,10 +56,12 @@ public class SessionAPI {
         }
     }
 
+    @Deprecated
     public static boolean hasJoined(String username, String serverId) {
-        HTTPResponse response = httpGetRequest(SESSION_BASE + String.format("checkserver.jsp?user=%s&serverId=%s", username, serverId));
-        if (!"YES".equals(response.getResponse())) return false;
-        return true;
+        ModernSessionResponse response = hasJoinedModern(username, serverId, "127.0.0.1");
+        return response.getResponseCode() == HttpURLConnection.HTTP_OK
+                && username != null
+                && username.equalsIgnoreCase(response.getUsername());
     }
 
     public static void hasJoined(String username, String serverId, String ip, SessionRequestRunnable callback) {
@@ -92,11 +98,29 @@ public class SessionAPI {
             String res_username = (obj.containsKey("name") ? (String) obj.get("name") : "nousername");
             String res_uuid = (obj.containsKey("id") ? (String) obj.get("id") : "nouuid");
             String res_ip = (obj.containsKey("ip") ? (String) obj.get("ip") : "noip");
-            System.out.println("[AUTH] Mojang response for " + username + ": code=" + response.getResponseCode() + ", uuid=" + res_uuid);
+            MinecraftServer.log.fine("[AUTH] Mojang response for " + username + ": code=" + response.getResponseCode());
             return new ModernSessionResponse(response.getResponseCode(), res_username, res_uuid, res_ip);
         } catch (Exception ex) {
-            System.out.println(String.format("[AUTH] Failed to authenticate session for '%s': %s", username, ex.getMessage()));
+            logLookupFailure(ex);
             return new ModernSessionResponse(-1, "", "", "");
+        }
+    }
+
+    private static void logLookupFailure(Exception exception) {
+        long now = System.currentTimeMillis();
+        long previous = LAST_FAILURE_LOG_AT.get();
+        if (now - previous >= FAILURE_LOG_INTERVAL_MS && LAST_FAILURE_LOG_AT.compareAndSet(previous, now)) {
+            long suppressed = SUPPRESSED_FAILURE_LOGS.getAndSet(0L);
+            String reason = exception == null || exception.getMessage() == null
+                    ? "unknown error"
+                    : exception.getMessage().replace('\r', ' ').replace('\n', ' ').trim();
+            if (reason.length() > 160) {
+                reason = reason.substring(0, 157) + "...";
+            }
+            MinecraftServer.log.warning("[AUTH] Mojang session lookup failed: " + reason
+                    + (suppressed > 0L ? " (" + suppressed + " similar failures suppressed)" : ""));
+        } else {
+            SUPPRESSED_FAILURE_LOGS.incrementAndGet();
         }
     }
 

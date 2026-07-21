@@ -47,10 +47,18 @@ public class ItemInWorldManager {
         this.delaySound = 0.0F;
     }
 
+    private int getTypeIdIfLoaded(int i, int j, int k) {
+        return this.world.getTypeIdIfLoaded(i, j, k);
+    }
+
+    private int getDataIfLoaded(int i, int j, int k) {
+        return this.world.getDataIfLoaded(i, j, k);
+    }
+
     // ======= UBERBUKKIT PRE-b1.3 AREA =======
 
     public void oldClick(int i, int j, int k, int l) { // UberBukkit add block face
-        int i1 = this.world.getTypeId(i, j, k);
+        int i1 = this.getTypeIdIfLoaded(i, j, k);
 
         // CraftBukkit start
         PlayerInteractEvent event = CraftEventFactory.callPlayerInteractEvent(this.player, Action.LEFT_CLICK_BLOCK, i, j, k, l, this.player.inventory.getItemInHand());
@@ -59,7 +67,7 @@ public class ItemInWorldManager {
             // If we denied a door from opening, we need to send a correcting update to the client, as it already opened the door.
             if (i1 == Block.WOODEN_DOOR.id) {
                 // For some reason *BOTH* the bottom/top part have to be marked updated.
-                boolean bottom = (this.world.getData(i, j, k) & 8) == 0;
+                boolean bottom = (this.getDataIfLoaded(i, j, k) & 8) == 0;
                 ((EntityPlayer) this.player).netServerHandler.sendPacket(new Packet53BlockChange(i, j, k, this.world));
                 ((EntityPlayer) this.player).netServerHandler.sendPacket(new Packet53BlockChange(i, j + (bottom ? 1 : -1), k, this.world));
             } else if (i1 == Block.TRAP_DOOR.id) {
@@ -89,7 +97,7 @@ public class ItemInWorldManager {
             --this.c;
         } else {
             if (i == this.e && j == this.f && k == this.g) {
-                int i1 = this.world.getTypeId(i, j, k);
+                int i1 = this.getTypeIdIfLoaded(i, j, k);
 
                 if (i1 == 0) {
                     return;
@@ -134,7 +142,7 @@ public class ItemInWorldManager {
         this.currentTick = System.currentTimeMillis(); // CraftBukkit
         if (this.i) {
             int i = (int) ((this.currentTick / 50) - (this.m / 50));
-            int j = this.world.getTypeId(this.j, this.k, this.l);
+            int j = this.getTypeIdIfLoaded(this.j, this.k, this.l);
 
             if (j != 0) {
                 Block block = Block.byId[j];
@@ -164,7 +172,7 @@ public class ItemInWorldManager {
     public void dig(int i, int j, int k, int l) {
         // this.world.douseFire((EntityHuman) null, i, j, k, l); // CraftBukkit - moved down
         this.lastDigTick = System.currentTimeMillis(); // CraftBukkit
-        int i1 = this.world.getTypeId(i, j, k);
+        int i1 = this.getTypeIdIfLoaded(i, j, k);
 
         // CraftBukkit start
         // Swings at air do *NOT* exist.
@@ -178,7 +186,7 @@ public class ItemInWorldManager {
             // If we denied a door from opening, we need to send a correcting update to the client, as it already opened the door.
             if (i1 == Block.WOODEN_DOOR.id) {
                 // For some reason *BOTH* the bottom/top part have to be marked updated.
-                boolean bottom = (this.world.getData(i, j, k) & 8) == 0;
+                boolean bottom = (this.getDataIfLoaded(i, j, k) & 8) == 0;
                 ((EntityPlayer) this.player).netServerHandler.sendPacket(new Packet53BlockChange(i, j, k, this.world));
                 ((EntityPlayer) this.player).netServerHandler.sendPacket(new Packet53BlockChange(i, j + (bottom ? 1 : -1), k, this.world));
             } else if (i1 == Block.TRAP_DOOR.id) {
@@ -234,7 +242,7 @@ public class ItemInWorldManager {
         if (i == this.e && j == this.f && k == this.g) {
             this.currentTick = System.currentTimeMillis(); // CraftBukkit
             int l = (int) ((this.currentTick / 50) - (this.lastDigTick / 50));
-            int i1 = this.world.getTypeId(i, j, k);
+            int i1 = this.getTypeIdIfLoaded(i, j, k);
 
             if (i1 != 0) {
                 Block block = Block.byId[i1];
@@ -271,8 +279,14 @@ public class ItemInWorldManager {
     }
 
     public boolean b(int i, int j, int k) {
-        Block block = Block.byId[this.world.getTypeId(i, j, k)];
-        int l = this.world.getData(i, j, k);
+        int blockId = this.getTypeIdIfLoaded(i, j, k);
+
+        if (blockId <= 0) {
+            return false;
+        }
+
+        Block block = Block.byId[blockId];
+        int l = this.getDataIfLoaded(i, j, k);
         boolean flag = this.world.setTypeId(i, j, k, 0);
 
         if (block != null && flag) {
@@ -283,8 +297,13 @@ public class ItemInWorldManager {
     }
 
     public boolean c(int i, int j, int k) {
-        int l = this.world.getTypeId(i, j, k);
-        int i1 = this.world.getData(i, j, k);
+        int l = this.getTypeIdIfLoaded(i, j, k);
+
+        if (l <= 0) {
+            return false;
+        }
+
+        int i1 = this.getDataIfLoaded(i, j, k);
 
         if (this.player instanceof EntityPlayer && !PlayerCapabilityRegistryApi.canAffectBlocks((EntityPlayer) this.player)) {
             return false;
@@ -314,7 +333,7 @@ public class ItemInWorldManager {
         }
         // CraftBukkit end
 
-        this.world.a(this.player, 2001, i, j, k, l + this.world.getData(i, j, k) * 256);
+        this.world.a(this.player, 2001, i, j, k, l + this.getDataIfLoaded(i, j, k) * 256);
         boolean canHarvestForDrops = BlockMiningRegistryApi.canHarvestForDrops(this.player, this.world, i, j, k);
         boolean flag = this.b(i, j, k);
         ItemStack itemstack = this.player.G();
@@ -372,6 +391,12 @@ public class ItemInWorldManager {
             return false;
         }
 
+        int i1 = world.getTypeIdIfLoaded(i, j, k);
+
+        if (i1 <= 0) {
+            return false;
+        }
+
         int originalCount = itemstack == null ? 0 : itemstack.count;
         int originalDamage = itemstack == null ? 0 : itemstack.getItemDamage();
 
@@ -380,7 +405,6 @@ public class ItemInWorldManager {
         if (blockPlaceEvent.isCancelled()) {
             return false;
         }
-        int i1 = world.getTypeId(i, j, k);
 
         // CraftBukkit start - Interact
         boolean result = false;
@@ -389,7 +413,7 @@ public class ItemInWorldManager {
             if (event.useInteractedBlock() == Event.Result.DENY) {
                 // If we denied a door from opening, we need to send a correcting update to the client, as it already opened the door.
                 if (i1 == Block.WOODEN_DOOR.id) {
-                    boolean bottom = (world.getData(i, j, k) & 8) == 0;
+                    boolean bottom = (world.getDataIfLoaded(i, j, k) & 8) == 0;
                     ((EntityPlayer) entityhuman).netServerHandler.sendPacket(new Packet53BlockChange(i, j + (bottom ? 1 : -1), k, world));
                 }
                 result = (event.useItemInHand() != Event.Result.ALLOW);

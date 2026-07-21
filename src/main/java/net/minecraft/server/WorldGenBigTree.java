@@ -31,7 +31,8 @@ public class WorldGenBigTree extends WorldGenerator {
             this.f = this.e - 1;
         }
 
-        int i = (int) (1.382D + Math.pow(this.k * (double) this.e / 13.0D, 2.0D));
+        double nodeDensity = this.k * (double) this.e / 13.0D;
+        int i = (int) (1.382D + nodeDensity * nodeDensity);
 
         if (i < 1) {
             i = 1;
@@ -67,7 +68,9 @@ public class WorldGenBigTree extends WorldGenerator {
 
                     if (this.a(aint1, aint2) == -1) {
                         int[] aint3 = new int[] { this.d[0], this.d[1], this.d[2] };
-                        double d3 = Math.sqrt(Math.pow((double) Math.abs(this.d[0] - aint1[0]), 2.0D) + Math.pow((double) Math.abs(this.d[2] - aint1[2]), 2.0D));
+                        double d3x = (double) (this.d[0] - aint1[0]);
+                        double d3z = (double) (this.d[2] - aint1[2]);
+                        double d3 = Math.sqrt(d3x * d3x + d3z * d3z);
                         double d4 = d3 * this.i;
 
                         if ((double) aint1[1] - d4 > (double) l) {
@@ -109,7 +112,9 @@ public class WorldGenBigTree extends WorldGenerator {
             k1 = -i1;
 
             while (k1 <= i1) {
-                double d0 = Math.sqrt(Math.pow((double) Math.abs(j1) + 0.5D, 2.0D) + Math.pow((double) Math.abs(k1) + 0.5D, 2.0D));
+                double d1 = (double) Math.abs(j1) + 0.5D;
+                double d2 = (double) Math.abs(k1) + 0.5D;
+                double d0 = Math.sqrt(d1 * d1 + d2 * d2);
 
                 if (d0 > (double) f) {
                     ++k1;
@@ -141,7 +146,9 @@ public class WorldGenBigTree extends WorldGenerator {
             } else if (Math.abs(f1) >= f) {
                 f2 = 0.0F;
             } else {
-                f2 = (float) Math.sqrt(Math.pow((double) Math.abs(f), 2.0D) - Math.pow((double) Math.abs(f1), 2.0D));
+                double d0 = (double) f;
+                double d1 = (double) f1;
+                f2 = (float) Math.sqrt(d0 * d0 - d1 * d1);
             }
 
             f2 *= 0.5F;

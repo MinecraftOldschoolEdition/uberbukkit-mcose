@@ -104,12 +104,15 @@ public class ContainerPlayer extends Container {
             itemstack = itemstack1.cloneItemStack();
             if (i == 0) {
                 this.a(itemstack1, 9, 45, true);
-            } else if (i >= 9 && i < 36) {
-                this.tryAutoEquipArmor(itemstack1);
-                this.a(itemstack1, 36, 45, false);
-            } else if (i >= 36 && i < 45) {
-                this.tryAutoEquipArmor(itemstack1);
-                this.a(itemstack1, 9, 36, false);
+            } else if (i >= 9 && i < 45) {
+                int armorSlotIndex = this.getEmptyArmorSlot(itemstack1);
+                if (armorSlotIndex >= 0) {
+                    this.a(itemstack1, armorSlotIndex, armorSlotIndex + 1, false);
+                } else if (i < 36) {
+                    this.a(itemstack1, 36, 45, false);
+                } else {
+                    this.a(itemstack1, 9, 36, false);
+                }
             } else {
                 this.a(itemstack1, 9, 45, false);
             }
@@ -130,26 +133,25 @@ public class ContainerPlayer extends Container {
         return itemstack;
     }
 
-    private void tryAutoEquipArmor(ItemStack itemstack) {
+    private int getEmptyArmorSlot(ItemStack itemstack) {
         if (itemstack == null || itemstack.count <= 0 || itemstack.getItem() == null) {
-            return;
+            return -1;
         }
 
         int armorType = -1;
         if (itemstack.getItem() instanceof ItemArmor) {
             armorType = ((ItemArmor) itemstack.getItem()).bk;
-        } else if (itemstack.getItem().id == Block.PUMPKIN.id) {
+        } else if (itemstack.getItem() instanceof ItemPumpkinMeta && itemstack.getData() == 0) {
             armorType = 0;
         }
 
         int armorSlotIndex = 5 + armorType;
         if (armorType < 0 || armorSlotIndex < 0 || armorSlotIndex >= this.e.size()) {
-            return;
+            return -1;
         }
 
         Slot armorSlot = (Slot) this.e.get(armorSlotIndex);
-        if (armorSlot != null && !armorSlot.b() && armorSlot.isAllowed(itemstack)) {
-            armorSlot.c(itemstack.a(1));
-        }
+        return armorSlot != null && !armorSlot.b() && armorSlot.isAllowed(itemstack)
+                ? armorSlotIndex : -1;
     }
 }

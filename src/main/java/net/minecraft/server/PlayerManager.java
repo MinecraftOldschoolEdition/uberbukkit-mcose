@@ -1,6 +1,7 @@
 package net.minecraft.server;
 
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 
 public class PlayerManager {
@@ -12,6 +13,7 @@ public class PlayerManager {
     private int e;
     private int f;
     private final int[][] g = new int[][] { { 1, 0 }, { 0, 1 }, { -1, 0 }, { 0, -1 } };
+    private final ArrayList[] chunkDistanceBuckets;
 
     public PlayerManager(MinecraftServer minecraftserver, int i, int j) {
         if (j > 15) {
@@ -22,6 +24,10 @@ public class PlayerManager {
             this.f = j;
             this.server = minecraftserver;
             this.e = i;
+            this.chunkDistanceBuckets = new ArrayList[j + 1];
+            for (int k = 0; k < this.chunkDistanceBuckets.length; ++k) {
+                this.chunkDistanceBuckets[k] = new ArrayList();
+            }
         }
     }
 
@@ -154,20 +160,53 @@ public class PlayerManager {
                 entityplayer.d = entityplayer.locX;
                 entityplayer.e = entityplayer.locZ;
 
-                // CraftBukkit start - send nearest chunks first
-                final int x = i;
-                final int z = j;
-                List<ChunkCoordIntPair> chunksToSend = entityplayer.chunkCoordIntPairQueue;
-                if (!chunksToSend.isEmpty()) {
-                    java.util.Collections.sort(chunksToSend, new java.util.Comparator<ChunkCoordIntPair>() {
-                        public int compare(ChunkCoordIntPair a, ChunkCoordIntPair b) {
-                            return Math.max(Math.abs(a.x - x), Math.abs(a.z - z)) - Math.max(Math.abs(b.x - x), Math.abs(b.z - z));
-                        }
-                    });
-                }
-                // CraftBukkit end
+                this.reorderChunkQueueNearestFirst(entityplayer, i, j);
             }
         }
+    }
+
+    private void reorderChunkQueueNearestFirst(EntityPlayer entityplayer, int centerX, int centerZ) {
+        List chunksToSend = entityplayer.chunkCoordIntPairQueue;
+        if (chunksToSend.size() < 2) {
+            return;
+        }
+
+        for (int i = 0; i < this.chunkDistanceBuckets.length; ++i) {
+            this.chunkDistanceBuckets[i].clear();
+        }
+
+        Iterator iterator = chunksToSend.iterator();
+        while (iterator.hasNext()) {
+            ChunkCoordIntPair pair = (ChunkCoordIntPair) iterator.next();
+            int distance = chunkDistance(pair, centerX, centerZ);
+            if (distance >= this.chunkDistanceBuckets.length) {
+                distance = this.chunkDistanceBuckets.length - 1;
+            }
+
+            this.chunkDistanceBuckets[distance].add(pair);
+        }
+
+        chunksToSend.clear();
+        for (int i = 0; i < this.chunkDistanceBuckets.length; ++i) {
+            ArrayList bucket = this.chunkDistanceBuckets[i];
+            if (!bucket.isEmpty()) {
+                chunksToSend.addAll(bucket);
+            }
+        }
+    }
+
+    private static int chunkDistance(ChunkCoordIntPair pair, int centerX, int centerZ) {
+        int dx = pair.x - centerX;
+        if (dx < 0) {
+            dx = -dx;
+        }
+
+        int dz = pair.z - centerZ;
+        if (dz < 0) {
+            dz = -dz;
+        }
+
+        return dx > dz ? dx : dz;
     }
 
     // Poseidon

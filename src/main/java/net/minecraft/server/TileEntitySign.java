@@ -5,6 +5,7 @@ public class TileEntitySign extends TileEntity {
     public String[] lines = new String[] { "", "", "", "" };
     public int b = -1;
     private boolean isEditable = true;
+    private String editingPlayerName;
     
     /** Text color as RGB integer (default black = 0x000000) */
     public int textColor = 0x000000;
@@ -43,6 +44,7 @@ public class TileEntitySign extends TileEntity {
 
     public void a(NBTTagCompound nbttagcompound) {
         this.isEditable = false;
+        this.editingPlayerName = null;
         super.a(nbttagcompound);
 
         for (int i = 0; i < 4; ++i) {
@@ -81,6 +83,30 @@ public class TileEntitySign extends TileEntity {
 
     public void a(boolean flag) {
         this.isEditable = flag;
+        if (!flag) {
+            this.editingPlayerName = null;
+        }
+    }
+
+    /** Bind this newly placed sign's single edit to the player who placed it. */
+    void beginEditing(String playerName) {
+        this.editingPlayerName = playerName == null || playerName.length() == 0 ? null : playerName;
+        this.isEditable = this.editingPlayerName != null;
+    }
+
+    /**
+     * Atomically consume the one permitted edit. Sign update packets can be
+     * replayed, so ownership must be checked and cleared before plugin events.
+     */
+    boolean finishEditing(String playerName) {
+        if (!this.isEditable || this.editingPlayerName == null || playerName == null
+                || !this.editingPlayerName.equalsIgnoreCase(playerName)) {
+            return false;
+        }
+
+        this.isEditable = false;
+        this.editingPlayerName = null;
+        return true;
     }
     
     /** Convert dye damage value to RGB color */

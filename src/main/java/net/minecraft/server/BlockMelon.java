@@ -25,17 +25,4 @@ public class BlockMelon extends Block {
         return 3 + random.nextInt(5);
     }
 
-    public void postBreak(World world, int i, int j, int k, int l) {
-        super.postBreak(world, i, j, k, l);
-        this.removeAdjacentStem(world, i - 1, j, k);
-        this.removeAdjacentStem(world, i + 1, j, k);
-        this.removeAdjacentStem(world, i, j, k - 1);
-        this.removeAdjacentStem(world, i, j, k + 1);
-    }
-
-    private void removeAdjacentStem(World world, int i, int j, int k) {
-        if (world.getTypeId(i, j, k) == Block.MELON_STEM.id) {
-            world.setTypeId(i, j, k, 0);
-        }
-    }
 }

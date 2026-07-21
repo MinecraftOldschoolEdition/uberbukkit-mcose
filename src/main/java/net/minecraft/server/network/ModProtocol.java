@@ -26,12 +26,15 @@ public final class ModProtocol {
     public static final int FEATURE_ENTITY_DATA_V2 = 1 << 5;
     public static final int FEATURE_REGIONCORE_ENTITIES = 1 << 6;
     public static final int FEATURE_SKIN_PARTS_SYNC = 1 << 7;
+    public static final int FEATURE_CLOUD_TIME_SYNC = 1 << 8;
+    public static final int FEATURE_CONTAINER_INPUTS = 1 << 9;
 
     public static final String CHANNEL_HELLO = "MCOSE|MOD_HELLO";
     public static final String CHANNEL_HELLO_ACK = "MCOSE|MOD_HELLO_ACK";
     public static final String CHANNEL_REGISTRY_SYNC = "MCOSE|REG_SYNC";
     public static final String CHANNEL_REGISTRY_REQUEST = "MCOSE|REG_REQ";
     public static final String CHANNEL_SKIN_PARTS = "MCOSE|SKINPARTS";
+    public static final String CHANNEL_CLOUD_TIME = "MCOSE|CLOUD_TIME";
 
     private ModProtocol() {}
 
@@ -96,7 +99,9 @@ public final class ModProtocol {
                 | FEATURE_ENTITY_WIRE_V2
                 | FEATURE_ENTITY_DATA_V2
                 | FEATURE_REGIONCORE_ENTITIES
-                | FEATURE_SKIN_PARTS_SYNC;
+                | FEATURE_SKIN_PARTS_SYNC
+                | FEATURE_CLOUD_TIME_SYNC
+                | FEATURE_CONTAINER_INPUTS;
         if (net.minecraft.server.ZstdRuntime.isAvailable()) {
             features |= FEATURE_CHUNK_ZSTD;
         }
@@ -106,6 +111,33 @@ public final class ModProtocol {
     public static boolean hasRequiredEntityFeatures(int featureBits) {
         int required = FEATURE_ENTITY_WIRE_V2 | FEATURE_ENTITY_DATA_V2;
         return (featureBits & required) == required;
+    }
+
+    public static byte[] createCloudTimePayload(long gameTime) {
+        try {
+            ByteArrayOutputStream baos = new ByteArrayOutputStream(8);
+            DataOutputStream out = new DataOutputStream(baos);
+            out.writeLong(gameTime);
+            out.flush();
+            return baos.toByteArray();
+        } catch (Throwable t) {
+            return new byte[0];
+        }
+    }
+
+    public static long readCloudTimePayload(byte[] payload) {
+        if (payload == null || payload.length != 8) {
+            return Long.MIN_VALUE;
+        }
+
+        try {
+            DataInputStream in = new DataInputStream(new ByteArrayInputStream(payload));
+            long gameTime = in.readLong();
+            in.close();
+            return gameTime;
+        } catch (Throwable ignored) {
+            return Long.MIN_VALUE;
+        }
     }
 
     public static byte[] createRegistrySyncPayload(RegistrySyncSnapshot snapshot) {

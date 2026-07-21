@@ -44,6 +44,14 @@ public final class CriticalBlockStateAccess {
     public static int getTorchMetadata(IBlockAccess access, int x, int y, int z) {
         BlockStateKey state = state(access, x, y, z);
         int fallback = access.getData(x, y, z) & 7;
+        String path = state.getBlockKey().getPath();
+        if ("redstone_torch".equals(path)) {
+            return 5;
+        }
+        if ("redstone_wall_torch".equals(path)) {
+            int meta = redstoneWallTorchMetaFromFacing(state.getProperty("facing"));
+            return meta < 0 ? fallback : meta;
+        }
         int meta = torchMetaFromFacing(state.getProperty("facing"));
         return meta < 0 ? fallback : meta;
     }
@@ -57,8 +65,11 @@ public final class CriticalBlockStateAccess {
         }
         String path = state.getBlockKey().getPath();
         boolean usesStickyBit = "piston_head".equals(path) || "moving_piston".equals(path) || "piston_moving".equals(path);
+        String pistonType = state.getProperty("type");
         boolean bit8 = usesStickyBit
-                ? getBoolean(state.getProperty("sticky"), (fallback & 8) != 0)
+                ? pistonType != null
+                        ? "sticky".equalsIgnoreCase(pistonType)
+                        : getBoolean(state.getProperty("sticky"), (fallback & 8) != 0)
                 : getBoolean(state.getProperty("extended"), (fallback & 8) != 0);
         return (facing & 7) | (bit8 ? 8 : 0);
     }
@@ -120,11 +131,19 @@ public final class CriticalBlockStateAccess {
         return -1;
     }
 
-    private static int repeaterMetaFromFacing(String facing) {
-        if ("north".equals(facing)) return 0;
+    private static int redstoneWallTorchMetaFromFacing(String facing) {
         if ("east".equals(facing)) return 1;
-        if ("south".equals(facing)) return 2;
-        if ("west".equals(facing)) return 3;
+        if ("west".equals(facing)) return 2;
+        if ("south".equals(facing)) return 3;
+        if ("north".equals(facing)) return 4;
+        return -1;
+    }
+
+    private static int repeaterMetaFromFacing(String facing) {
+        if ("south".equals(facing)) return 0;
+        if ("west".equals(facing)) return 1;
+        if ("north".equals(facing)) return 2;
+        if ("east".equals(facing)) return 3;
         return -1;
     }
 

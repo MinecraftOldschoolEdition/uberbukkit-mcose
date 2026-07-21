@@ -141,6 +141,26 @@ public final class ItemStack {
         if (Block.REDSTONE_TORCH_OFF != null && Block.REDSTONE_TORCH_ON != null && this.id == Block.REDSTONE_TORCH_OFF.id) {
             this.id = Block.REDSTONE_TORCH_ON.id;
         }
+
+        // Placed-state IDs can occur in old inventories and packets. Normalize
+        // them to the usable inventory items before RegionCore stores the stack.
+        if ((Block.SIGN_POST != null && this.id == Block.SIGN_POST.id)
+                || (Block.WALL_SIGN != null && this.id == Block.WALL_SIGN.id)) {
+            this.id = Item.SIGN.id;
+        } else if (Block.SUGAR_CANE_BLOCK != null && this.id == Block.SUGAR_CANE_BLOCK.id) {
+            this.id = Item.SUGAR_CANE.id;
+        } else if (Block.WOODEN_DOOR != null && this.id == Block.WOODEN_DOOR.id) {
+            this.id = Item.WOOD_DOOR.id;
+        } else if (Block.IRON_DOOR_BLOCK != null && this.id == Block.IRON_DOOR_BLOCK.id) {
+            this.id = Item.IRON_DOOR.id;
+        } else if (Block.BED != null && this.id == Block.BED.id) {
+            this.id = Item.BED.id;
+        } else if (Block.CAKE_BLOCK != null && this.id == Block.CAKE_BLOCK.id) {
+            this.id = Item.CAKE.id;
+        } else if ((Block.DIODE_OFF != null && this.id == Block.DIODE_OFF.id)
+                || (Block.DIODE_ON != null && this.id == Block.DIODE_ON.id)) {
+            this.id = Item.DIODE.id;
+        }
     }
 
     /**

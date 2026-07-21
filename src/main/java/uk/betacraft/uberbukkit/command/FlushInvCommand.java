@@ -39,7 +39,6 @@ public class FlushInvCommand extends Command {
         if (entity.netServerHandler.networkManager.pvn <= 6) {
             ArrayList<ItemStack> queue = entity.packet5.queue.dropAllQueue();
             for (ItemStack item : queue) {
-                System.out.println("Drop queue id: " + item.id + ", dmg: " + item.damage + ", cnt: " + item.count);
                 HashMap<Integer, org.bukkit.inventory.ItemStack> map = player.getInventory().addItem(new CraftItemStack(item));
                 // drop what couldn't fit in the inventory
                 for (org.bukkit.inventory.ItemStack stack : map.values()) {

@@ -46,9 +46,9 @@ settings:
         info: This setting causes the server to detect and kick malicious players who send too many packets in a short period of time. This is useful to prevent players from sending too many packets to the server to cause lag.
         threshold: 10000
     connection-throttle-ms:
-        value: 0
-        info: Minimum milliseconds between connections from the same IP. Set to 0 to disable (default). Only increase if you're experiencing connection spam attacks.
-        burst: 4
+        value: 4000
+        info: Minimum milliseconds between connection bursts from the same non-loopback IP. Set to 0 only behind a trusted rate-limiting proxy.
+        burst: 8
         burst-info: How many connections from one IP are allowed inside the throttle window before newer attempts are rejected.
     uuid-fetcher:
         allow-graceful-uuids:
@@ -74,8 +74,8 @@ settings:
             retry-delay-ms-info: Base delay in milliseconds before retrying modern session verification after transient failures.
             max-retry-delay-ms: 1000
             max-retry-delay-ms-info: Upper bound in milliseconds for exponential authentication retry backoff.
-            parallel-no-ip-fallback: true
-            parallel-no-ip-fallback-info: If enabled, authentication may perform a no-IP hasJoined fallback when the primary lookup is inconclusive or transiently failing.
+            parallel-no-ip-fallback: false
+            parallel-no-ip-fallback-info: Unsafe compatibility fallback for trusted proxies only. Direct public servers should keep this disabled so authentication remains bound to the connecting IP.
     support:
         modloader:
             enable: false
@@ -86,6 +86,15 @@ settings:
             enabled: true
         info: This setting causes the server to create a new log file each day. This is useful for log rotation and log file management.
         enabled: false
+    logging:
+        verbose:
+            info: Enables fine-grained internal diagnostics. Leave disabled during normal operation to keep console and file logs concise.
+            enabled: false
+        duplicate-suppression:
+            info: Limits identical messages within a short window while preserving the first few copies. This prevents broken plugins and repeated warnings from inflating log files.
+            enabled: true
+            window-seconds: 30
+            burst: 3
     statistics:
         key: cfa4fdd7-ee11-4aaf-ac2e-a198d4d2ed56
         enabled: true

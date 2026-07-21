@@ -11,6 +11,12 @@ import org.jetbrains.annotations.NotNull;
 import java.util.*;
 
 public class Explosion {
+    private static final int EXPLOSION_RAY_GRID_SIZE = 16;
+    private static final int EXPLOSION_RAY_COUNT = EXPLOSION_RAY_GRID_SIZE * EXPLOSION_RAY_GRID_SIZE * EXPLOSION_RAY_GRID_SIZE
+            - (EXPLOSION_RAY_GRID_SIZE - 2) * (EXPLOSION_RAY_GRID_SIZE - 2) * (EXPLOSION_RAY_GRID_SIZE - 2);
+    private static final float EXPLOSION_RAY_STEP = 0.3F;
+    private static final float EXPLOSION_RAY_DECAY = EXPLOSION_RAY_STEP * 0.75F;
+    private static final double[] EXPLOSION_RAYS = createExplosionRays();
     public boolean setFire = false;
     private final Random random = new Random();
     private final World world;
@@ -21,6 +27,7 @@ public class Explosion {
     public EntityDamageEvent.DamageCause customDamageCause = null; // Poseidon
     public float size;
     public Set<ChunkPosition> blocks = new HashSet<>(); // UberBukkit: Set -> Set<ChunkPosition>
+    private final Map<CacheKey, Float> blockDensityCache = new HashMap<CacheKey, Float>(); // Paper - Optimize explosions
 
     public boolean wasCanceled = false; // CraftBukkit
 
@@ -33,9 +40,33 @@ public class Explosion {
         this.posZ = d2;
     }
 
+    private static double[] createExplosionRays() {
+        double[] rays = new double[EXPLOSION_RAY_COUNT * 3];
+        int index = 0;
+        int edge = EXPLOSION_RAY_GRID_SIZE - 1;
+
+        for (int i = 0; i < EXPLOSION_RAY_GRID_SIZE; ++i) {
+            for (int j = 0; j < EXPLOSION_RAY_GRID_SIZE; ++j) {
+                for (int k = 0; k < EXPLOSION_RAY_GRID_SIZE; ++k) {
+                    if (i == 0 || i == edge || j == 0 || j == edge || k == 0 || k == edge) {
+                        double d0 = ((float) i / ((float) edge) * 2.0F - 1.0F);
+                        double d1 = ((float) j / ((float) edge) * 2.0F - 1.0F);
+                        double d2 = ((float) k / ((float) edge) * 2.0F - 1.0F);
+                        double d3 = Math.sqrt(d0 * d0 + d1 * d1 + d2 * d2);
+
+                        rays[index++] = d0 / d3 * (double) EXPLOSION_RAY_STEP;
+                        rays[index++] = d1 / d3 * (double) EXPLOSION_RAY_STEP;
+                        rays[index++] = d2 / d3 * (double) EXPLOSION_RAY_STEP;
+                    }
+                }
+            }
+        }
+
+        return rays;
+    }
+
     public void a() {
         float f = this.size;
-        byte b0 = 16;
 
         int i;
         int j;
@@ -44,44 +75,33 @@ public class Explosion {
         double d1;
         double d2;
 
-        for (i = 0; i < b0; ++i) {
-            for (j = 0; j < b0; ++j) {
-                for (k = 0; k < b0; ++k) {
-                    if (i == 0 || i == b0 - 1 || j == 0 || j == b0 - 1 || k == 0 || k == b0 - 1) {
-                        double d3 = ((float) i / ((float) b0 - 1.0F) * 2.0F - 1.0F);
-                        double d4 = ((float) j / ((float) b0 - 1.0F) * 2.0F - 1.0F);
-                        double d5 = ((float) k / ((float) b0 - 1.0F) * 2.0F - 1.0F);
-                        double d6 = Math.sqrt(d3 * d3 + d4 * d4 + d5 * d5);
+        for (int ray = 0; ray < EXPLOSION_RAYS.length; ray += 3) {
+            double d3 = EXPLOSION_RAYS[ray];
+            double d4 = EXPLOSION_RAYS[ray + 1];
+            double d5 = EXPLOSION_RAYS[ray + 2];
+            float f1 = this.size * (0.7F + this.world.random.nextFloat() * 0.6F);
 
-                        d3 /= d6;
-                        d4 /= d6;
-                        d5 /= d6;
-                        float f1 = this.size * (0.7F + this.world.random.nextFloat() * 0.6F);
+            d0 = this.posX;
+            d1 = this.posY;
+            d2 = this.posZ;
 
-                        d0 = this.posX;
-                        d1 = this.posY;
-                        d2 = this.posZ;
+            for (; f1 > 0.0F; f1 -= EXPLOSION_RAY_DECAY) {
+                int l = MathHelper.floor(d0);
+                int i1 = MathHelper.floor(d1);
+                int j1 = MathHelper.floor(d2);
+                int k1 = this.world.getTypeId(l, i1, j1);
 
-                        for (float f2 = 0.3F; f1 > 0.0F; f1 -= f2 * 0.75F) {
-                            int l = MathHelper.floor(d0);
-                            int i1 = MathHelper.floor(d1);
-                            int j1 = MathHelper.floor(d2);
-                            int k1 = this.world.getTypeId(l, i1, j1);
-
-                            if (k1 > 0) {
-                                f1 -= (Block.byId[k1].a(this.source) + 0.3F) * f2;
-                            }
-
-                            if (f1 > 0.0F) {
-                                this.blocks.add(new ChunkPosition(l, i1, j1));
-                            }
-
-                            d0 += d3 * (double) f2;
-                            d1 += d4 * (double) f2;
-                            d2 += d5 * (double) f2;
-                        }
-                    }
+                if (k1 > 0) {
+                    f1 -= (Block.byId[k1].a(this.source) + 0.3F) * EXPLOSION_RAY_STEP;
                 }
+
+                if (f1 > 0.0F) {
+                    this.blocks.add(new ChunkPosition(l, i1, j1));
+                }
+
+                d0 += d3;
+                d1 += d4;
+                d2 += d5;
             }
         }
 
@@ -166,8 +186,7 @@ public class Explosion {
 
         this.size = f;
 
-        ArrayList<ChunkPosition> arraylist = new ArrayList<>();
-        arraylist.addAll(this.blocks);
+        ArrayList<ChunkPosition> arraylist = new ArrayList<>(this.blocks);
 
         boolean allowFireTick = this.world.worldData == null || this.world.worldData.getDoFireTick();
         if (this.setFire && allowFireTick) {
@@ -202,19 +221,17 @@ public class Explosion {
     public void a(boolean flag) {
         this.world.makeSound(this.posX, this.posY, this.posZ, "random.explode", 4.0F, (1.0F + (this.world.random.nextFloat() - this.world.random.nextFloat()) * 0.2F) * 0.7F);
 
-        ArrayList<ChunkPosition> blocksCopy = new ArrayList<>(this.blocks);
-
         // CraftBukkit start
         org.bukkit.World bworld = this.world.getWorld();
         org.bukkit.entity.Entity explode = this.source == null ? null : this.source.getBukkitEntity();
         Location location = new Location(bworld, this.posX, this.posY, this.posZ);
 
-        List<org.bukkit.block.Block> blockList = new ArrayList<>();
-        for (int j = blocksCopy.size() - 1; j >= 0; j--) {
-            ChunkPosition cpos = blocksCopy.get(j);
+        List<org.bukkit.block.Block> blockList = new ArrayList<org.bukkit.block.Block>(this.blocks.size());
+        Iterator blockIterator = this.blocks.iterator();
+        while (blockIterator.hasNext()) {
+            ChunkPosition cpos = (ChunkPosition) blockIterator.next();
             // UberBukkit - No need to handle blocks that aren't in the world's boundaries
             if (cpos.y > 127 || cpos.y < 0) {
-                blocksCopy.remove(j);
                 continue;
             }
 
@@ -237,22 +254,19 @@ public class Explosion {
 
         // Project Poseidon Start
         // Backport from newer CraftBukkit
-        blocksCopy.clear();
         this.blocks.clear();
-        for (final org.bukkit.block.Block block2 : event.blockList()) {
-            final ChunkPosition coords = new ChunkPosition(block2.getX(), block2.getY(), block2.getZ());
-            blocksCopy.add(coords);
-            this.blocks.add(coords);
-        }
         // Project Poseidon End
         // CraftBukkit end
 
-        for (int i = blocksCopy.size() - 1; i >= 0; --i) {
-            ChunkPosition chunkposition = blocksCopy.get(i);
-            int j = chunkposition.x;
-            int k = chunkposition.y;
-            int l = chunkposition.z;
+        List<org.bukkit.block.Block> eventBlocks = event.blockList();
+        for (int i = eventBlocks.size() - 1; i >= 0; --i) {
+            org.bukkit.block.Block eventBlock = eventBlocks.get(i);
+            int j = eventBlock.getX();
+            int k = eventBlock.getY();
+            int l = eventBlock.getZ();
             int i1 = this.world.getTypeId(j, k, l);
+
+            this.blocks.add(new ChunkPosition(j, k, l));
 
             if (flag) {
                 double d0 = (float) j + this.world.random.nextFloat();
@@ -325,10 +339,10 @@ public class Explosion {
     // Paper start - Optimize explosions
     private float getBlockDensity(Vec3D vec3d, Entity entity) {
         CacheKey key = new CacheKey(this, entity.boundingBox);
-        Float blockDensity = this.world.explosionDensityCache.get(key);
+        Float blockDensity = this.blockDensityCache.get(key);
         if (blockDensity == null) {
             blockDensity = this.world.a(vec3d, entity.boundingBox);
-            this.world.explosionDensityCache.put(key, blockDensity);
+            this.blockDensityCache.put(key, blockDensity);
         }
 
         return blockDensity;

@@ -105,6 +105,22 @@ public abstract class Packet {
 
     // CraftBukkit - throws IOException
     public static Packet a(DataInputStream datainputstream, boolean flag, int pvn) throws IOException {
+        return a(datainputstream, flag, pvn, false);
+    }
+
+    // CraftBukkit - throws IOException
+    static Packet a(DataInputStream datainputstream, boolean flag, int pvn, boolean loginPhase) throws IOException {
+        return a(datainputstream, flag, pvn, loginPhase, null);
+    }
+
+    // The read can block while the connection transitions from login to gameplay.
+    // Consult live state only after the packet id arrives so the first gameplay
+    // packet is not rejected using a stale pre-login snapshot.
+    static Packet a(DataInputStream datainputstream, boolean flag, int pvn, LoginPhaseState loginPhaseState) throws IOException {
+        return a(datainputstream, flag, pvn, false, loginPhaseState);
+    }
+
+    private static Packet a(DataInputStream datainputstream, boolean flag, int pvn, boolean fixedLoginPhase, LoginPhaseState loginPhaseState) throws IOException {
         boolean flag1 = false;
         Packet packet = null;
 
@@ -114,6 +130,13 @@ public abstract class Packet {
             i = datainputstream.read();
             if (i == -1) {
                 return null;
+            }
+
+            // Reject unexpected login-phase packets before their body parser can
+            // allocate memory or recurse through attacker-controlled structures.
+            boolean loginPhase = loginPhaseState != null ? loginPhaseState.isLoginPhase() : fixedLoginPhase;
+            if (loginPhase && !isAllowedLoginPacketId(i)) {
+                throw new IOException("Packet " + i + " is not allowed before login");
             }
 
             if (flag && !serverPacketIdList.contains(Integer.valueOf(i)) || !flag && !clientPacketIdList.contains(Integer.valueOf(i))) {
@@ -158,6 +181,18 @@ public abstract class Packet {
         }
 
         return packet;
+    }
+
+    interface LoginPhaseState {
+        boolean isLoginPhase();
+    }
+
+    static boolean isAllowedLoginPacketId(int packetId) {
+        return packetId == 0   // keep alive
+                || packetId == 1   // login
+                || packetId == 2   // handshake
+                || packetId == 252 // modern authentication response
+                || packetId == 254; // legacy server-list ping
     }
 
     // CraftBukkit - throws IOException

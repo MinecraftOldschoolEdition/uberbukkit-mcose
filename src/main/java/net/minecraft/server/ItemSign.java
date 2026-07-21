@@ -66,6 +66,7 @@ public class ItemSign extends Item {
                 TileEntitySign tileentitysign = (TileEntitySign) world.getTileEntity(i, j, k);
 
                 if (tileentitysign != null) {
+                    tileentitysign.beginEditing(entityhuman.name);
                     entityhuman.a(tileentitysign);
                 }
 

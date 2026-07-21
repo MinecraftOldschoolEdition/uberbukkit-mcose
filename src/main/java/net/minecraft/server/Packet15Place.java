@@ -46,14 +46,24 @@ public class Packet15Place extends Packet {
                     short2 = datainputstream.readByte();
                 }
 
+                if (short1 >= Item.byId.length || Item.byId[short1] == null) {
+                    throw new IOException("Invalid item id " + short1 + " in block place packet");
+                }
+
+                if (b0 <= 0) {
+                    throw new IOException("Invalid item count " + b0 + " for item " + short1 + " in block place packet");
+                }
+
                 this.itemstack = new ItemStack(short1, b0, short2);
-                
+
                 // Read NBT data if present (MCOSE protocol extension, pvn >= 14)
                 if (this.pvn >= 14) {
                     this.itemstack.tag = PacketLimits.readCompressedNBT(datainputstream, PacketLimits.MAX_ITEM_NBT_BYTES, "item NBT");
                 }
-            } else {
+            } else if (short1 == -1) {
                 this.itemstack = null;
+            } else {
+                throw new IOException("Invalid item id " + short1 + " in block place packet");
             }
         }
     }
@@ -83,7 +93,7 @@ public class Packet15Place extends Packet {
                 } else {
                     dataoutputstream.writeByte(this.itemstack.getData());
                 }
-                
+
                 // Write NBT data if present (MCOSE protocol extension, pvn >= 14)
                 if (this.pvn >= 14) {
                     if (this.itemstack.tag != null) {

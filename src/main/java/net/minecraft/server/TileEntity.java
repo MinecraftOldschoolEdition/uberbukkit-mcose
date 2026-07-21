@@ -47,6 +47,10 @@ public class TileEntity {
     public void g_() {
     }
 
+    public boolean isTickable() {
+        return false;
+    }
+
     public static TileEntity c(NBTTagCompound nbttagcompound) {
         TileEntity tileentity = null;
 

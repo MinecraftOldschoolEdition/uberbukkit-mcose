@@ -20,6 +20,18 @@ import java.util.List;
 
 public abstract class EntityLiving extends Entity {
 
+    private static final String MOB_HARD_DESPAWN_RANGE_CONFIG = "world.settings.mob-despawn-range.hard";
+    private static final String MOB_SOFT_DESPAWN_RANGE_CONFIG = "world.settings.mob-despawn-range.soft";
+    private static final String MAX_ENTITY_COLLISIONS_CONFIG = "world.settings.max-entity-collisions";
+    private static final int VANILLA_HARD_DESPAWN_RANGE = 128;
+    private static final int VANILLA_SOFT_DESPAWN_RANGE = 32;
+    private static final int DEFAULT_MAX_ENTITY_COLLISIONS = 8;
+    private static boolean mobDespawnRangesLoaded = false;
+    private static boolean maxEntityCollisionsLoaded = false;
+    private static double mobHardDespawnRangeSquared = VANILLA_HARD_DESPAWN_RANGE * VANILLA_HARD_DESPAWN_RANGE;
+    private static double mobSoftDespawnRangeSquared = VANILLA_SOFT_DESPAWN_RANGE * VANILLA_SOFT_DESPAWN_RANGE;
+    private static int maxEntityCollisions = DEFAULT_MAX_ENTITY_COLLISIONS;
+
     private final CombatTracker combatTracker = new CombatTracker(this);
     public int maxNoDamageTicks = 20;
     public float I;
@@ -255,27 +267,11 @@ public abstract class EntityLiving extends Entity {
 
         this.N += (f3 - this.N) * 0.3F;
 
-        float f4;
-
-        for (f4 = f1 - this.K; f4 < -180.0F; f4 += 360.0F) {
-            ;
-        }
-
-        while (f4 >= 180.0F) {
-            f4 -= 360.0F;
-        }
+        float f4 = MathHelper.wrapDegrees(f1 - this.K);
 
         this.K += f4 * 0.3F;
 
-        float f5;
-
-        for (f5 = this.yaw - this.K; f5 < -180.0F; f5 += 360.0F) {
-            ;
-        }
-
-        while (f5 >= 180.0F) {
-            f5 -= 360.0F;
-        }
+        float f5 = MathHelper.wrapDegrees(this.yaw - this.K);
 
         boolean flag = f5 < -90.0F || f5 >= 90.0F;
 
@@ -296,29 +292,9 @@ public abstract class EntityLiving extends Entity {
             f2 *= -1.0F;
         }
 
-        while (this.yaw - this.lastYaw < -180.0F) {
-            this.lastYaw -= 360.0F;
-        }
-
-        while (this.yaw - this.lastYaw >= 180.0F) {
-            this.lastYaw += 360.0F;
-        }
-
-        while (this.K - this.L < -180.0F) {
-            this.L -= 360.0F;
-        }
-
-        while (this.K - this.L >= 180.0F) {
-            this.L += 360.0F;
-        }
-
-        while (this.pitch - this.lastPitch < -180.0F) {
-            this.lastPitch -= 360.0F;
-        }
-
-        while (this.pitch - this.lastPitch >= 180.0F) {
-            this.lastPitch += 360.0F;
-        }
+        this.lastYaw = this.yaw - MathHelper.wrapDegrees(this.yaw - this.lastYaw);
+        this.L = this.K - MathHelper.wrapDegrees(this.K - this.L);
+        this.lastPitch = this.pitch - MathHelper.wrapDegrees(this.pitch - this.lastPitch);
 
         this.O += f2;
     }
@@ -793,13 +769,21 @@ public abstract class EntityLiving extends Entity {
         this.aA *= 0.98F;
         this.aB *= 0.9F;
         this.a(this.az, this.aA);
+        int collisionLimit = getMaxEntityCollisions();
+        this.numCollisions = Math.max(0, this.numCollisions - collisionLimit);
+        if (collisionLimit <= 0 || this.numCollisions >= collisionLimit) {
+            return;
+        }
+
         List list1 = this.world.b((Entity) this, this.boundingBox.b(0.20000000298023224D, 0.0D, 0.20000000298023224D));
 
         if (list1 != null && list1.size() > 0) {
-            for (int j = 0; j < list1.size(); ++j) {
+            for (int j = 0; j < list1.size() && this.numCollisions < collisionLimit; ++j) {
                 Entity entity = (Entity) list1.get(j);
 
                 if (entity.d_()) {
+                    ++entity.numCollisions;
+                    ++this.numCollisions;
                     entity.collide(this);
                 }
             }
@@ -824,23 +808,70 @@ public abstract class EntityLiving extends Entity {
         EntityHuman entityhuman = this.world.findNearbyPlayer(this, -1.0D);
 
         if (this.h_() && entityhuman != null) {
+            loadMobDespawnRanges();
             double d0 = entityhuman.locX - this.locX;
             double d1 = entityhuman.locY - this.locY;
             double d2 = entityhuman.locZ - this.locZ;
             double d3 = d0 * d0 + d1 * d1 + d2 * d2;
 
-            if (d3 > 16384.0D) {
+            if (d3 > mobHardDespawnRangeSquared) {
                 this.die();
             }
 
             if (this.ay > 600 && this.random.nextInt(800) == 0) {
-                if (d3 < 1024.0D) {
+                if (d3 < mobSoftDespawnRangeSquared) {
                     this.ay = 0;
                 } else {
                     this.die();
                 }
             }
         }
+    }
+
+    private static void loadMobDespawnRanges() {
+        if (mobDespawnRangesLoaded) {
+            return;
+        }
+
+        PoseidonConfig config = PoseidonConfig.getInstance();
+        int hardRange = getConfigInt(config, MOB_HARD_DESPAWN_RANGE_CONFIG, VANILLA_HARD_DESPAWN_RANGE, 1, 4096);
+        int softRange = getConfigInt(config, MOB_SOFT_DESPAWN_RANGE_CONFIG, VANILLA_SOFT_DESPAWN_RANGE, 1, 4096);
+
+        if (hardRange < softRange) {
+            hardRange = softRange;
+        }
+
+        mobHardDespawnRangeSquared = squareAsDouble(hardRange);
+        mobSoftDespawnRangeSquared = squareAsDouble(softRange);
+        mobDespawnRangesLoaded = true;
+    }
+
+    private static int getMaxEntityCollisions() {
+        if (!maxEntityCollisionsLoaded) {
+            maxEntityCollisions = getConfigInt(PoseidonConfig.getInstance(), MAX_ENTITY_COLLISIONS_CONFIG, DEFAULT_MAX_ENTITY_COLLISIONS, 0, 1024);
+            maxEntityCollisionsLoaded = true;
+        }
+        return maxEntityCollisions;
+    }
+
+    private static int getConfigInt(PoseidonConfig config, String key, int defaultValue, int min, int max) {
+        int value = defaultValue;
+        try {
+            Object option = config.getConfigOption(key, Integer.valueOf(defaultValue));
+            if (option instanceof Number) {
+                value = ((Number) option).intValue();
+            } else {
+                value = Integer.parseInt(String.valueOf(option));
+            }
+        } catch (Exception e) {
+            value = defaultValue;
+        }
+
+        return Math.max(min, Math.min(max, value));
+    }
+
+    private static double squareAsDouble(int value) {
+        return (double) value * (double) value;
     }
 
     protected void c_() {
@@ -943,7 +974,7 @@ public abstract class EntityLiving extends Entity {
     }
 
     public boolean d() {
-        return this.world.containsEntity(this.boundingBox) && this.world.getEntities(this, this.boundingBox).size() == 0 && !this.world.c(this.boundingBox);
+        return this.world.containsEntity(this.boundingBox) && !this.world.hasCollision(this, this.boundingBox) && !this.world.c(this.boundingBox);
     }
 
     protected void Y() {

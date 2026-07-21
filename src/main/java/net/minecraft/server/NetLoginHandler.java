@@ -27,6 +27,7 @@ public class NetLoginHandler extends NetHandler {
 
     public static Logger a = Logger.getLogger("Minecraft");
     private static Random d = new Random();
+    private static final SecureRandom VERIFY_TOKEN_RANDOM = new SecureRandom();
     public NetworkManager networkManager;
     public volatile boolean c = false;
     private MinecraftServer server;
@@ -37,6 +38,10 @@ public class NetLoginHandler extends NetHandler {
     private ConnectionType connectionType;
     private boolean usingReleaseToBeta = false; //Poseidon -> Release2Beta support
     private boolean receivedLoginPacket = false;
+    private boolean receivedHandshake = false;
+    private boolean receivedSharedKey = false;
+    private String handshakeUsername;
+    private volatile LoginProcessHandler loginProcessHandler;
     private int rawConnectionType;
     private boolean receivedKeepAlive = false;
 
@@ -44,7 +49,6 @@ public class NetLoginHandler extends NetHandler {
     private boolean modernAuthEnabled = false;
     private byte[] verifyToken;
     private SecretKey sharedSecret;
-    private boolean modernAuthWithoutEncryption = true; // Beta 1.7.3 doesn't support encryption
 
     private final String msgKickShutdown;
 
@@ -67,12 +71,27 @@ public class NetLoginHandler extends NetHandler {
     // CraftBukkit end
 
     public void a() {
+        this.a(true);
+    }
+
+    public boolean a(boolean allowLoginCompletion) {
         Packet1Login pendingLogin = this.h;
         if (pendingLogin != null) {
+            if (!allowLoginCompletion) {
+                this.tickNetworkDuringLogin();
+                return false;
+            }
+
             this.h = null;
             this.b(pendingLogin);
+            return true;
         }
 
+        this.tickNetworkDuringLogin();
+        return false;
+    }
+
+    private void tickNetworkDuringLogin() {
         if (this.f++ == 600) {
             this.disconnect("Took too long to log in");
         } else {
@@ -80,7 +99,12 @@ public class NetLoginHandler extends NetHandler {
         }
     }
 
+    public boolean hasPendingLoginCompletion() {
+        return this.h != null;
+    }
+
     public void disconnect(String s) {
+        this.cancelPendingAuthentication();
         try {
             a.info("Disconnecting " + this.b() + ": " + s);
             this.networkManager.queue(new Packet255KickDisconnect(s));
@@ -92,15 +116,30 @@ public class NetLoginHandler extends NetHandler {
     }
 
     public void a(Packet2Handshake packet2handshake) {
+        if (this.receivedHandshake) {
+            this.disconnect("Multiple handshake packets received.");
+            return;
+        }
+
+        String usernameError = validateHandshakeUsername(packet2handshake.a);
+        if (usernameError != null) {
+            this.disconnect(usernameError);
+            return;
+        }
+
+        this.receivedHandshake = true;
+        this.handshakeUsername = packet2handshake.a;
+        this.g = packet2handshake.a;
+
         // Online mode uses modern Mojang authentication
         if (this.server.onlineMode) {
             if (!CrackedAllowlist.get().contains(packet2handshake.a)) {
                 // Use modern authentication flow
                 this.modernAuthEnabled = true;
-                a.info("[AUTH] Using modern Mojang authentication for " + packet2handshake.a);
+                a.fine("[AUTH] Using modern Mojang authentication for " + packet2handshake.a);
 
                 this.verifyToken = new byte[4];
-                new SecureRandom().nextBytes(this.verifyToken);
+                VERIFY_TOKEN_RANDOM.nextBytes(this.verifyToken);
 
                 KeyPair keyPair = CryptoHelper.getServerKeyPair();
                 this.serverId = ""; // Empty string for modern auth
@@ -108,7 +147,7 @@ public class NetLoginHandler extends NetHandler {
                 return;
             }
             // Cracked allowlist bypasses auth
-            a.info("[AUTH] Cracked allowlist user '" + packet2handshake.a + "' bypassing authentication");
+            a.fine("[AUTH] Cracked allowlist user '" + packet2handshake.a + "' bypassing authentication");
             this.networkManager.queue(new Packet2Handshake("-", packet2handshake.pvn11));
             return;
         }
@@ -123,10 +162,11 @@ public class NetLoginHandler extends NetHandler {
 
     // Handler for modern authentication response
     public void a(Packet252SharedKey packet252SharedKey) {
-        if (!this.modernAuthEnabled || !this.server.onlineMode) {
+        if (!this.modernAuthEnabled || !this.server.onlineMode || this.receivedSharedKey) {
             this.disconnect("Protocol error");
             return;
         }
+        this.receivedSharedKey = true;
 
         try {
             KeyPair keyPair = CryptoHelper.getServerKeyPair();
@@ -141,11 +181,12 @@ public class NetLoginHandler extends NetHandler {
             this.sharedSecret = CryptoHelper.createSecretKey(decryptedSecret);
             this.serverId = CryptoHelper.generateServerId("", keyPair.getPublic(), this.sharedSecret);
 
-            // No link-layer encryption is enabled for b1.7.3; continue waiting for login
-            if (this.modernAuthWithoutEncryption) {
-                this.f = 0; // reset timeout
-                this.receivedLoginPacket = false;
-            }
+            // Packet252 itself was plaintext. From this point onward the game
+            // stream is encrypted, which channel-binds the Mojang proof to the
+            // party that generated the shared AES secret and prevents relay login.
+            this.networkManager.enableEncryption(this.sharedSecret);
+            this.f = 0; // reset timeout
+            this.receivedLoginPacket = false;
         } catch (Exception e) {
             a.warning("Error handling encryption response: " + e.getMessage());
             this.disconnect("Encryption error");
@@ -155,6 +196,18 @@ public class NetLoginHandler extends NetHandler {
     public void a(Packet1Login packet1login) {
         if (receivedLoginPacket) {
             this.disconnect("Multiple login packets received.");
+            return;
+        }
+        if (!this.receivedHandshake) {
+            this.disconnect("Login sent before handshake.");
+            return;
+        }
+        if (this.handshakeUsername == null || !this.handshakeUsername.equals(packet1login.name)) {
+            this.disconnect("Handshake and login usernames do not match.");
+            return;
+        }
+        if (this.modernAuthEnabled && !this.receivedSharedKey) {
+            this.disconnect("Authentication response required.");
             return;
         }
         receivedLoginPacket = true;
@@ -366,7 +419,19 @@ public class NetLoginHandler extends NetHandler {
 
     public void a(String s, Object[] aobject) {
         a.info(this.b() + " lost connection");
+        this.cancelPendingAuthentication();
         this.c = true;
+    }
+
+    public void setLoginProcessHandler(LoginProcessHandler loginProcessHandler) {
+        this.loginProcessHandler = loginProcessHandler;
+    }
+
+    private void cancelPendingAuthentication() {
+        LoginProcessHandler process = this.loginProcessHandler;
+        if (process != null) {
+            process.cancelAuthenticationTask();
+        }
     }
 
     public void a(Packet packet) {
@@ -431,6 +496,45 @@ public class NetLoginHandler extends NetHandler {
      */
     public String getServerID() {
         return serverId;
+    }
+
+    static String validateHandshakeUsername(String username) {
+        if (username == null || username.length() == 0 || username.length() > 16) {
+            return "Invalid username.";
+        }
+
+        // This check is an invariant even when legacy username validation is
+        // disabled: player names are used as filenames by the save manager.
+        // Never allow a login name to escape the players directory.
+        for (int i = 0; i < username.length(); ++i) {
+            char ch = username.charAt(i);
+            if (ch == '/' || ch == '\\' || ch == ':' || Character.isISOControl(ch)) {
+                return "Invalid username.";
+            }
+        }
+
+        PoseidonConfig config = PoseidonConfig.getInstance();
+        if (!config.getConfigBoolean("settings.check-username-validity.enabled", true)) {
+            return null;
+        }
+
+        int minimumLength = Math.max(1, config.getInt("settings.check-username-validity.min-length", 3));
+        int maximumLength = Math.min(16, Math.max(minimumLength, config.getInt("settings.check-username-validity.max-length", 16)));
+        if (username.length() < minimumLength || username.length() > maximumLength) {
+            return "Invalid username length.";
+        }
+
+        String regex = String.valueOf(config.getConfigOption("settings.check-username-validity.regex", "[a-zA-Z0-9_?]*"));
+        try {
+            if (!username.matches(regex)) {
+                return "Invalid username.";
+            }
+        } catch (RuntimeException invalidRegex) {
+            if (!username.matches("[a-zA-Z0-9_?]*")) {
+                return "Invalid username.";
+            }
+        }
+        return null;
     }
 
     static String a(NetLoginHandler netloginhandler) {

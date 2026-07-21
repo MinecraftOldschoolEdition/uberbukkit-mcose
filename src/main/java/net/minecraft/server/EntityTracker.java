@@ -1,6 +1,7 @@
 package net.minecraft.server;
 
 import com.legacyminecraft.poseidon.PoseidonConfig;
+import org.bukkit.craftbukkit.util.LongHashtable;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -12,6 +13,8 @@ public class EntityTracker {
 
     private Set a = new HashSet();
     public EntityList b = new EntityList(); //Project Poseidon: private -> public
+    private LongHashtable<Set> trackedEntriesByChunk = new LongHashtable<Set>();
+    private final ArrayList movedPlayerTrackers = new ArrayList();
     private MinecraftServer c;
     private int d;
     private int e;
@@ -55,6 +58,51 @@ public class EntityTracker {
         NEAR,
         MID,
         FAR
+    }
+
+    private long chunkKey(int chunkX, int chunkZ) {
+        return ((long) chunkX << 32) ^ (chunkZ & 4294967295L);
+    }
+
+    private void removeFromChunkIndex(EntityTrackerEntry entitytrackerentry, long key) {
+        Set entries = (Set) this.trackedEntriesByChunk.get(key);
+
+        if (entries != null) {
+            entries.remove(entitytrackerentry);
+            if (entries.isEmpty()) {
+                this.trackedEntriesByChunk.remove(key);
+            }
+        }
+    }
+
+    private void updateChunkIndex(EntityTrackerEntry entitytrackerentry) {
+        long key = this.chunkKey(entitytrackerentry.tracker.bH, entitytrackerentry.tracker.bJ);
+
+        if (entitytrackerentry.hasTrackedChunkKey && key == entitytrackerentry.trackedChunkKey) {
+            return;
+        }
+
+        if (entitytrackerentry.hasTrackedChunkKey) {
+            this.removeFromChunkIndex(entitytrackerentry, entitytrackerentry.trackedChunkKey);
+        }
+
+        Set entries = (Set) this.trackedEntriesByChunk.get(key);
+
+        if (entries == null) {
+            entries = new HashSet();
+            this.trackedEntriesByChunk.put(key, entries);
+        }
+
+        entries.add(entitytrackerentry);
+        entitytrackerentry.trackedChunkKey = key;
+        entitytrackerentry.hasTrackedChunkKey = true;
+    }
+
+    private void removeFromChunkIndex(EntityTrackerEntry entitytrackerentry) {
+        if (entitytrackerentry.hasTrackedChunkKey) {
+            this.removeFromChunkIndex(entitytrackerentry, entitytrackerentry.trackedChunkKey);
+            entitytrackerentry.hasTrackedChunkKey = false;
+        }
     }
 
     public EntityTracker(MinecraftServer minecraftserver, int i) {
@@ -389,6 +437,7 @@ public class EntityTracker {
 
             this.a.add(entitytrackerentry);
             this.b.a(entity.id, entitytrackerentry);
+            this.updateChunkIndex(entitytrackerentry);
             entitytrackerentry.scanPlayers(this.c.getWorldServer(this.e).players);
         }
     }
@@ -410,13 +459,15 @@ public class EntityTracker {
 
         if (entitytrackerentry1 != null) {
             this.a.remove(entitytrackerentry1);
+            this.removeFromChunkIndex(entitytrackerentry1);
             entitytrackerentry1.a();
         }
     }
 
     // CraftBukkit - synchronized
     public synchronized void updatePlayers() {
-        ArrayList arraylist = new ArrayList();
+        ArrayList arraylist = this.movedPlayerTrackers;
+        arraylist.clear();
         Iterator iterator = this.a.iterator();
         List players = this.c.getWorldServer(this.e).players;
         TrackingPressureState state = evaluateTrackingPressureState();
@@ -427,6 +478,7 @@ public class EntityTracker {
         while (iterator.hasNext()) {
             EntityTrackerEntry entitytrackerentry = (EntityTrackerEntry) iterator.next();
 
+            this.updateChunkIndex(entitytrackerentry);
             TrackingDistanceBand skipBand = getSkipBand(entitytrackerentry, state, players);
             if (skipBand != null) {
                 if (skipBand == TrackingDistanceBand.NEAR) {
@@ -461,6 +513,8 @@ public class EntityTracker {
                 }
             }
         }
+
+        arraylist.clear();
     }
 
     public synchronized TrackingPressureState getTrackingPressureState() {
@@ -529,7 +583,13 @@ public class EntityTracker {
     // Poseidon
     // CraftBukkit - synchronized
     public synchronized void a(EntityPlayer entityplayer, Chunk chunk) {
-        Iterator iterator = this.a.iterator();
+        Set entries = (Set) this.trackedEntriesByChunk.get(this.chunkKey(chunk.x, chunk.z));
+
+        if (entries == null || entries.isEmpty()) {
+            return;
+        }
+
+        Iterator iterator = entries.iterator();
 
         while (iterator.hasNext()) {
             EntityTrackerEntry entitytrackerentry = (EntityTrackerEntry) iterator.next();

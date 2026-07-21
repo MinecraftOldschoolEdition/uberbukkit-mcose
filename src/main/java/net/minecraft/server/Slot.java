@@ -23,6 +23,11 @@ public class Slot {
         return true;
     }
 
+    /** Read-only menu slots may override removal independently of placement. */
+    public boolean canTakeStack() {
+        return true;
+    }
+
     public ItemStack getItem() {
         return this.inventory.getItem(this.index);
     }

@@ -3,6 +3,7 @@ package net.minecraft.server;
 import java.io.*;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 
 public class ChunkLoader implements IChunkLoader {
 
@@ -120,7 +121,7 @@ public class ChunkLoader implements IChunkLoader {
         nbttagcompound.setLong("LastUpdate", world.getTime());
         NibbleArray data = chunk.e == null ? new NibbleArray(chunk.b.length) : chunk.e;
         WorldData worldData = world == null ? null : world.q();
-        boolean writeStateOnly = worldData != null && worldData.i() >= WorldSaveVersions.MCREGION_2;
+        boolean writeStateOnly = worldData != null && WorldSaveVersions.usesStatePalette(worldData.i());
         if (writeStateOnly) {
             if (shouldPreserveOriginalRegionCoreState(chunk)) {
                 preserveOriginalRegionCoreState(nbttagcompound, chunk);
@@ -140,6 +141,7 @@ public class ChunkLoader implements IChunkLoader {
 
         Iterator iterator;
         NBTTagCompound nbttagcompound1;
+        Map savedEntityCounts = ChunkEntityLimits.createCounter();
 
         for (int i = 0; i < chunk.entitySlices.length; ++i) {
             iterator = chunk.entitySlices[i].iterator();
@@ -149,7 +151,7 @@ public class ChunkLoader implements IChunkLoader {
 
                 chunk.q = true;
                 nbttagcompound1 = new NBTTagCompound();
-                if (entity.c(nbttagcompound1)) {
+                if (entity.c(nbttagcompound1) && ChunkEntityLimits.canSave(nbttagcompound1, entity, savedEntityCounts)) {
                     nbttaglist.a((NBTBase) nbttagcompound1);
                 }
             }
@@ -224,9 +226,11 @@ public class ChunkLoader implements IChunkLoader {
             chunk.regionCoreOriginalStateData = copyBytes(nbttagcompound.j(BlockStateCodec.KEY_DATA));
             chunk.regionCoreOriginalStateHasBits = nbttagcompound.hasKey(BlockStateCodec.KEY_BITS);
             chunk.regionCoreOriginalStateBits = nbttagcompound.c(BlockStateCodec.KEY_BITS);
+            chunk.regionCoreOriginalStateHasVersion = nbttagcompound.hasKey(BlockStateCodec.KEY_VERSION);
+            chunk.regionCoreOriginalStateVersion = nbttagcompound.e(BlockStateCodec.KEY_VERSION);
             chunk.regionCoreUsedFallbackProjection = decodedState.usedNearestFallback;
             if (decodedState.usedNearestFallback) {
-                System.out.println("[RegionCore] Loaded chunk [" + i + "," + j + "] with nearest-state legacy fallback projections.");
+                MinecraftServer.log.fine("[RegionCore] Loaded chunk [" + i + "," + j + "] with nearest-state legacy fallback projections.");
             }
         } else {
             chunk.b = nbttagcompound.j("Blocks");
@@ -254,8 +258,16 @@ public class ChunkLoader implements IChunkLoader {
         NBTTagList nbttaglist = nbttagcompound.l("Entities");
 
         if (nbttaglist != null) {
+            Map loadedEntityCounts = ChunkEntityLimits.createCounter();
+
             for (int k = 0; k < nbttaglist.c(); ++k) {
                 NBTTagCompound nbttagcompound1 = (NBTTagCompound) nbttaglist.a(k);
+
+                if (!ChunkEntityLimits.canLoad(nbttagcompound1, loadedEntityCounts)) {
+                    chunk.q = true;
+                    continue;
+                }
+
                 Entity entity = EntityTypes.a(nbttagcompound1, world);
 
                 chunk.q = true;
@@ -319,6 +331,7 @@ public class ChunkLoader implements IChunkLoader {
             }
 
             if (restoredTicks > 0) {
+                world.markPendingBlockTicksSavedForChunk(i, j);
                 if (TILE_TICK_LOG) {
                     System.out.println("[Chunk TileTicks] load chunk [" + i + "," + j + "] ticks=" + restoredTicks);
                 }
@@ -338,13 +351,27 @@ public class ChunkLoader implements IChunkLoader {
     }
 
     private static void preserveOriginalRegionCoreState(NBTTagCompound levelTag, Chunk chunk) {
-        levelTag.a(BlockStateCodec.KEY_PALETTE, (NBTBase) chunk.regionCoreOriginalStatePalette);
-        levelTag.a(BlockStateCodec.KEY_DATA, copyBytes(chunk.regionCoreOriginalStateData));
+        NBTTagCompound preservedState = new NBTTagCompound();
+        preservedState.a(BlockStateCodec.KEY_PALETTE, (NBTBase) chunk.regionCoreOriginalStatePalette);
+        preservedState.a(BlockStateCodec.KEY_DATA, copyBytes(chunk.regionCoreOriginalStateData));
         if (chunk.regionCoreOriginalStateHasBits) {
-            levelTag.a(BlockStateCodec.KEY_BITS, chunk.regionCoreOriginalStateBits);
+            preservedState.a(BlockStateCodec.KEY_BITS, chunk.regionCoreOriginalStateBits);
+        }
+        if (chunk.regionCoreOriginalStateHasVersion) {
+            preservedState.a(BlockStateCodec.KEY_VERSION, chunk.regionCoreOriginalStateVersion);
+        }
+
+        // Preserve unsupported namespaced entries verbatim while upgrading any
+        // recognized compatibility aliases in the same palette exactly once.
+        BlockStateCodec.canonicalizeStatePalette(preservedState);
+        levelTag.a(BlockStateCodec.KEY_PALETTE, (NBTBase) preservedState.l(BlockStateCodec.KEY_PALETTE));
+        levelTag.a(BlockStateCodec.KEY_DATA, copyBytes(preservedState.j(BlockStateCodec.KEY_DATA)));
+        if (preservedState.hasKey(BlockStateCodec.KEY_BITS)) {
+            levelTag.a(BlockStateCodec.KEY_BITS, preservedState.c(BlockStateCodec.KEY_BITS));
         } else {
             levelTag.remove(BlockStateCodec.KEY_BITS);
         }
+        levelTag.a(BlockStateCodec.KEY_VERSION, preservedState.e(BlockStateCodec.KEY_VERSION));
     }
 
     private static byte[] copyBytes(byte[] source) {

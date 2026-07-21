@@ -103,9 +103,30 @@ public class BlockPiston extends Block {
                 // CraftBukkit end
 
                 CriticalBlockStateAccess.setMetadata(world, i, j, k, i1, false);
-                world.playNote(i, j, k, 1, i1);
+                world.playNote(i, j, k, this.resolveRetractionEvent(world, i, j, k, i1), i1);
             }
         }
+    }
+
+    private int resolveRetractionEvent(World world, int i, int j, int k, int facing) {
+        int movingX = i + PistonBlockTextures.b[facing] * 2;
+        int movingY = j + PistonBlockTextures.c[facing] * 2;
+        int movingZ = k + PistonBlockTextures.d[facing] * 2;
+        if (world.getTypeId(movingX, movingY, movingZ) != Block.PISTON_MOVING.id) {
+            return 1;
+        }
+        TileEntity tile = world.getTileEntity(movingX, movingY, movingZ);
+        if (!(tile instanceof TileEntityPiston)) {
+            return 1;
+        }
+        TileEntityPiston moving = (TileEntityPiston) tile;
+		return moving.d() == facing
+				&& moving.c()
+				&& (moving.a(0.0F) < 0.5F
+						|| moving.wasTickedAt(world.getBlockTickTime())
+						|| world.isHandlingTick())
+				? 2
+				: 1;
     }
 
     private boolean f(World world, int i, int j, int k, int l) {
@@ -119,16 +140,16 @@ public class BlockPiston extends Block {
                 CriticalBlockStateAccess.setMetadata(world, i, j, k, i1 | 8, true);
                 world.makeSound((double) i + 0.5D, (double) j + 0.5D, (double) k + 0.5D, "tile.piston.out", 0.5F, world.random.nextFloat() * 0.25F + 0.6F);
             }
-        } else if (l == 1) {
+        } else if (l == 1 || l == 2) {
             TileEntity tileentity = world.getTileEntity(i + PistonBlockTextures.b[i1], j + PistonBlockTextures.c[i1], k + PistonBlockTextures.d[i1]);
 
             if (tileentity != null && tileentity instanceof TileEntityPiston) {
                 ((TileEntityPiston) tileentity).k();
             }
 
-            world.setRawTypeIdAndData(i, j, k, Block.PISTON_MOVING.id, i1);
+            world.setRawTypeIdAndData(i, j, k, Block.PISTON_MOVING.id, i1 | (this.a ? 8 : 0));
             world.setTileEntity(i, j, k, BlockPistonMoving.a(this.id, i1, i1, false, true));
-            if (this.a) {
+			if (this.a) {
                 int j1 = i + PistonBlockTextures.b[i1] * 2;
                 int k1 = j + PistonBlockTextures.c[i1] * 2;
                 int l1 = k + PistonBlockTextures.d[i1] * 2;
@@ -151,14 +172,14 @@ public class BlockPiston extends Block {
                     }
                 }
 
-                if (!flag && i2 > 0 && a(i2, world, j1, k1, l1, false) && (Block.byId[i2].e() == 0 || i2 == Block.PISTON.id || i2 == Block.PISTON_STICKY.id)) {
+				if (!flag && l == 1 && i2 > 0 && a(i2, world, j1, k1, l1, false) && (Block.byId[i2].e() == 0 || i2 == Block.PISTON.id || i2 == Block.PISTON_STICKY.id)) {
                     this.b = false;
                     world.setTypeId(j1, k1, l1, 0);
                     this.b = true;
                     i += PistonBlockTextures.b[i1];
                     j += PistonBlockTextures.c[i1];
                     k += PistonBlockTextures.d[i1];
-                    world.setRawTypeIdAndData(i, j, k, Block.PISTON_MOVING.id, j2);
+                    world.setRawTypeIdAndData(i, j, k, Block.PISTON_MOVING.id, i1);
                     world.setTileEntity(i, j, k, BlockPistonMoving.a(i2, j2, i1, false, false));
                 } else if (!flag) {
                     this.b = false;
@@ -372,9 +393,9 @@ public class BlockPiston extends Block {
 
                 if (k2 == this.id && l1 == i && i2 == j && j2 == k) {
                     world.setRawTypeIdAndData(i1, j1, k1, Block.PISTON_MOVING.id, l | (this.a ? 8 : 0));
-                    world.setTileEntity(i1, j1, k1, BlockPistonMoving.a(Block.PISTON_EXTENSION.id, l | (this.a ? 8 : 0), l, true, false));
+                    world.setTileEntity(i1, j1, k1, BlockPistonMoving.a(Block.PISTON_EXTENSION.id, l | (this.a ? 8 : 0), l, true, true));
                 } else {
-                    world.setRawTypeIdAndData(i1, j1, k1, Block.PISTON_MOVING.id, l2);
+                    world.setRawTypeIdAndData(i1, j1, k1, Block.PISTON_MOVING.id, l);
                     world.setTileEntity(i1, j1, k1, BlockPistonMoving.a(k2, l2, l, true, false));
                 }
 

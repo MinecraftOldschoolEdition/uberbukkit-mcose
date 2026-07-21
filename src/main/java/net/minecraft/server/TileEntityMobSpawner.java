@@ -11,13 +11,19 @@ public class TileEntityMobSpawner extends TileEntity {
     public String mobName = "Pig"; // CraftBukkit - private -> public
     public double b;
     public double c = 0.0D;
+    private int tickDelay = 0;
 
     private static boolean poseidonAreaLimit = PoseidonConfig.getInstance().getConfigBoolean("world.settings.mob-spawner-area-limit.enable");
     private static int poseidonAreaLimitRadius = PoseidonConfig.getInstance().getConfigInteger("world.settings.mob-spawner-area-limit.limit");
     private static int poseidonChunkRadius = PoseidonConfig.getInstance().getConfigInteger("world.settings.mob-spawner-area-limit.chunk-radius");
+    private static int poseidonTickRate = PoseidonConfig.getInstance().getConfigInteger("world.settings.mob-spawner-tick-rate");
 
     public TileEntityMobSpawner() {
         this.spawnDelay = 20;
+    }
+
+    public boolean isTickable() {
+        return true;
     }
 
     public void a(String s) {
@@ -43,12 +49,24 @@ public class TileEntityMobSpawner extends TileEntity {
             }
 
             if (!this.world.isStatic) {
-                if (this.spawnDelay == -1) {
+                int tickRate = this.getTickRate();
+
+                if (tickRate == -1) {
+                    return;
+                }
+
+                if (this.spawnDelay > 0 && --this.tickDelay > 0) {
+                    return;
+                }
+
+                this.tickDelay = tickRate;
+
+                if (this.spawnDelay == -1 || this.spawnDelay < -tickRate) {
                     this.c();
                 }
 
                 if (this.spawnDelay > 0) {
-                    --this.spawnDelay;
+                    this.spawnDelay -= tickRate;
                     return;
                 }
 
@@ -116,6 +134,14 @@ public class TileEntityMobSpawner extends TileEntity {
 
             super.g_();
         }
+    }
+
+    private int getTickRate() {
+        if (poseidonTickRate == -1) {
+            return -1;
+        }
+
+        return poseidonTickRate < 1 ? 1 : poseidonTickRate;
     }
 
     private void c() {

@@ -10,7 +10,15 @@ import java.net.SocketAddress;
 import java.net.SocketException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedList;
 import java.util.List;
+import java.util.ListIterator;
+import java.util.concurrent.atomic.AtomicLong;
+import javax.crypto.Cipher;
+import javax.crypto.CipherInputStream;
+import javax.crypto.CipherOutputStream;
+import javax.crypto.SecretKey;
+import javax.crypto.spec.IvParameterSpec;
 
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
@@ -22,7 +30,7 @@ import uk.betacraft.uberbukkit.Uberbukkit;
 import uk.betacraft.uberbukkit.packet.Packet62Sound;
 import uk.betacraft.uberbukkit.protocol.Protocol;
 
-public class NetworkManager {
+public class NetworkManager implements Packet.LoginPhaseState {
 
     public static final Object a = new Object();
     public static int b;
@@ -31,13 +39,13 @@ public class NetworkManager {
     private final Object writeLock = new Object();
     public Socket socket; // CraftBukkit - private -> public
     private SocketAddress i; //Project Poseidon - remove final statement
-    private DataInputStream input;
-    private DataOutputStream output;
+    private volatile DataInputStream input;
+    private volatile DataOutputStream output;
     private boolean l = true;
-    private List m = Collections.synchronizedList(new ArrayList());
-    private List urgentQueue = Collections.synchronizedList(new ArrayList());
-    private List highPriorityQueue = Collections.synchronizedList(new ArrayList());
-    private List lowPriorityQueue = Collections.synchronizedList(new ArrayList());
+    private List m = Collections.synchronizedList(new LinkedList());
+    private List urgentQueue = Collections.synchronizedList(new LinkedList());
+    private List highPriorityQueue = Collections.synchronizedList(new LinkedList());
+    private List lowPriorityQueue = Collections.synchronizedList(new LinkedList());
     private volatile NetHandler p;
     private boolean q = false;
     private volatile boolean readOnly = false;
@@ -48,6 +56,7 @@ public class NetworkManager {
     private Object[] v;
     private int w = 0;
     private int x = 0;
+    private long inboundQueueBytes = 0L;
     public static int[] d = new int[256];
     public static int[] e = new int[256];
     public int f = 0;
@@ -60,10 +69,18 @@ public class NetworkManager {
     private static final int LOW_PRIORITY_COALESCE_SCAN_LIMIT = 320;
     private static final int LOW_PRIORITY_MOVEMENT_HARD_CAP = 420;
     private static final int OUTBOUND_MAX_PACKETS = 8192;
+    private static final int OUTBOUND_WRITE_BATCH_LIMIT = 64;
     private static final int INBOUND_MAX_PACKETS = 8192;
+    private static final long INBOUND_MAX_BYTES = 16L * 1024L * 1024L;
+    private static final long MALFORMED_PACKET_LOG_INTERVAL_MS = 10000L;
+    private static final AtomicLong LAST_MALFORMED_PACKET_LOG_AT = new AtomicLong(0L);
+    private static final AtomicLong SUPPRESSED_MALFORMED_PACKET_LOGS = new AtomicLong(0L);
     private final boolean firePacketEvents;
     private final int movementCoalesceThreshold;
     private final int movementDropHardCap;
+    private final Object encryptionLock = new Object();
+    private volatile boolean encryptionReadPaused = false;
+    private volatile boolean encryptionEnabled = false;
 
     private final boolean spamDetection;
 
@@ -151,6 +168,11 @@ public class NetworkManager {
         this.p = nethandler;
     }
 
+    @Override
+    public boolean isLoginPhase() {
+        return this.p instanceof NetLoginHandler;
+    }
+
     private String getProfilerPlayerName() {
         if (this.p instanceof NetServerHandler) {
             NetServerHandler handler = (NetServerHandler) this.p;
@@ -223,15 +245,17 @@ public class NetworkManager {
     private int coalesceMovementPackets(int entityId) {
         int scanned = 0;
         int removed = 0;
-        for (int idx = this.lowPriorityQueue.size() - 1; idx >= 0 && scanned < LOW_PRIORITY_COALESCE_SCAN_LIMIT; idx--, scanned++) {
-            Packet queued = (Packet) this.lowPriorityQueue.get(idx);
+        ListIterator iterator = this.lowPriorityQueue.listIterator(this.lowPriorityQueue.size());
+        while (iterator.hasPrevious() && scanned < LOW_PRIORITY_COALESCE_SCAN_LIMIT) {
+            Packet queued = (Packet) iterator.previous();
+            scanned++;
             if (queued == null) {
                 continue;
             }
 
             int queuedEntityId = getMovementEntityId(queued);
             if (queuedEntityId == entityId) {
-                this.lowPriorityQueue.remove(idx);
+                iterator.remove();
                 this.x -= queued.a() + 1;
                 removed++;
             }
@@ -341,22 +365,48 @@ public class NetworkManager {
 
             if (size < INBOUND_PRIORITY_BACKLOG_THRESHOLD || this.inboundPriorityBurstCount >= burstLimit) {
                 this.inboundPriorityBurstCount = 0;
-                return (Packet) this.m.remove(0);
+                return this.removeInboundPacketAt(0);
             }
 
-            for (int idx = 0; idx < scanLimitCap; idx++) {
-                Packet candidate = (Packet) this.m.get(idx);
+            ListIterator iterator = this.m.listIterator();
+            for (int scanned = 0; iterator.hasNext() && scanned < scanLimitCap; scanned++) {
+                Packet candidate = (Packet) iterator.next();
                 if (candidate == null) {
                     continue;
                 }
                 if (isInboundCriticalPacketId(candidate.b())) {
                     this.inboundPriorityBurstCount++;
-                    return (Packet) this.m.remove(idx);
+                    iterator.remove();
+                    this.inboundQueueBytes -= safePacketSize(candidate);
+                    if (this.inboundQueueBytes < 0L) {
+                        this.inboundQueueBytes = 0L;
+                    }
+                    return candidate;
                 }
             }
 
             this.inboundPriorityBurstCount = 0;
-            return (Packet) this.m.remove(0);
+            return this.removeInboundPacketAt(0);
+        }
+    }
+
+    private Packet removeInboundPacketAt(int index) {
+        Packet packet = (Packet) this.m.remove(index);
+        this.inboundQueueBytes -= safePacketSize(packet);
+        if (this.inboundQueueBytes < 0L) {
+            this.inboundQueueBytes = 0L;
+        }
+        return packet;
+    }
+
+    private static long safePacketSize(Packet packet) {
+        if (packet == null) {
+            return 1L;
+        }
+        try {
+            return Math.max(1L, (long) packet.a() + 1L);
+        } catch (RuntimeException invalidSize) {
+            return 1L;
         }
     }
 
@@ -379,93 +429,8 @@ public class NetworkManager {
     }
 
     private boolean f() {
-        boolean flag = false;
-
         try {
-            Object object;
-            Packet packet;
-            int i;
-            int[] aint;
-
-            if (!this.urgentQueue.isEmpty() && (this.f == 0 || System.currentTimeMillis() - ((Packet) this.urgentQueue.get(0)).timestamp >= (long) this.f)) {
-                object = this.g;
-                synchronized (this.g) {
-                    packet = (Packet) this.urgentQueue.remove(0);
-                    this.x -= packet.a() + 1;
-                }
-
-                long queueWaitMs = Math.max(0L, System.currentTimeMillis() - packet.timestamp);
-                writePacket(packet);
-                aint = e;
-                i = packet.b();
-                aint[i] += packet.a() + 1;
-                ++this.highPriorityBurstCount;
-                ServerProfiler.getInstance().recordPacketEgress(
-                    i,
-                    packet.getClass().getSimpleName(),
-                    queueWaitMs,
-                    true,
-                    packet.a() + 1,
-                    getProfilerPlayerName()
-                );
-                flag = true;
-            }
-
-            if (!this.highPriorityQueue.isEmpty() && (this.f == 0 || System.currentTimeMillis() - ((Packet) this.highPriorityQueue.get(0)).timestamp >= (long) this.f)) {
-                object = this.g;
-                synchronized (this.g) {
-                    packet = (Packet) this.highPriorityQueue.remove(0);
-                    this.x -= packet.a() + 1;
-                }
-
-                long queueWaitMs = Math.max(0L, System.currentTimeMillis() - packet.timestamp);
-                writePacket(packet);
-                aint = e;
-                i = packet.b();
-                aint[i] += packet.a() + 1;
-                ++this.highPriorityBurstCount;
-                ServerProfiler.getInstance().recordPacketEgress(
-                    i,
-                    packet.getClass().getSimpleName(),
-                    queueWaitMs,
-                    true,
-                    packet.a() + 1,
-                    getProfilerPlayerName()
-                );
-                flag = true;
-            }
-
-            // CraftBukkit - don't allow low priority packet to be sent unless it was placed in the queue before the first packet on the high priority queue
-            boolean allowLowPriorityFairness = this.highPriorityBurstCount >= 3;
-            if ((flag || this.lowPriorityQueueDelay-- <= 0 || allowLowPriorityFairness)
-                    && !this.lowPriorityQueue.isEmpty()
-                    && this.urgentQueue.isEmpty()
-                    && (this.highPriorityQueue.isEmpty() || allowLowPriorityFairness || ((Packet) this.highPriorityQueue.get(0)).timestamp > ((Packet) this.lowPriorityQueue.get(0)).timestamp)) {
-                object = this.g;
-                synchronized (this.g) {
-                    packet = (Packet) this.lowPriorityQueue.remove(0);
-                    this.x -= packet.a() + 1;
-                }
-
-                long queueWaitMs = Math.max(0L, System.currentTimeMillis() - packet.timestamp);
-                writePacket(packet);
-                aint = e;
-                i = packet.b();
-                aint[i] += packet.a() + 1;
-                this.lowPriorityQueueDelay = 0;
-                this.highPriorityBurstCount = 0;
-                ServerProfiler.getInstance().recordPacketEgress(
-                    i,
-                    packet.getClass().getSimpleName(),
-                    queueWaitMs,
-                    false,
-                    packet.a() + 1,
-                    getProfilerPlayerName()
-                );
-                flag = true;
-            }
-
-            return flag;
+            return this.writeOutboundBatch(OUTBOUND_WRITE_BATCH_LIMIT);
         } catch (Exception exception) {
             if (!this.t) {
                 this.a(exception);
@@ -475,12 +440,184 @@ public class NetworkManager {
         }
     }
 
-    private void writePacket(Packet packet) throws IOException {
+    private boolean writeOutboundBatch(int maxPackets) throws IOException {
+        if (this.tickEmptyOutboundQueues()) {
+            return false;
+        }
+
+        int sentPackets = 0;
+        List egressRecords = new ArrayList(Math.min(maxPackets, OUTBOUND_WRITE_BATCH_LIMIT));
+
         synchronized (this.writeLock) {
-            if (this.output == null) {
-                throw new IOException("Output stream closed");
+            while (sentPackets < maxPackets) {
+                int sentThisCycle = this.writeOutboundCycleLocked(maxPackets - sentPackets, egressRecords);
+
+                if (sentThisCycle <= 0) {
+                    break;
+                }
+
+                sentPackets += sentThisCycle;
             }
-            Packet.a(packet, this.output);
+        }
+
+        this.recordOutboundEgress(egressRecords);
+        return sentPackets > 0;
+    }
+
+    private boolean tickEmptyOutboundQueues() {
+        synchronized (this.g) {
+            if (this.urgentQueue.isEmpty() && this.highPriorityQueue.isEmpty() && this.lowPriorityQueue.isEmpty()) {
+                --this.lowPriorityQueueDelay;
+                return true;
+            }
+
+            return false;
+        }
+    }
+
+    private int writeOutboundCycleLocked(int remainingBatchSlots, List egressRecords) throws IOException {
+        boolean sentInCycle = false;
+        int sent = 0;
+        long now = System.currentTimeMillis();
+
+        OutboundQueuedPacket queuedPacket = this.pollUrgentPacket(now);
+        if (queuedPacket != null) {
+            egressRecords.add(this.writeQueuedPacketLocked(queuedPacket, now, true));
+            ++this.highPriorityBurstCount;
+            sentInCycle = true;
+            ++sent;
+        }
+
+        if (sent < remainingBatchSlots) {
+            queuedPacket = this.pollHighPriorityPacket(now);
+            if (queuedPacket != null) {
+                egressRecords.add(this.writeQueuedPacketLocked(queuedPacket, now, true));
+                ++this.highPriorityBurstCount;
+                sentInCycle = true;
+                ++sent;
+            }
+        }
+
+        if (sent < remainingBatchSlots) {
+            queuedPacket = this.pollLowPriorityPacket(sentInCycle);
+            if (queuedPacket != null) {
+                egressRecords.add(this.writeQueuedPacketLocked(queuedPacket, now, false));
+                this.lowPriorityQueueDelay = 0;
+                this.highPriorityBurstCount = 0;
+                ++sent;
+            }
+        }
+
+        return sent;
+    }
+
+    private OutboundQueuedPacket pollUrgentPacket(long now) {
+        synchronized (this.g) {
+            if (!this.urgentQueue.isEmpty() && (this.f == 0 || now - ((Packet) this.urgentQueue.get(0)).timestamp >= (long) this.f)) {
+                return this.removeQueuedPacket(this.urgentQueue);
+            }
+
+            return null;
+        }
+    }
+
+    private OutboundQueuedPacket pollHighPriorityPacket(long now) {
+        synchronized (this.g) {
+            if (!this.highPriorityQueue.isEmpty() && (this.f == 0 || now - ((Packet) this.highPriorityQueue.get(0)).timestamp >= (long) this.f)) {
+                return this.removeQueuedPacket(this.highPriorityQueue);
+            }
+
+            return null;
+        }
+    }
+
+    private OutboundQueuedPacket pollLowPriorityPacket(boolean sentInCycle) {
+        synchronized (this.g) {
+            boolean allowLowPriorityFairness = this.highPriorityBurstCount >= 3;
+            boolean allowLowPriority = sentInCycle;
+
+            if (!allowLowPriority) {
+                allowLowPriority = this.lowPriorityQueueDelay-- <= 0;
+            }
+
+            if (!allowLowPriority) {
+                allowLowPriority = allowLowPriorityFairness;
+            }
+
+            if (allowLowPriority
+                    && !this.lowPriorityQueue.isEmpty()
+                    && this.urgentQueue.isEmpty()
+                    && (this.highPriorityQueue.isEmpty() || allowLowPriorityFairness || ((Packet) this.highPriorityQueue.get(0)).timestamp > ((Packet) this.lowPriorityQueue.get(0)).timestamp)) {
+                return this.removeQueuedPacket(this.lowPriorityQueue);
+            }
+
+            return null;
+        }
+    }
+
+    private OutboundQueuedPacket removeQueuedPacket(List queue) {
+        Packet packet = (Packet) queue.remove(0);
+        int packetBytes = packet.a() + 1;
+
+        this.x -= packetBytes;
+        return new OutboundQueuedPacket(packet, packetBytes);
+    }
+
+    private OutboundQueuedPacket writeQueuedPacketLocked(OutboundQueuedPacket queuedPacket, long now, boolean highPriority) throws IOException {
+        Packet packet = queuedPacket.packet;
+        DataOutputStream currentOutput = this.output;
+
+        if (currentOutput == null) {
+            throw new IOException("Output stream closed");
+        }
+
+        Packet.a(packet, currentOutput);
+        int packetId = packet.b();
+        e[packetId] += queuedPacket.packetBytes;
+        queuedPacket.markEgress(
+            packetId,
+            packet.getClass().getSimpleName(),
+            Math.max(0L, now - packet.timestamp),
+            highPriority,
+            getProfilerPlayerName()
+        );
+        return queuedPacket;
+    }
+
+    private void recordOutboundEgress(List egressRecords) {
+        for (int i = 0; i < egressRecords.size(); ++i) {
+            OutboundQueuedPacket queuedPacket = (OutboundQueuedPacket) egressRecords.get(i);
+            ServerProfiler.getInstance().recordPacketEgress(
+                queuedPacket.packetId,
+                queuedPacket.packetClass,
+                queuedPacket.queueWaitMs,
+                queuedPacket.highPriority,
+                queuedPacket.packetBytes,
+                queuedPacket.playerName
+            );
+        }
+    }
+
+    private static final class OutboundQueuedPacket {
+        private final Packet packet;
+        private final int packetBytes;
+        private int packetId;
+        private String packetClass;
+        private long queueWaitMs;
+        private boolean highPriority;
+        private String playerName;
+
+        private OutboundQueuedPacket(Packet packet, int packetBytes) {
+            this.packet = packet;
+            this.packetBytes = packetBytes;
+        }
+
+        private void markEgress(int packetId, String packetClass, long queueWaitMs, boolean highPriority, String playerName) {
+            this.packetId = packetId;
+            this.packetClass = packetClass;
+            this.queueWaitMs = queueWaitMs;
+            this.highPriority = highPriority;
+            this.playerName = playerName;
         }
     }
 
@@ -520,10 +657,18 @@ public class NetworkManager {
             if (this.readOnly) {
                 return false;
             }
+            if (this.encryptionReadPaused && !this.encryptionEnabled) {
+                return false;
+            }
 
-            Packet packet = Packet.a(this.input, this.p.c(), this.pvn); // uberbukkit - allows packets to be read accordingly to client version
+            Packet packet = Packet.a(this.input, this.p.c(), this.pvn, this); // uberbukkit - allows packets to be read accordingly to client version
 
             if (packet != null) {
+                if (packet instanceof Packet252SharedKey && this.p instanceof NetLoginHandler && !this.encryptionEnabled) {
+                    // Stop the reader at the exact plaintext/encrypted boundary. The
+                    // login handler enables AES after validating this packet.
+                    this.encryptionReadPaused = true;
+                }
                 if (!recordInboundPacketRate()) {
                     return false;
                 }
@@ -542,9 +687,12 @@ public class NetworkManager {
                     }
                 }
                 if (!consumedByParallelLane) {
-                    this.m.add(packet);
+                    synchronized (this.m) {
+                        this.m.add(packet);
+                        this.inboundQueueBytes += safePacketSize(packet);
+                    }
                 }
-                if (this.m.size() > INBOUND_MAX_PACKETS) {
+                if (this.m.size() > INBOUND_MAX_PACKETS || this.inboundQueueBytes > INBOUND_MAX_BYTES) {
                     this.a("disconnect.overflow", new Object[0]);
                     return false;
                 }
@@ -557,16 +705,109 @@ public class NetworkManager {
             return flag;
         } catch (Exception exception) {
             if (!this.t) {
-                this.a(exception);
+                this.handleInboundException(exception);
             }
 
             return false;
         }
     }
 
+    /**
+     * Enable the modern protocol's AES/CFB8 transport after Packet252 has been
+     * fully decoded. The client encrypts every subsequent byte with the shared
+     * secret as both key and IV.
+     */
+    public void enableEncryption(SecretKey key) throws Exception {
+        if (key == null || key.getEncoded() == null || key.getEncoded().length != 16) {
+            throw new IOException("Invalid AES session key");
+        }
+
+        synchronized (this.encryptionLock) {
+            if (this.encryptionEnabled) {
+                throw new IOException("Encryption is already enabled");
+            }
+            if (!(this.p instanceof NetLoginHandler) || !this.encryptionReadPaused) {
+                throw new IOException("Encryption enabled outside the shared-key transition");
+            }
+
+            Cipher decryptCipher = createStreamCipher(Cipher.DECRYPT_MODE, key);
+            Cipher encryptCipher = createStreamCipher(Cipher.ENCRYPT_MODE, key);
+
+            synchronized (this.writeLock) {
+                if (this.output == null || this.socket == null) {
+                    throw new IOException("Connection closed during encryption setup");
+                }
+                this.output.flush();
+                this.input = new DataInputStream(new CipherInputStream(this.socket.getInputStream(), decryptCipher));
+                if (Uberbukkit.getTargetPVN() >= 11) {
+                    this.output = new DataOutputStream(new BufferedOutputStream(
+                            new CipherOutputStream(this.socket.getOutputStream(), encryptCipher), 5120));
+                } else {
+                    this.output = new DataOutputStream(new CipherOutputStream(this.socket.getOutputStream(), encryptCipher));
+                }
+            }
+
+            this.encryptionEnabled = true;
+            this.encryptionReadPaused = false;
+        }
+        this.s.interrupt();
+    }
+
+    static Cipher createStreamCipher(int mode, SecretKey key) throws Exception {
+        Cipher cipher = Cipher.getInstance("AES/CFB8/NoPadding");
+        cipher.init(mode, key, new IvParameterSpec(key.getEncoded()));
+        return cipher;
+    }
+
     private void a(Exception exception) {
         exception.printStackTrace();
         this.a("disconnect.genericReason", new Object[] { "Internal exception: " + exception.toString() });
+    }
+
+    private void handleInboundException(Exception exception) {
+        if (exception instanceof IOException) {
+            this.logMalformedPacket(exception);
+            this.a("disconnect.genericReason", new Object[] { "Malformed packet" });
+            return;
+        }
+        this.a(exception);
+    }
+
+    private void logMalformedPacket(Exception exception) {
+        long now = System.currentTimeMillis();
+        long previous = LAST_MALFORMED_PACKET_LOG_AT.get();
+        if (now - previous >= MALFORMED_PACKET_LOG_INTERVAL_MS
+                && LAST_MALFORMED_PACKET_LOG_AT.compareAndSet(previous, now)) {
+            long suppressed = SUPPRESSED_MALFORMED_PACKET_LOGS.getAndSet(0L);
+            System.err.println("[Network] Rejected malformed packet from " + String.valueOf(this.i)
+                    + " (" + describeMalformedPacket(exception) + ")"
+                    + (suppressed > 0L ? " (" + suppressed + " similar messages suppressed)" : ""));
+        } else {
+            SUPPRESSED_MALFORMED_PACKET_LOGS.incrementAndGet();
+        }
+    }
+
+    static String describeMalformedPacket(Exception exception) {
+        if (exception == null) {
+            return "unknown error";
+        }
+
+        String type = exception.getClass().getSimpleName();
+        String message = exception.getMessage();
+        if (message == null || message.length() == 0) {
+            return type;
+        }
+
+        message = message.replace('\r', ' ').replace('\n', ' ').trim();
+        String prefix = type + ": ";
+        if (prefix.length() >= 160) {
+            return prefix.substring(0, 157) + "...";
+        }
+        int maximumMessageLength = 160 - prefix.length();
+        if (message.length() > maximumMessageLength) {
+            message = message.substring(0, maximumMessageLength - 3) + "...";
+        }
+        return prefix + message;
     }
 
     private boolean recordInboundPacketRate() {

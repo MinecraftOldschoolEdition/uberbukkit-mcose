@@ -10,6 +10,7 @@ import uk.betacraft.uberbukkit.Uberbukkit;
 
 public class EntityPainting extends Entity {
 
+    private static final int HANGING_CHECK_INTERVAL = 100;
     private int f;
     public int a;
     public int b;
@@ -19,7 +20,7 @@ public class EntityPainting extends Entity {
 
     public EntityPainting(World world) {
         super(world);
-        this.f = 0;
+        this.f = this.id % HANGING_CHECK_INTERVAL;
         this.a = 0;
         this.height = 0.0F;
         this.b(0.5F, 0.5F);
@@ -122,7 +123,7 @@ public class EntityPainting extends Entity {
     }
 
     public void m_() {
-        if (this.f++ == 100 && !this.world.isStatic) {
+        if (this.f++ == HANGING_CHECK_INTERVAL && !this.world.isStatic) {
             this.f = 0;
             if (!this.h()) {
                 // CraftBukkit start

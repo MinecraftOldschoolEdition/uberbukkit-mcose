@@ -138,7 +138,7 @@ public class Item {
     public static Item RECORD_ARIA_MATH   = (new ItemRecord(2012, "aria math")).a(12, 15).a("record");
     public static Item RECORD_DOG         = (new ItemRecord(2013, "dog")).a(13, 15).a("record");
     public static Item RECORD_CERTITUDES  = (new ItemRecord(2014, "certitudes")).a(14, 15).a("record");
-    public static Item RECORD_TSUKI_NO_KOIBUMI = (new ItemRecord(2015, "tsuku no koibumi")).a(15, 15).a("record");
+    public static Item RECORD_TSUKI_NO_KOIBUMI = (new ItemRecord(2015, "tsuki no koibumi")).a(15, 15).a("record");
     public final int id;
     protected int maxStackSize = 64;
     private int durability = 0;

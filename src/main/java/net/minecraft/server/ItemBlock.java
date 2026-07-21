@@ -21,6 +21,11 @@ public class ItemBlock extends Item {
     }
 
     public boolean a(ItemStack itemstack, EntityHuman entityhuman, World world, int i, int j, int k, int l) {
+        return placeBlock(this.id, this, itemstack, entityhuman, world, i, j, k, l);
+    }
+
+    static boolean placeBlock(int placedBlockId, Item placedItem, ItemStack itemstack, EntityHuman entityhuman,
+            World world, int i, int j, int k, int l) {
         int clickedX = i, clickedY = j, clickedZ = k; // CraftBukkit
 
         if (world.getTypeId(i, j, k) == Block.SNOW.id) {
@@ -53,10 +58,10 @@ public class ItemBlock extends Item {
 
         if (itemstack.count == 0) {
             return false;
-        } else if (!UberbukkitConfig.getInstance().getBoolean("mechanics.allow_blocks_at_y_127", false) && j == 127 && Block.byId[this.id].material.isBuildable()) {
+        } else if (!UberbukkitConfig.getInstance().getBoolean("mechanics.allow_blocks_at_y_127", false) && j == 127 && Block.byId[placedBlockId].material.isBuildable()) {
             return false;
-        } else if (world.a(this.id, i, j, k, false, l)) {
-            Block block = Block.byId[this.id];
+        } else if (world.a(placedBlockId, i, j, k, false, l)) {
+            Block block = Block.byId[placedBlockId];
 
             // CraftBukkit start - This executes the placement of the block
             CraftBlockState replacedBlockState = CraftBlockState.getBlockState(world, i, j, k);
@@ -84,7 +89,7 @@ public class ItemBlock extends Item {
              * Whenever the call to 'world.setTypeIdAndData' changes we need to figure out again what to
              * replace this with.
              */
-            if (world.setRawTypeIdAndData(i, j, k, this.id, this.filterData(itemstack.getData()))) { // <-- world.setTypeIdAndData does this to place the block
+            if (world.setRawTypeIdAndData(i, j, k, placedBlockId, placedItem.filterData(itemstack.getData()))) { // <-- world.setTypeIdAndData does this to place the block
                 BlockPlaceEvent event = CraftEventFactory.callBlockPlaceEvent(world, entityhuman, eventUseBlockBelow ? blockStateBelow : replacedBlockState, clickedX, clickedY, clickedZ, block);
 
                 if (event.isCancelled() || !event.canBuild()) {
@@ -94,7 +99,7 @@ public class ItemBlock extends Item {
 
                     } else {
 
-                        if (this.id == Block.ICE.id) {
+                        if (placedBlockId == Block.ICE.id) {
                             // Ice will explode if we set straight to 0
                             world.setTypeId(i, j, k, 20);
                         }
@@ -106,17 +111,17 @@ public class ItemBlock extends Item {
                 }
                 // CraftBukkit end
 
-                if (PoseidonConfig.getInstance().getConfigBoolean("world.settings.pistons.other-fixes.enabled", true) && (this.id == 29 || this.id == 33)) {
-                    Block.byId[this.id].postPlace(world, i, j, k, l);
-                    Block.byId[this.id].postPlace(world, i, j, k, entityhuman);
-                    world.update(i, j, k, this.id); // <-- world.setTypeIdAndData does this on success (tell the world)
+                if (PoseidonConfig.getInstance().getConfigBoolean("world.settings.pistons.other-fixes.enabled", true) && (placedBlockId == 29 || placedBlockId == 33)) {
+                    Block.byId[placedBlockId].postPlace(world, i, j, k, l);
+                    Block.byId[placedBlockId].postPlace(world, i, j, k, entityhuman);
+                    world.update(i, j, k, placedBlockId); // <-- world.setTypeIdAndData does this on success (tell the world)
                 } else {
-                    world.update(i, j, k, this.id);
-                    Block.byId[this.id].postPlace(world, i, j, k, l);
-                    Block.byId[this.id].postPlace(world, i, j, k, entityhuman);
+                    world.update(i, j, k, placedBlockId);
+                    Block.byId[placedBlockId].postPlace(world, i, j, k, l);
+                    Block.byId[placedBlockId].postPlace(world, i, j, k, entityhuman);
                 }
 
-                if (this.id == Block.TNT.id) {
+                if (placedBlockId == Block.TNT.id) {
                     BlockTNT.recordPlacedBy(world, i, j, k, entityhuman);
                 }
 

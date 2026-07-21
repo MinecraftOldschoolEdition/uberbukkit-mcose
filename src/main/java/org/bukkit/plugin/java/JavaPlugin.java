@@ -3,6 +3,7 @@ package org.bukkit.plugin.java;
 import com.avaje.ebean.EbeanServer;
 import com.avaje.ebean.EbeanServerFactory;
 import com.avaje.ebean.config.DataSourceConfig;
+import com.avaje.ebean.config.GlobalProperties;
 import com.avaje.ebean.config.ServerConfig;
 import com.avaje.ebeaninternal.api.SpiEbeanServer;
 import com.avaje.ebeaninternal.server.ddl.DdlGenerator;
@@ -24,6 +25,13 @@ import java.util.List;
  * Represents a Java plugin
  */
 public abstract class JavaPlugin implements Plugin {
+    static {
+        // Plugin subclasses are initialized only after their JavaPlugin
+        // superclass, so close the legacy Ebean listener before plugin static
+        // initializers can touch Ebean.
+        disableUnsafeEbeanClustering();
+    }
+
     private boolean isEnabled = false;
     private boolean initialized = false;
     private PluginLoader loader = null;
@@ -157,6 +165,7 @@ public abstract class JavaPlugin implements Plugin {
             this.config.load();
 
             if (description.isDatabaseEnabled()) {
+                disableUnsafeEbeanClustering();
                 ServerConfig db = new ServerConfig();
 
                 db.setDefaultServer(false);
@@ -173,10 +182,26 @@ public abstract class JavaPlugin implements Plugin {
                 ClassLoader previous = Thread.currentThread().getContextClassLoader();
 
                 Thread.currentThread().setContextClassLoader(classLoader);
-                ebean = EbeanServerFactory.create(db);
-                Thread.currentThread().setContextClassLoader(previous);
+                try {
+                    synchronized (EbeanServerFactory.class) {
+                        // Ebean 2.7's socket cluster transport accepts unauthenticated
+                        // Java-serialized objects. Reassert the fail-closed setting at
+                        // the creation boundary in case ebean.properties enabled it.
+                        disableUnsafeEbeanClustering();
+                        ebean = EbeanServerFactory.create(db);
+                    }
+                } finally {
+                    Thread.currentThread().setContextClassLoader(previous);
+                }
             }
         }
+    }
+
+    static void disableUnsafeEbeanClustering() {
+        GlobalProperties.put("ebean.cluster.type", "");
+        GlobalProperties.put("ebean.cluster.local", "");
+        GlobalProperties.put("ebean.cluster.members", "");
+        GlobalProperties.put("ebean.cluster.lucene.masterHostPort", "");
     }
 
     /**

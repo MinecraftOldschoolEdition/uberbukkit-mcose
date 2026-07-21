@@ -54,6 +54,11 @@ public class Packet5EntityEquipment extends Packet {
         } else {
             short short1 = datainputstream.readShort();
 
+            int expectedLength = getLegacyInventorySize(this.a);
+            if (short1 != expectedLength) {
+                throw new IOException("Invalid legacy inventory length " + short1 + " for inventory " + this.a + " (expected " + expectedLength + ")");
+            }
+
             this.items = new ItemStack[short1];
 
             for (int i = 0; i < short1; ++i) {
@@ -63,7 +68,18 @@ public class Packet5EntityEquipment extends Packet {
                     byte b0 = datainputstream.readByte();
                     short short3 = datainputstream.readShort();
 
+                    if (short2 >= Item.byId.length || Item.byId[short2] == null) {
+                        throw new IOException("Invalid item id " + short2 + " in legacy inventory packet");
+                    }
+
+                    int maxStackSize = Item.byId[short2].getMaxStackSize();
+                    if (b0 <= 0 || b0 > maxStackSize) {
+                        throw new IOException("Invalid item count " + b0 + " for item " + short2 + " in legacy inventory packet (expected 1-" + maxStackSize + ")");
+                    }
+
                     this.items[i] = new ItemStack(short2, b0, short3);
+                } else if (short2 != -1) {
+                    throw new IOException("Invalid item id " + short2 + " in legacy inventory packet");
                 }
             }
         }
@@ -103,6 +119,16 @@ public class Packet5EntityEquipment extends Packet {
     public int a() {
         // uberbukkit - size varies between pvns
         return this.pvn >= 7 ? 8 : (6 + this.items.length * 5);
+    }
+
+    private static int getLegacyInventorySize(int inventoryId) throws IOException {
+        if (inventoryId == -1) {
+            return 36;
+        }
+        if (inventoryId == -2 || inventoryId == -3) {
+            return 4;
+        }
+        throw new IOException("Invalid legacy inventory id " + inventoryId);
     }
 
     // uberbukkit

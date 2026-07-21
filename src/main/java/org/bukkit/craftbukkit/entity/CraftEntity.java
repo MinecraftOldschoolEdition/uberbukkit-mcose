@@ -1,6 +1,6 @@
 package org.bukkit.craftbukkit.entity;
 
-import com.google.common.collect.MapMaker;
+import com.google.common.cache.CacheBuilder;
 import net.minecraft.server.*;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -16,7 +16,7 @@ import java.util.Map;
 import java.util.UUID;
 
 public abstract class CraftEntity implements org.bukkit.entity.Entity {
-    private static final Map<String, CraftPlayer> players = new MapMaker().softValues().makeMap();
+    private static final Map<String, CraftPlayer> players = CacheBuilder.newBuilder().softValues().<String, CraftPlayer>build().asMap();
     protected final CraftServer server;
     protected Entity entity;
     private EntityDamageEvent lastDamageEvent;

@@ -11,6 +11,14 @@ public class ItemAxe extends ItemTool {
     public boolean a(ItemStack itemstack, EntityHuman entityhuman, World world, int i, int j, int k, int l) {
         int blockId = world.getTypeId(i, j, k);
         int data = world.getData(i, j, k);
+        if (blockId == Block.PUMPKIN_PLAIN.id) {
+            boolean carved = world.setTypeIdAndData(i, j, k, Block.CARVED_PUMPKIN.id,
+                    this.carvedMetadata(entityhuman, l));
+            if (carved && (entityhuman == null || entityhuman.gameMode != 1)) {
+                itemstack.damage(1, entityhuman);
+            }
+            return carved;
+        }
         if (blockId != Block.PUMPKIN.id || data <= 3) {
             return false;
         }

@@ -18,7 +18,9 @@ public class Chunk {
     public int x; // UBERBUKKIT non-final
     public int z; // UBERBUKKIT non-final
     public Map tileEntities;
+    private final TileEntityLookupKey tileEntityLookupKey = new TileEntityLookupKey();
     public List[] entitySlices;
+    private Map entitySliceClassCounts;
     public boolean done;
     public boolean o;
     public boolean p;
@@ -28,11 +30,14 @@ public class Chunk {
     public byte[] regionCoreOriginalStateData;
     public byte regionCoreOriginalStateBits;
     public boolean regionCoreOriginalStateHasBits;
+    public int regionCoreOriginalStateVersion;
+    public boolean regionCoreOriginalStateHasVersion;
     public boolean regionCoreUsedFallbackProjection;
 
     public Chunk(World world, int i, int j) {
         this.tileEntities = new HashMap();
         this.entitySlices = new List[8];
+        this.entitySliceClassCounts = new HashMap();
         this.done = false;
         this.o = false;
         this.q = false;
@@ -384,6 +389,7 @@ public class Chunk {
         entity.bI = k;
         entity.bJ = this.z;
         this.entitySlices[k].add(entity);
+        this.incrementEntitySliceClassCounts(entity, k);
     }
 
     public void b(Entity entity) {
@@ -399,7 +405,9 @@ public class Chunk {
             i = this.entitySlices.length - 1;
         }
 
-        this.entitySlices[i].remove(entity);
+        if (this.entitySlices[i].remove(entity)) {
+            this.decrementEntitySliceClassCounts(entity, i);
+        }
     }
 
     public boolean c(int i, int j, int k) {
@@ -407,8 +415,7 @@ public class Chunk {
     }
 
     public TileEntity d(int i, int j, int k) {
-        ChunkPosition chunkposition = new ChunkPosition(i, j, k);
-        TileEntity tileentity = (TileEntity) this.tileEntities.get(chunkposition);
+        TileEntity tileentity = (TileEntity) this.tileEntities.get(this.tileEntityLookupKey.set(i, j, k));
 
         if (tileentity == null) {
             int l = this.getTypeId(i, j, k);
@@ -420,11 +427,11 @@ public class Chunk {
             BlockContainer blockcontainer = (BlockContainer) Block.byId[l];
 
             blockcontainer.c(this.world, this.x * 16 + i, j, this.z * 16 + k);
-            tileentity = (TileEntity) this.tileEntities.get(chunkposition);
+            tileentity = (TileEntity) this.tileEntities.get(this.tileEntityLookupKey.set(i, j, k));
         }
 
         if (tileentity != null && tileentity.g()) {
-            this.tileEntities.remove(chunkposition);
+            this.tileEntities.remove(this.tileEntityLookupKey.set(i, j, k));
             return null;
         } else {
             return tileentity;
@@ -438,23 +445,22 @@ public class Chunk {
 
         this.placeTileEntity(i, j, k, tileentity);
         if (this.c) {
-            this.world.c.add(tileentity);
+            this.world.addTileEntity(tileentity);
         }
     }
 
     public void placeTileEntity(int i, int j, int k, TileEntity tileentity) {
-        ChunkPosition chunkposition = new ChunkPosition(i, j, k);
-
         tileentity.world = this.world;
         tileentity.x = this.x * 16 + i;
         tileentity.y = j;
         tileentity.z = this.z * 16 + k;
-        if (this.getTypeId(i, j, k) != 0 && Block.byId[this.getTypeId(i, j, k)] instanceof BlockContainer) {
+        int typeId = this.getTypeId(i, j, k);
+        if (typeId != 0 && Block.byId[typeId] instanceof BlockContainer) {
             tileentity.j();
-            this.tileEntities.put(chunkposition, tileentity);
+            this.tileEntities.put(new ChunkPosition(i, j, k), tileentity);
             // Poseidon start - Backport of 0021-Remove-invalid-mob-spawner-tile-entities.patch from PaperSpigot
-        } else if (tileentity instanceof TileEntityMobSpawner && !(Block.byId[this.getTypeId(i, j, k)] instanceof BlockMobSpawner)) {
-            this.tileEntities.remove(chunkposition);
+        } else if (tileentity instanceof TileEntityMobSpawner && !(Block.byId[typeId] instanceof BlockMobSpawner)) {
+            this.tileEntities.remove(this.tileEntityLookupKey.set(i, j, k));
             // Poseidon end
         } else {
             System.out.println("Attempted to place a tile entity where there was no entity tile!");
@@ -462,10 +468,8 @@ public class Chunk {
     }
 
     public void e(int i, int j, int k) {
-        ChunkPosition chunkposition = new ChunkPosition(i, j, k);
-
         if (this.c) {
-            TileEntity tileentity = (TileEntity) this.tileEntities.remove(chunkposition);
+            TileEntity tileentity = (TileEntity) this.tileEntities.remove(this.tileEntityLookupKey.set(i, j, k));
 
             if (tileentity != null) {
                 tileentity.h();
@@ -504,6 +508,7 @@ public class Chunk {
                 // (which for example disables inventory icon updates and prevents block breaking)
                 if (entity instanceof EntityPlayer && (cx != this.x || cz != this.z)) {
                     iter.remove();
+                    this.decrementEntitySliceClassCounts(entity, i);
                 }
             }
             // CraftBukkit end
@@ -541,6 +546,33 @@ public class Chunk {
         }
     }
 
+    public boolean hasBlockingEntity(AxisAlignedBB axisalignedbb) {
+        int i = MathHelper.floor((axisalignedbb.b - 2.0D) / 16.0D);
+        int j = MathHelper.floor((axisalignedbb.e + 2.0D) / 16.0D);
+
+        if (i < 0) {
+            i = 0;
+        }
+
+        if (j >= this.entitySlices.length) {
+            j = this.entitySlices.length - 1;
+        }
+
+        for (int k = i; k <= j; ++k) {
+            List list = this.entitySlices[k];
+
+            for (int l = 0; l < list.size(); ++l) {
+                Entity entity = (Entity) list.get(l);
+
+                if (!entity.dead && entity.aI && entity.boundingBox.a(axisalignedbb)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     public void a(Class oclass, AxisAlignedBB axisalignedbb, List list) {
         int i = MathHelper.floor((axisalignedbb.b - 2.0D) / 16.0D);
         int j = MathHelper.floor((axisalignedbb.e + 2.0D) / 16.0D);
@@ -554,6 +586,10 @@ public class Chunk {
         }
 
         for (int k = i; k <= j; ++k) {
+            if (!this.hasEntitiesAssignableTo(oclass, k)) {
+                continue;
+            }
+
             List list1 = this.entitySlices[k];
 
             for (int l = 0; l < list1.size(); ++l) {
@@ -563,6 +599,85 @@ public class Chunk {
                     list.add(entity);
                 }
             }
+        }
+    }
+
+    public int countEntities(Class oclass, AxisAlignedBB axisalignedbb) {
+        int i = MathHelper.floor((axisalignedbb.b - 2.0D) / 16.0D);
+        int j = MathHelper.floor((axisalignedbb.e + 2.0D) / 16.0D);
+        int count = 0;
+
+        if (i < 0) {
+            i = 0;
+        }
+
+        if (j >= this.entitySlices.length) {
+            j = this.entitySlices.length - 1;
+        }
+
+        for (int k = i; k <= j; ++k) {
+            if (!this.hasEntitiesAssignableTo(oclass, k)) {
+                continue;
+            }
+
+            List list = this.entitySlices[k];
+
+            for (int l = 0; l < list.size(); ++l) {
+                Entity entity = (Entity) list.get(l);
+
+                if (oclass.isAssignableFrom(entity.getClass()) && entity.boundingBox.a(axisalignedbb)) {
+                    ++count;
+                }
+            }
+        }
+
+        return count;
+    }
+
+    private boolean hasEntitiesAssignableTo(Class oclass, int slice) {
+        int[] counts = (int[]) this.entitySliceClassCounts.get(oclass);
+        return counts != null && counts[slice] > 0;
+    }
+
+    private void incrementEntitySliceClassCounts(Entity entity, int slice) {
+        this.updateEntitySliceClassCounts(entity.getClass(), slice, 1);
+    }
+
+    private void decrementEntitySliceClassCounts(Entity entity, int slice) {
+        this.updateEntitySliceClassCounts(entity.getClass(), slice, -1);
+    }
+
+    private void updateEntitySliceClassCounts(Class oclass, int slice, int delta) {
+        for (Class type = oclass; type != null && Entity.class.isAssignableFrom(type); type = type.getSuperclass()) {
+            this.updateEntitySliceClassCount(type, slice, delta);
+            this.updateEntitySliceInterfaceCounts(type.getInterfaces(), slice, delta);
+        }
+    }
+
+    private void updateEntitySliceInterfaceCounts(Class[] interfaces, int slice, int delta) {
+        for (int i = 0; i < interfaces.length; ++i) {
+            Class interfaceClass = interfaces[i];
+
+            this.updateEntitySliceClassCount(interfaceClass, slice, delta);
+            this.updateEntitySliceInterfaceCounts(interfaceClass.getInterfaces(), slice, delta);
+        }
+    }
+
+    private void updateEntitySliceClassCount(Class oclass, int slice, int delta) {
+        int[] counts = (int[]) this.entitySliceClassCounts.get(oclass);
+
+        if (counts == null) {
+            if (delta <= 0) {
+                return;
+            }
+
+            counts = new int[this.entitySlices.length];
+            this.entitySliceClassCounts.put(oclass, counts);
+        }
+
+        counts[slice] += delta;
+        if (counts[slice] < 0) {
+            counts[slice] = 0;
         }
     }
 
@@ -578,7 +693,7 @@ public class Chunk {
                 return true;
             }
 
-            return this.o;
+            return this.o || this.world.shouldSavePendingBlockTicksForChunk(this.x, this.z);
         }
     }
 
@@ -653,5 +768,36 @@ public class Chunk {
 
     public void h() {
         BlockRegister.a(this.b);
+    }
+
+    private static final class TileEntityLookupKey {
+        private int x;
+        private int y;
+        private int z;
+
+        TileEntityLookupKey set(int x, int y, int z) {
+            this.x = x;
+            this.y = y;
+            this.z = z;
+            return this;
+        }
+
+        public boolean equals(Object object) {
+            if (object instanceof ChunkPosition) {
+                ChunkPosition chunkposition = (ChunkPosition) object;
+                return chunkposition.x == this.x && chunkposition.y == this.y && chunkposition.z == this.z;
+            }
+
+            if (object instanceof TileEntityLookupKey) {
+                TileEntityLookupKey key = (TileEntityLookupKey) object;
+                return key.x == this.x && key.y == this.y && key.z == this.z;
+            }
+
+            return false;
+        }
+
+        public int hashCode() {
+            return this.x * 8976890 + this.y * 981131 + this.z;
+        }
     }
 }

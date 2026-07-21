@@ -23,9 +23,11 @@ public final class PacketLimits {
     public static final int MAX_NAME_TAG_CHARS = 64;
     public static final int MAX_VERSION_CHARS = 64;
     public static final int MAX_USERNAME_CHARS = 32;
-    public static final int MAX_UUID_CHARS = 64;
-    public static final int MAX_SIGNATURE_CHARS = 4096;
-    public static final int MAX_PUBLIC_KEY_CHARS = 4096;
+    public static final int MAX_UUID_CHARS = 36;
+    // Ed25519 uses a 64-byte signature and 32-byte public key. Their canonical
+    // padded Base64 encodings are exactly 88 and 44 characters respectively.
+    public static final int MAX_SIGNATURE_CHARS = 88;
+    public static final int MAX_PUBLIC_KEY_CHARS = 44;
     public static final int MAX_AUTH_BYTE_ARRAY_BYTES = 512;
 
     private PacketLimits() {}

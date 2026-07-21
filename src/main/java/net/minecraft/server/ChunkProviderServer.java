@@ -13,7 +13,9 @@ import org.bukkit.event.world.ChunkUnloadEvent;
 import org.bukkit.generator.BlockPopulator;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 
 // CraftBukkit start
@@ -30,6 +32,12 @@ public class ChunkProviderServer implements IChunkProvider {
     public LongHashtable<Chunk> chunks = new LongHashtable<Chunk>();
     public List chunkList = new ArrayList();
     public WorldServer world;
+    private int nextChunkSaveIndex = 0;
+    private final Map<Long, ChunkSaveFailure> chunkSaveFailures = new HashMap<Long, ChunkSaveFailure>();
+    private int lastChunkSaveFailureLogTick = Integer.MIN_VALUE;
+    private int suppressedChunkSaveFailureLogs = 0;
+    private static final int SAVE_RETRY_BASE_TICKS = 20;
+    private static final int SAVE_RETRY_MAX_TICKS = 1200;
     // CraftBukkit end
 
     public ChunkProviderServer(WorldServer worldserver, IChunkLoader ichunkloader, IChunkProvider ichunkprovider) {
@@ -41,6 +49,10 @@ public class ChunkProviderServer implements IChunkProvider {
 
     public boolean isChunkLoaded(int i, int j) {
         return this.chunks.containsKey(i, j); // CraftBukkit
+    }
+
+    Chunk getChunkAtIfLoadedMainThreadNoCache(int i, int j) {
+        return (Chunk) this.chunks.get(i, j);
     }
 
     public void queueUnload(int i, int j) {
@@ -171,15 +183,15 @@ public class ChunkProviderServer implements IChunkProvider {
         try {
             chunk = chunk == null ? (!this.world.isLoading && !this.forceChunkLoad ? this.emptyChunk : this.getChunkAt(i, j)) : chunk;
         } catch (Exception e) {
-            //Poseidon chunk regenerate
             if (PoseidonConfig.getInstance().getConfigBoolean("emergency.debug.regenerate-corrupt-chunks.enable")) {
-                System.out.println("Poseidon ran into a critical error when attempting to load a chunk (" + i + "," + j + "+. Regenerating chunk...");
-                chunk = this.emptyChunk;
-            } else {
-                System.out.println("Poseidon ran into a critical error when attempting to load a chunk (" + i + "," + j + "+. The server will now likely hang. Enabling \"emergency.debug.regenerate-corrupt-chunks.enable\" in the Poseidon.yml may help.");
+                System.err.println("Poseidon could not load chunk (" + i + "," + j + "). Emergency corrupt-chunk handling is enabled; returning the empty quarantine chunk.");
                 e.printStackTrace();
+                return this.emptyChunk;
+            } else {
+                throw e instanceof ChunkLoadFailureException
+                        ? (ChunkLoadFailureException) e
+                        : new ChunkLoadFailureException(i, j, e);
             }
-            e.printStackTrace();
         }
 
 
@@ -212,9 +224,21 @@ public class ChunkProviderServer implements IChunkProvider {
                 return chunk;
             } catch (Exception exception) {
                 ServerProfiler.getInstance().recordChunkIo("load", (System.nanoTime() - start) / 1_000_000.0D, this.world.worldData.name);
-                exception.printStackTrace();
-                return null;
+                throw exception instanceof ChunkLoadFailureException
+                        ? (ChunkLoadFailureException) exception
+                        : new ChunkLoadFailureException(i, j, exception);
             }
+        }
+    }
+
+    static final class ChunkLoadFailureException extends RuntimeException {
+        final int chunkX;
+        final int chunkZ;
+
+        ChunkLoadFailureException(int chunkX, int chunkZ, Throwable cause) {
+            super("Failed to load existing chunk [" + chunkX + "," + chunkZ + "]; refusing to regenerate over recoverable data", cause);
+            this.chunkX = chunkX;
+            this.chunkZ = chunkZ;
         }
     }
 
@@ -232,17 +256,69 @@ public class ChunkProviderServer implements IChunkProvider {
     }
 
     public void saveChunk(Chunk chunk) { // CraftBukkit - private -> public
-        if (this.e != null) {
-            long start = System.nanoTime();
-            try {
-                chunk.r = this.world.getTime();
-                this.e.a(this.world, chunk);
-                ServerProfiler.getInstance().recordChunkIo("save", (System.nanoTime() - start) / 1_000_000.0D, this.world.worldData.name);
-            } catch (Exception ioexception) { // CraftBukkit - IOException -> Exception
-                ServerProfiler.getInstance().recordChunkIo("save", (System.nanoTime() - start) / 1_000_000.0D, this.world.worldData.name);
-                ioexception.printStackTrace();
-            }
+        this.saveChunkSafely(chunk, true);
+    }
+
+    private boolean saveChunkSafely(Chunk chunk) {
+        return this.saveChunkSafely(chunk, false);
+    }
+
+    private boolean saveChunkSafely(Chunk chunk, boolean force) {
+        if (this.e == null) {
+            return false;
         }
+        if (!force && !this.isChunkSaveRetryReady(chunk)) {
+            return false;
+        }
+
+        long start = System.nanoTime();
+        try {
+            chunk.r = this.world.getTime();
+            this.e.a(this.world, chunk);
+            this.world.markPendingBlockTicksSavedForChunk(chunk.x, chunk.z);
+            ServerProfiler.getInstance().recordChunkIo("save", (System.nanoTime() - start) / 1_000_000.0D, this.world.worldData.name);
+            this.chunkSaveFailures.remove(Long.valueOf(chunkKey(chunk.x, chunk.z)));
+            return true;
+        } catch (Exception ioexception) { // CraftBukkit - IOException -> Exception
+            chunk.o = true;
+            ServerProfiler.getInstance().recordChunkIo("save", (System.nanoTime() - start) / 1_000_000.0D, this.world.worldData.name);
+            this.recordChunkSaveFailure(chunk, ioexception);
+            return false;
+        }
+    }
+
+    private boolean isChunkSaveRetryReady(Chunk chunk) {
+        ChunkSaveFailure failure = this.chunkSaveFailures.get(Long.valueOf(chunkKey(chunk.x, chunk.z)));
+        return failure == null || MinecraftServer.currentTick >= failure.nextAttemptTick;
+    }
+
+    private void recordChunkSaveFailure(Chunk chunk, Exception failureCause) {
+        Long key = Long.valueOf(chunkKey(chunk.x, chunk.z));
+        ChunkSaveFailure failure = this.chunkSaveFailures.get(key);
+        if (failure == null) {
+            failure = new ChunkSaveFailure();
+            this.chunkSaveFailures.put(key, failure);
+        }
+
+        ++failure.attempts;
+        int shift = Math.min(10, failure.attempts - 1);
+        int delay = Math.min(SAVE_RETRY_MAX_TICKS, SAVE_RETRY_BASE_TICKS << shift);
+        failure.nextAttemptTick = MinecraftServer.currentTick + delay;
+
+        int elapsed = MinecraftServer.currentTick - this.lastChunkSaveFailureLogTick;
+        if (elapsed < 0 || elapsed >= 20) {
+            System.err.println("Failed to save chunk [" + chunk.x + "," + chunk.z + "]; retrying in " + delay
+                    + " ticks (" + failureCause.getClass().getSimpleName() + ": " + String.valueOf(failureCause.getMessage()) + ")"
+                    + (this.suppressedChunkSaveFailureLogs > 0 ? " (" + this.suppressedChunkSaveFailureLogs + " similar messages suppressed)" : ""));
+            this.lastChunkSaveFailureLogTick = MinecraftServer.currentTick;
+            this.suppressedChunkSaveFailureLogs = 0;
+        } else {
+            ++this.suppressedChunkSaveFailureLogs;
+        }
+    }
+
+    private static long chunkKey(int chunkX, int chunkZ) {
+        return ((long) chunkX & 4294967295L) | (((long) chunkZ & 4294967295L) << 32);
     }
 
     public void getChunkAt(IChunkProvider ichunkprovider, int i, int j) {
@@ -279,29 +355,53 @@ public class ChunkProviderServer implements IChunkProvider {
     public boolean saveChunks(boolean flag, IProgressUpdate iprogressupdate) {
         int i = 0;
 
-        for (int j = 0; j < this.chunkList.size(); ++j) {
-            Chunk chunk = (Chunk) this.chunkList.get(j);
+        if (flag) {
+            for (int j = 0; j < this.chunkList.size(); ++j) {
+                Chunk chunk = (Chunk) this.chunkList.get(j);
 
-            if (flag && !chunk.p) {
-                this.saveChunkNOP(chunk);
-            }
+                if (!chunk.p) {
+                    this.saveChunkNOP(chunk);
+                }
 
-            if (chunk.a(flag)) {
-                this.saveChunk(chunk);
-                chunk.o = false;
-                ++i;
-                if (i == 24 && !flag) {
-                    return false;
+                if (chunk.a(true)) {
+                    if (this.saveChunkSafely(chunk, true)) {
+                        chunk.o = false;
+                    }
                 }
             }
-        }
 
-        if (flag) {
             if (this.e == null) {
                 return true;
             }
 
             this.e.b();
+            return true;
+        }
+
+        int chunkCount = this.chunkList.size();
+
+        if (chunkCount == 0) {
+            this.nextChunkSaveIndex = 0;
+            return true;
+        }
+
+        for (int checked = 0; checked < chunkCount; ++checked) {
+            if (this.nextChunkSaveIndex >= this.chunkList.size()) {
+                this.nextChunkSaveIndex = 0;
+            }
+
+            Chunk chunk = (Chunk) this.chunkList.get(this.nextChunkSaveIndex++);
+
+            if (chunk.a(false)) {
+                if (this.saveChunkSafely(chunk)) {
+                    chunk.o = false;
+                    ++i;
+                }
+
+                if (i == 24) {
+                    return false;
+                }
+            }
         }
 
         return true;
@@ -311,24 +411,37 @@ public class ChunkProviderServer implements IChunkProvider {
         if (!this.world.canSave) {
             // CraftBukkit start
             org.bukkit.Server server = this.world.getServer();
+            ArrayList failedUnloads = new ArrayList();
             for (int i = 0; i < 50 && !this.unloadQueue.isEmpty(); i++) {
                 long chunkcoordinates = this.unloadQueue.popFirst();
                 Chunk chunk = this.chunks.get(chunkcoordinates);
                 if (chunk == null) continue;
 
                 ChunkUnloadEvent event = new ChunkUnloadEvent(chunk.bukkitChunk);
+                if (!this.isChunkSaveRetryReady(chunk)) {
+                    failedUnloads.add(Long.valueOf(chunkcoordinates));
+                    continue;
+                }
                 server.getPluginManager().callEvent(event);
                 if (!event.isCancelled()) {
 //                    this.world.getWorld().preserveChunk((CraftChunk) chunk.bukkitChunk);
 
-                    chunk.removeEntities();
-                    this.saveChunk(chunk);
+                    if (!this.saveChunkSafely(chunk)) {
+                        failedUnloads.add(Long.valueOf(chunkcoordinates));
+                        continue;
+                    }
                     this.saveChunkNOP(chunk);
+                    chunk.removeEntities();
                     // this.unloadQueue.remove(integer);
                     this.chunks.remove(chunkcoordinates); // CraftBukkit
                     this.chunkList.remove(chunk);
+                    this.chunkSaveFailures.remove(Long.valueOf(chunkcoordinates));
                     ServerProfiler.getInstance().recordChunkUnloaded();
                 }
+            }
+
+            for (int i = 0; i < failedUnloads.size(); ++i) {
+                this.unloadQueue.add(((Long) failedUnloads.get(i)).longValue());
             }
             // CraftBukkit end
 
@@ -342,5 +455,10 @@ public class ChunkProviderServer implements IChunkProvider {
 
     public boolean canSave() {
         return !this.world.canSave;
+    }
+
+    private static final class ChunkSaveFailure {
+        int attempts;
+        int nextAttemptTick;
     }
 }

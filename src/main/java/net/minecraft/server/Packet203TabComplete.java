@@ -41,19 +41,14 @@ public class Packet203TabComplete extends Packet {
         // Read text (for request)
         this.text = PacketLimits.readUtf(in, PacketLimits.MAX_COMMAND_TEXT_CHARS, "tab-complete text");
         
-        // Read completions count
+        // A server only receives tab-complete requests. Response entries are
+        // server-to-client data and accepting them here permits a client to
+        // force hundreds of bounded strings to be allocated before dispatch.
         int count = in.readInt();
-        if (count < 0 || count > PacketLimits.MAX_TAB_COMPLETIONS) {
-            throw new IOException("Invalid tab-complete count: " + count);
+        if (count != 0) {
+            throw new IOException("Client tab-complete request contained response entries: " + count);
         }
-        if (count > 0) {
-            this.completions = new String[count];
-            for (int i = 0; i < count; i++) {
-                this.completions[i] = PacketLimits.readUtf(in, PacketLimits.MAX_COMPLETION_CHARS, "tab-complete completion");
-            }
-        } else if (count == 0) {
-            this.completions = new String[0];
-        }
+        this.completions = new String[0];
     }
 
     @Override

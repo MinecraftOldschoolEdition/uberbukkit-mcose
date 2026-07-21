@@ -20,6 +20,18 @@ public class Packet102WindowClick extends Packet {
     public Packet102WindowClick() {
     }
 
+    public int getContainerInput() {
+        return ContainerInput.decodeInput(this.c, this.f);
+    }
+
+    public int getMouseButton() {
+        return ContainerInput.decodeButton(this.c);
+    }
+
+    public boolean hasExtendedContainerInput() {
+        return ContainerInput.isExtendedButton(this.c);
+    }
+
     public void a(NetHandler nethandler) {
         nethandler.a(this);
     }
@@ -48,14 +60,23 @@ public class Packet102WindowClick extends Packet {
                 short2 = datainputstream.readByte();
             }
 
+            if (short1 >= Item.byId.length || Item.byId[short1] == null) {
+                throw new IOException("Invalid item id " + short1 + " in window click packet");
+            }
+            if (b0 <= 0) {
+                throw new IOException("Invalid item count " + b0 + " in window click packet");
+            }
+
             this.e = new ItemStack(short1, b0, short2);
             
             // Read NBT data if present (MCOSE protocol extension, pvn >= 14)
             if (this.pvn >= 14) {
                 this.e.tag = PacketLimits.readCompressedNBT(datainputstream, PacketLimits.MAX_ITEM_NBT_BYTES, "item NBT");
             }
-        } else {
+        } else if (short1 == -1) {
             this.e = null;
+        } else {
+            throw new IOException("Invalid item id " + short1 + " in window click packet");
         }
     }
 

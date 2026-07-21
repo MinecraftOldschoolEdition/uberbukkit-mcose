@@ -62,6 +62,12 @@ public class PoseidonConfig extends Configuration {
         generateConfigOption("settings.per-day-log-file.enabled", false);
         generateConfigOption("settings.per-day-log-file.latest-log.info", "This setting causes the server to create a latest.log similar to modern Minecraft servers. This can be useful for certain control panels and log file management.");
         generateConfigOption("settings.per-day-log-file.latest-log.enabled", true);
+        generateConfigOption("settings.logging.verbose.info", "Enables fine-grained internal diagnostics. Leave disabled during normal operation to keep console and file logs concise.");
+        generateConfigOption("settings.logging.verbose.enabled", false);
+        generateConfigOption("settings.logging.duplicate-suppression.info", "Limits identical messages within a short window while preserving the first few copies. This prevents broken plugins and repeated warnings from inflating log files.");
+        generateConfigOption("settings.logging.duplicate-suppression.enabled", true);
+        generateConfigOption("settings.logging.duplicate-suppression.window-seconds", 30);
+        generateConfigOption("settings.logging.duplicate-suppression.burst", 3);
 
         //generateConfigOption("settings.fetch-uuids-from", "https://api.mojang.com/profiles/minecraft");
 
@@ -94,6 +100,10 @@ public class PoseidonConfig extends Configuration {
         generateConfigOption("settings.remove-join-leave-debug", true);
         generateConfigOption("settings.enable-tpc-nodelay", true);
         generateConfigOption("settings.enable-tcp-nodelay", true);
+        generateConfigOption("settings.region-file-cache-size", 256);
+        generateConfigOption("settings.region-file-cache-size-info", "Paper-style limit for open region files. Higher values can reduce region file churn on large worlds at the cost of more open file handles.");
+        generateConfigOption("settings.region-file-flush-on-save.enabled", true);
+        generateConfigOption("settings.region-file-flush-on-save.info", "Paper-style save flush for open region files. When enabled, explicit save-level operations sync pending region writes without closing the region file cache.");
 
         //generateConfigOption("settings.use-get-for-uuids.enabled", true);
         //generateConfigOption("settings.use-get-for-uuids.info", "This setting causes the server to use the GET method for Username to UUID conversion. This is useful incase the POST method goes offline.");
@@ -131,12 +141,20 @@ public class PoseidonConfig extends Configuration {
         generateConfigOption("settings.packet-rate-limit.enabled", true);
         generateConfigOption("settings.packet-rate-limit.info", "This setting kicks connections whose smoothed inbound packet rate stays above the configured packets-per-second limit.");
         generateConfigOption("settings.packet-rate-limit.packets-per-second", 500);
+        generateConfigOption("settings.book-size.page-max", 2560);
+        generateConfigOption("settings.book-size.page-max-info", "Paper-style maximum UTF-8 byte budget for the first page of an edited book.");
+        generateConfigOption("settings.book-size.total-multiplier", 0.98D);
+        generateConfigOption("settings.book-size.total-multiplier-info", "Paper-style decay multiplier for the additional byte budget granted by each following book page.");
         
         // Connection throttling - prevents rapid connections from same IP
-        generateConfigOption("settings.connection-throttle-ms.value", 0);
-        generateConfigOption("settings.connection-throttle-ms.info", "Minimum milliseconds between connections from the same IP. Set to 0 to disable (default). Only increase if you're experiencing connection spam attacks.");
-        generateConfigOption("settings.connection-throttle-ms.burst", 4);
+        generateConfigOption("settings.connection-throttle-ms.value", 4000);
+        generateConfigOption("settings.connection-throttle-ms.info", "Minimum milliseconds between connection bursts from the same non-loopback IP. Set to 0 only behind a trusted rate-limiting proxy.");
+        generateConfigOption("settings.connection-throttle-ms.burst", 8);
         generateConfigOption("settings.connection-throttle-ms.burst-info", "How many connections from one IP are allowed within the throttle window before newer attempts are rejected.");
+        generateConfigOption("settings.max-joins-per-tick", 5);
+        generateConfigOption("settings.max-joins-per-tick-info", "Paper-style join buffering. Limits expensive player join finalization work per server tick. Set to 0 or lower to disable the cap.");
+        generateConfigOption("settings.max-pending-logins", 128);
+        generateConfigOption("settings.max-pending-logins-info", "Hard cap on sockets in the login phase. New sockets are closed before allocating network/authentication workers when the cap is full.");
 
         //Statistics
         generateConfigOption("settings.statistics.key", UUID.randomUUID().toString());
@@ -181,6 +199,29 @@ public class PoseidonConfig extends Configuration {
         generateConfigOption("world.settings.mob-spawner-area-limit.limit", 150);
         generateConfigOption("world.settings.mob-spawner-area-limit.chunk-radius", 8);
         generateConfigOption("world.settings.mob-spawner-area-limit.info", "This setting controls the maximum number of entities of a mob spawner type that can exist within the defined chunk radius around a mob spawner. If the number of entities exceeds this limit, the spawner will stop spawning additional entities of that type. This is useful to stop the extreme lag that can be caused by mob spawners.");
+        generateConfigOption("world.settings.max-entity-collisions", 8);
+        generateConfigOption("world.settings.max-entity-collisions-info", "Paper-style per-entity collision cap. Limits crowd-pushing work in dense farms and pens; 0 disables entity pushing.");
+        generateConfigOption("world.settings.mob-spawner-tick-rate", 1);
+        generateConfigOption("world.settings.mob-spawner-tick-rate-info", "Paper-style mob spawner tick interval. 1 keeps vanilla timing, higher values reduce spawner CPU by ticking spawn logic less often, and -1 disables spawner ticking.");
+
+        generateConfigOption("world.settings.natural-spawn-tick-rate.info", "Paper-style natural spawn interval per creature type. 1 keeps current timing, higher values skip spawn checks on intervening ticks, and 0 disables that category.");
+        generateConfigOption("world.settings.natural-spawn-tick-rate.monster", 1);
+        generateConfigOption("world.settings.natural-spawn-tick-rate.creature", 1);
+        generateConfigOption("world.settings.natural-spawn-tick-rate.water-creature", 1);
+
+        generateConfigOption("world.settings.farmland-tick-rate.info", "Paper-style random tick intervals for farmland. 1 keeps vanilla timing, higher values stagger moisture checks over more ticks, and 0 disables that moisture-state check.");
+        generateConfigOption("world.settings.farmland-tick-rate.wet", 1);
+        generateConfigOption("world.settings.farmland-tick-rate.dry", 1);
+        generateConfigOption("world.settings.grass-spread-tick-rate", 1);
+        generateConfigOption("world.settings.grass-spread-tick-rate-info", "Paper-style random tick interval for grass spread and fade updates. 1 keeps vanilla timing, higher values stagger grass updates over more ticks, and 0 disables random grass updates.");
+        generateConfigOption("world.settings.disable-ice-and-snow.info", "Paper-style option to skip weather-driven snow and ice formation. Melting and player-placed snow/ice behavior are unchanged.");
+        generateConfigOption("world.settings.disable-ice-and-snow.enabled", false);
+
+        generateConfigOption("settings.per-player-mob-spawns.enabled", true);
+        generateConfigOption("settings.per-player-mob-spawns.info", "Paper-style local mob caps for natural spawning. When enabled, chunks near players already at their local cap are skipped before expensive spawn-position probing.");
+        generateConfigOption("world.settings.mob-despawn-range.info", "Paper-style mob despawn distances. Defaults preserve vanilla: hard despawn above 128 blocks, random soft despawn above 32 blocks after idle time.");
+        generateConfigOption("world.settings.mob-despawn-range.hard", 128);
+        generateConfigOption("world.settings.mob-despawn-range.soft", 32);
 
 
         //generateConfigOption("world-settings.eject-from-vehicle-on-teleport.enabled", true);
@@ -264,6 +305,21 @@ public class PoseidonConfig extends Configuration {
         generateConfigOption("settings.entity-tracking.action-priority.mid-chunk-radius", 4);
         generateConfigOption("settings.entity-tracking.action-priority.mob-update-frequency", 4);
         generateConfigOption("settings.entity-tracking.action-priority.vehicle-update-frequency", 4);
+
+        // Entity Activation Settings - throttles far-away idle mob AI.
+        generateConfigOption("settings.entity-activation.info", "Controls Paper-style throttling for far-away idle creature AI. Projectiles, items, vehicles, players, TNT, and active combat/leash states remain fully ticked.");
+        generateConfigOption("settings.entity-activation.enabled", true);
+        generateConfigOption("settings.entity-activation.monster-range", 32);
+        generateConfigOption("settings.entity-activation.animal-range", 32);
+        generateConfigOption("settings.entity-activation.water-range", 16);
+        generateConfigOption("settings.entity-activation.misc-creature-range", 16);
+        generateConfigOption("settings.entity-activation.inactive-check-interval", 20);
+        generateConfigOption("settings.entity-activation.new-entity-immunity-ticks", 200);
+
+        // Entity Load/Save Limit Settings - opt-in protection for pathological chunk entity piles.
+        generateConfigOption("settings.entity-load-save-limit-per-chunk.info", "Optional Paper-style cap for how many entities of each type are loaded from or saved into one chunk. Disabled by default because enabling it can intentionally drop excess entities.");
+        generateConfigOption("settings.entity-load-save-limit-per-chunk.enabled", false);
+        generateConfigOption("settings.entity-load-save-limit-per-chunk.limits", "Item=256,Arrow=128,Snowball=128,Egg=128,FallingSand=64,PrimedTnt=64,Minecart=64,Boat=64");
 
         // Startup readiness gate and warmup policy
         generateConfigOption("settings.startup-readiness.enabled", true);
