@@ -70,6 +70,7 @@ public class MinecraftServer implements Runnable, ICommandListener {
     private Queue s = new java.util.concurrent.ConcurrentLinkedQueue();
     // public EntityTracker[] tracker = new EntityTracker[2]; // CraftBukkit - removed!
     public boolean onlineMode;
+    public boolean preventProxyConnections;
     public boolean spawnAnimals;
     public boolean pvpMode;
     public boolean allowFlight;
@@ -230,6 +231,7 @@ public class MinecraftServer implements Runnable, ICommandListener {
         String s = this.propertyManager.getString("server-ip", "");
 
         this.onlineMode = this.propertyManager.getBoolean("online-mode", true);
+        this.preventProxyConnections = this.propertyManager.getBoolean("prevent-proxy-connections", false);
         this.spawnAnimals = this.propertyManager.getBoolean("spawn-animals", true);
         this.pvpMode = this.propertyManager.getBoolean("pvp", true);
         this.allowFlight = this.propertyManager.getBoolean("allow-flight", false);

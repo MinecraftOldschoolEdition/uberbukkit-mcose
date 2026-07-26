@@ -3,6 +3,7 @@ package net.minecraft.server;
 import java.util.List;
 
 import uk.betacraft.uberbukkit.Uberbukkit;
+import uk.betacraft.uberbukkit.UberbukkitConfig;
 
 public class WorldData {
 
@@ -44,6 +45,8 @@ public class WorldData {
         if (gameRules.hasKey("sleepEnabled")) this.sleepEnabled = gameRules.m("sleepEnabled");
         if (gameRules.hasKey("advertiseAchievements")) this.advertiseAchievements = gameRules.m("advertiseAchievements");
         if (gameRules.hasKey("keepInventory")) this.keepInventory = gameRules.m("keepInventory");
+        if (gameRules.hasKey("punchToPrimeTNT")) this.punchToPrimeTNT = gameRules.m("punchToPrimeTNT");
+        if (gameRules.hasKey("punchSheepForWool")) this.punchSheepForWool = gameRules.m("punchSheepForWool");
         if (gameRules.hasKey("spawnRadius")) this.spawnRadius = Math.max(0, gameRules.e("spawnRadius"));
     }
 
@@ -92,8 +95,13 @@ public class WorldData {
             this.difficulty = nbttagcompound.e("Difficulty");
         }
         // Modern/client-compatible gamerule layout.
+        boolean hasPunchToPrimeTNT = false;
+        boolean hasPunchSheepForWool = false;
         if (nbttagcompound.hasKey("GameRules")) {
-            this.loadGameRulesFromCompound(nbttagcompound.k("GameRules"));
+            NBTTagCompound gameRules = nbttagcompound.k("GameRules");
+            hasPunchToPrimeTNT = gameRules.hasKey("punchToPrimeTNT");
+            hasPunchSheepForWool = gameRules.hasKey("punchSheepForWool");
+            this.loadGameRulesFromCompound(gameRules);
         }
         // Load gamerules, defaulting to true if not present
         if (nbttagcompound.hasKey("DoDayNightCycle")) this.doDayNightCycle = nbttagcompound.m("DoDayNightCycle");
@@ -105,6 +113,21 @@ public class WorldData {
         if (nbttagcompound.hasKey("SleepEnabled")) this.sleepEnabled = nbttagcompound.m("SleepEnabled");
         if (nbttagcompound.hasKey("AdvertiseAchievements")) this.advertiseAchievements = nbttagcompound.m("AdvertiseAchievements");
         if (nbttagcompound.hasKey("KeepInventory")) this.keepInventory = nbttagcompound.m("KeepInventory");
+        if (nbttagcompound.hasKey("PunchToPrimeTNT")) {
+            this.punchToPrimeTNT = nbttagcompound.m("PunchToPrimeTNT");
+            hasPunchToPrimeTNT = true;
+        }
+        if (nbttagcompound.hasKey("PunchSheepForWool")) {
+            this.punchSheepForWool = nbttagcompound.m("PunchSheepForWool");
+            hasPunchSheepForWool = true;
+        }
+        // Migrate the old server-wide compatibility settings into worlds that predate these rules.
+        if (!hasPunchToPrimeTNT) {
+            this.punchToPrimeTNT = !UberbukkitConfig.getInstance().getBoolean("mechanics.tnt_require_lighter", true);
+        }
+        if (!hasPunchSheepForWool) {
+            this.punchSheepForWool = UberbukkitConfig.getInstance().getBoolean("mechanics.sheep_drop_wool_on_punch", false);
+        }
         // Integer gamerules
         if (nbttagcompound.hasKey("SpawnRadius")) this.spawnRadius = nbttagcompound.e("SpawnRadius");
     }
@@ -112,6 +135,8 @@ public class WorldData {
     public WorldData(long i, String s) {
         this.a = i;
         this.name = s;
+        this.punchToPrimeTNT = !UberbukkitConfig.getInstance().getBoolean("mechanics.tnt_require_lighter", true);
+        this.punchSheepForWool = UberbukkitConfig.getInstance().getBoolean("mechanics.sheep_drop_wool_on_punch", false);
     }
 
     public WorldData(WorldData worlddata) {
@@ -144,6 +169,8 @@ public class WorldData {
         this.advertiseAchievements = worlddata.advertiseAchievements;
         this.sleepEnabled = worlddata.sleepEnabled;
         this.keepInventory = worlddata.keepInventory;
+        this.punchToPrimeTNT = worlddata.punchToPrimeTNT;
+        this.punchSheepForWool = worlddata.punchSheepForWool;
         this.spawnRadius = worlddata.spawnRadius;
     }
 
@@ -207,6 +234,8 @@ public class WorldData {
         nbttagcompound.a("SleepEnabled", this.sleepEnabled);
         nbttagcompound.a("AdvertiseAchievements", this.advertiseAchievements);
         nbttagcompound.a("KeepInventory", this.keepInventory);
+        nbttagcompound.a("PunchToPrimeTNT", this.punchToPrimeTNT);
+        nbttagcompound.a("PunchSheepForWool", this.punchSheepForWool);
         // Integer gamerules
         nbttagcompound.a("SpawnRadius", this.spawnRadius);
 
@@ -221,6 +250,8 @@ public class WorldData {
         gameRules.a("sleepEnabled", this.sleepEnabled);
         gameRules.a("advertiseAchievements", this.advertiseAchievements);
         gameRules.a("keepInventory", this.keepInventory);
+        gameRules.a("punchToPrimeTNT", this.punchToPrimeTNT);
+        gameRules.a("punchSheepForWool", this.punchSheepForWool);
         gameRules.a("spawnRadius", this.spawnRadius);
         nbttagcompound.a("GameRules", gameRules);
     }
@@ -354,6 +385,8 @@ public class WorldData {
     private boolean advertiseAchievements = true; // Default to true - broadcast achievements to all players
     private boolean sleepEnabled = true; // Default: sleeping in beds is enabled
     private boolean keepInventory = false; // If true, players keep inventory on death
+    private boolean punchToPrimeTNT = false;
+    private boolean punchSheepForWool = false;
     
     // Gamerules (integer)
     private int spawnRadius = 10; // Vanilla default spawn randomization radius
@@ -377,6 +410,10 @@ public class WorldData {
     public void setAdvertiseAchievements(boolean v) { this.advertiseAchievements = v; }
     public boolean getKeepInventory() { return this.keepInventory; }
     public void setKeepInventory(boolean v) { this.keepInventory = v; }
+    public boolean getPunchToPrimeTNT() { return this.punchToPrimeTNT; }
+    public void setPunchToPrimeTNT(boolean v) { this.punchToPrimeTNT = v; }
+    public boolean getPunchSheepForWool() { return this.punchSheepForWool; }
+    public void setPunchSheepForWool(boolean v) { this.punchSheepForWool = v; }
     
     // Integer gamerules
     public int getSpawnRadius() { return this.spawnRadius; }

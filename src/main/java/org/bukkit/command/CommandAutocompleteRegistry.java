@@ -66,7 +66,9 @@ public final class CommandAutocompleteRegistry {
         "showDeathMessages",
         "sleepEnabled",
         "advertiseAchievements",
-        "keepInventory"
+        "keepInventory",
+        "punchToPrimeTNT",
+        "punchSheepForWool"
     };
 
     private static final String[] INTEGER_GAMERULES = new String[] { "spawnRadius", "spawnProtectionRadius" };

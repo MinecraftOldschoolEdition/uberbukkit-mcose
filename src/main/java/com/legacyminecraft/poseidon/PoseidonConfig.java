@@ -94,8 +94,8 @@ public class PoseidonConfig extends Configuration {
         generateConfigOption("settings.authentication.session.retry-delay-ms-info", "Base delay in milliseconds before retrying modern session verification after transient failures.");
         generateConfigOption("settings.authentication.session.max-retry-delay-ms", 1000);
         generateConfigOption("settings.authentication.session.max-retry-delay-ms-info", "Upper bound in milliseconds for exponential authentication retry backoff.");
-        generateConfigOption("settings.authentication.session.parallel-no-ip-fallback", true);
-        generateConfigOption("settings.authentication.session.parallel-no-ip-fallback-info", "If enabled, authentication may perform a no-IP hasJoined fallback when the primary lookup is inconclusive or transiently failing.");
+        generateConfigOption("settings.authentication.session.parallel-no-ip-fallback", false);
+        generateConfigOption("settings.authentication.session.parallel-no-ip-fallback-info", "Unsafe compatibility fallback for trusted proxies only. This only applies when prevent-proxy-connections is enabled and the IP-bound lookup has a transient failure.");
 
         generateConfigOption("settings.remove-join-leave-debug", true);
         generateConfigOption("settings.enable-tpc-nodelay", true);

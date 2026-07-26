@@ -13,7 +13,7 @@ import java.util.Locale;
 public class GameruleCommand extends VanillaCommand {
     
     // Boolean gamerules
-    private static final String[] BOOLEAN_RULES = {"doDayNightCycle", "tntexplodes", "mobGriefing", "doWeatherCycle", "doFireTick", "showDeathMessages", "sleepEnabled", "advertiseAchievements", "keepInventory"};
+    private static final String[] BOOLEAN_RULES = {"doDayNightCycle", "tntexplodes", "mobGriefing", "doWeatherCycle", "doFireTick", "showDeathMessages", "sleepEnabled", "advertiseAchievements", "keepInventory", "punchToPrimeTNT", "punchSheepForWool"};
     // Integer gamerules
     private static final String[] INTEGER_RULES = {"spawnRadius", "spawnProtectionRadius"};
     
@@ -36,6 +36,86 @@ public class GameruleCommand extends VanillaCommand {
             if (rule.equalsIgnoreCase(name)) return true;
         }
         return false;
+    }
+
+    static String[] booleanRuleNames() {
+        return BOOLEAN_RULES.clone();
+    }
+
+    static String[] integerRuleNames() {
+        return INTEGER_RULES.clone();
+    }
+
+    static Boolean getBooleanRuleValue(WorldData worldData, String ruleName) {
+        if (worldData == null || ruleName == null) {
+            return null;
+        }
+        if (ruleName.equalsIgnoreCase("doDayNightCycle")) {
+            return Boolean.valueOf(worldData.getDoDayNightCycle());
+        }
+        if (ruleName.equalsIgnoreCase("tntexplodes")) {
+            return Boolean.valueOf(worldData.getTntexplodes());
+        }
+        if (ruleName.equalsIgnoreCase("mobGriefing")) {
+            return Boolean.valueOf(worldData.getMobGriefing());
+        }
+        if (ruleName.equalsIgnoreCase("doWeatherCycle")) {
+            return Boolean.valueOf(worldData.getDoWeatherCycle());
+        }
+        if (ruleName.equalsIgnoreCase("doFireTick")) {
+            return Boolean.valueOf(worldData.getDoFireTick());
+        }
+        if (ruleName.equalsIgnoreCase("showDeathMessages")) {
+            return Boolean.valueOf(worldData.getShowDeathMessages());
+        }
+        if (ruleName.equalsIgnoreCase("sleepEnabled")) {
+            return Boolean.valueOf(worldData.getSleepEnabled());
+        }
+        if (ruleName.equalsIgnoreCase("advertiseAchievements")) {
+            return Boolean.valueOf(worldData.getAdvertiseAchievements());
+        }
+        if (ruleName.equalsIgnoreCase("keepInventory")) {
+            return Boolean.valueOf(worldData.getKeepInventory());
+        }
+        if (ruleName.equalsIgnoreCase("punchToPrimeTNT")) {
+            return Boolean.valueOf(worldData.getPunchToPrimeTNT());
+        }
+        if (ruleName.equalsIgnoreCase("punchSheepForWool")) {
+            return Boolean.valueOf(worldData.getPunchSheepForWool());
+        }
+        return null;
+    }
+
+    static boolean setBooleanRuleValue(WorldData worldData, String ruleName, boolean value) {
+        if (worldData == null || ruleName == null) {
+            return false;
+        }
+        if (ruleName.equalsIgnoreCase("doDayNightCycle")) {
+            worldData.setDoDayNightCycle(value);
+        } else if (ruleName.equalsIgnoreCase("tntexplodes")) {
+            worldData.setTntexplodes(value);
+        } else if (ruleName.equalsIgnoreCase("mobGriefing")) {
+            worldData.setMobGriefing(value);
+        } else if (ruleName.equalsIgnoreCase("doWeatherCycle")) {
+            worldData.setDoWeatherCycle(value);
+        } else if (ruleName.equalsIgnoreCase("doFireTick")) {
+            worldData.setDoFireTick(value);
+        } else if (ruleName.equalsIgnoreCase("showDeathMessages")) {
+            worldData.setShowDeathMessages(value);
+        } else if (ruleName.equalsIgnoreCase("sleepEnabled")) {
+            worldData.setSleepEnabled(value);
+        } else if (ruleName.equalsIgnoreCase("advertiseAchievements")) {
+            worldData.setAdvertiseAchievements(value);
+        } else if (ruleName.equalsIgnoreCase("keepInventory")) {
+            worldData.setKeepInventory(value);
+        } else if (ruleName.equalsIgnoreCase("punchToPrimeTNT")) {
+            worldData.setPunchToPrimeTNT(value);
+        } else if (ruleName.equalsIgnoreCase("punchSheepForWool")) {
+            worldData.setPunchSheepForWool(value);
+        } else {
+            return false;
+        }
+        return true;
     }
 
     private boolean isSpawnProtectionRule(String name) {
@@ -88,24 +168,13 @@ public class GameruleCommand extends VanillaCommand {
 
         if (args.length == 1) {
             // Query a gamerule value
-            if (ruleName.equals("dodaynightcycle")) {
-                sender.sendMessage(args[0] + " = " + worldData.getDoDayNightCycle());
-            } else if (ruleName.equals("tntexplodes")) {
-                sender.sendMessage(args[0] + " = " + worldData.getTntexplodes());
-            } else if (ruleName.equals("mobgriefing")) {
-                sender.sendMessage(args[0] + " = " + worldData.getMobGriefing());
-            } else if (ruleName.equals("doweathercycle")) {
-                sender.sendMessage(args[0] + " = " + worldData.getDoWeatherCycle());
-            } else if (ruleName.equals("dofiretick")) {
-                sender.sendMessage(args[0] + " = " + worldData.getDoFireTick());
-            } else if (ruleName.equals("showdeathmessages")) {
-                sender.sendMessage(args[0] + " = " + worldData.getShowDeathMessages());
-            } else if (ruleName.equals("sleepenabled")) {
-                sender.sendMessage(args[0] + " = " + worldData.getSleepEnabled());
-            } else if (ruleName.equals("advertiseachievements")) {
-                sender.sendMessage(args[0] + " = " + worldData.getAdvertiseAchievements());
-            } else if (ruleName.equals("keepinventory")) {
-                sender.sendMessage(args[0] + " = " + worldData.getKeepInventory());
+            if (isBooleanRule(ruleName)) {
+                Boolean value = getBooleanRuleValue(worldData, ruleName);
+                if (value == null) {
+                    sender.sendMessage(ChatColor.RED + "Unknown game rule: " + args[0]);
+                    return false;
+                }
+                sender.sendMessage(args[0] + " = " + value.booleanValue());
             } else if (isRespawnRadiusRule(ruleName)) {
                 sender.sendMessage(args[0] + " = " + worldData.getSpawnRadius());
             } else if (isSpawnProtectionRule(ruleName)) {
@@ -157,25 +226,7 @@ public class GameruleCommand extends VanillaCommand {
                     return false;
                 }
 
-                if (ruleName.equals("dodaynightcycle")) {
-                    worldData.setDoDayNightCycle(value);
-                } else if (ruleName.equals("tntexplodes")) {
-                    worldData.setTntexplodes(value);
-                } else if (ruleName.equals("mobgriefing")) {
-                    worldData.setMobGriefing(value);
-                } else if (ruleName.equals("doweathercycle")) {
-                    worldData.setDoWeatherCycle(value);
-                } else if (ruleName.equals("dofiretick")) {
-                    worldData.setDoFireTick(value);
-                } else if (ruleName.equals("showdeathmessages")) {
-                    worldData.setShowDeathMessages(value);
-                } else if (ruleName.equals("sleepenabled")) {
-                    worldData.setSleepEnabled(value);
-                } else if (ruleName.equals("advertiseachievements")) {
-                    worldData.setAdvertiseAchievements(value);
-                } else if (ruleName.equals("keepinventory")) {
-                    worldData.setKeepInventory(value);
-                } else {
+                if (!setBooleanRuleValue(worldData, ruleName, value)) {
                     sender.sendMessage(ChatColor.RED + "Unknown game rule: " + args[0]);
                     return false;
                 }

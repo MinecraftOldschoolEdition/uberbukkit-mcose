@@ -75,7 +75,7 @@ settings:
             max-retry-delay-ms: 1000
             max-retry-delay-ms-info: Upper bound in milliseconds for exponential authentication retry backoff.
             parallel-no-ip-fallback: false
-            parallel-no-ip-fallback-info: Unsafe compatibility fallback for trusted proxies only. Direct public servers should keep this disabled so authentication remains bound to the connecting IP.
+            parallel-no-ip-fallback-info: Unsafe compatibility fallback for trusted proxies only. This only applies when prevent-proxy-connections is enabled and the IP-bound lookup has a transient failure.
     support:
         modloader:
             enable: false

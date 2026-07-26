@@ -192,9 +192,16 @@ public class LoginProcessHandler {
         }
     }
 
-    public synchronized void userMojangSessionVerified() {
-        if (!loginSuccessful & !loginCancelled) {
-            getUserUUID();
+    public synchronized void userMojangSessionVerified(UUID verifiedUuid) {
+        if (!loginSuccessful && !loginCancelled) {
+            if (verifiedUuid == null) {
+                cancelLoginProcess("Failed to verify username!");
+                return;
+            }
+            // hasJoined already returns the authenticated profile UUID. Reuse it
+            // directly so a stale cache or a second profile-service failure cannot
+            // change the identity that Mojang just verified.
+            userUUIDReceived(verifiedUuid, true);
         }
     }
 

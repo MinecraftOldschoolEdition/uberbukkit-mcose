@@ -6,8 +6,10 @@ import com.legacyminecraft.poseidon.util.SessionAPI;
 import org.bukkit.craftbukkit.CraftServer;
 
 import java.net.InetSocketAddress;
+import java.net.HttpURLConnection;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -28,6 +30,8 @@ public class ThreadLoginVerifier extends Thread {
     private static final int DEFAULT_RETRY_DELAY_MS = 250;
     private static final int DEFAULT_MAX_RETRY_DELAY_MS = 1000;
     private static final boolean DEFAULT_PARALLEL_NO_IP_FALLBACK = false;
+    private static final String INVALID_SESSION_MESSAGE = "Failed to verify username!";
+    private static final String AUTHENTICATION_UNAVAILABLE_MESSAGE = "Authentication servers are unavailable. Please try again later.";
     private static final int LOGIN_VERIFIER_THREADS = Math.max(2, Math.min(8, Runtime.getRuntime().availableProcessors()));
     private static final long SESSION_LOOKUP_TIMEOUT_MS = 5000L;
 
@@ -68,6 +72,8 @@ public class ThreadLoginVerifier extends Thread {
 
     final LoginProcessHandler loginProcessHandler;  //Project Poseidon
 
+    private UUID verifiedProfileUuid;
+
     // CraftBukkit start
     CraftServer server;
 
@@ -106,7 +112,7 @@ public class ThreadLoginVerifier extends Thread {
                 return;
             }
             if (verificationFailure == null) {
-                loginProcessHandler.userMojangSessionVerified();
+                loginProcessHandler.userMojangSessionVerified(this.verifiedProfileUuid);
                 return;
             }
 
@@ -118,19 +124,27 @@ public class ThreadLoginVerifier extends Thread {
     }
 
     private String verifySessionWithRetry(String playerName, String serverId, String clientIP) {
-        boolean isLocalhost = "127.0.0.1".equals(clientIP) || "localhost".equals(clientIP);
         int maxAttempts = Math.max(1, getConfigInt("settings.authentication.session.max-attempts", DEFAULT_MAX_ATTEMPTS));
         int retryDelayMs = Math.max(0, getConfigInt("settings.authentication.session.retry-delay-ms", DEFAULT_RETRY_DELAY_MS));
         int maxRetryDelayMs = Math.max(retryDelayMs, getConfigInt("settings.authentication.session.max-retry-delay-ms", DEFAULT_MAX_RETRY_DELAY_MS));
         boolean parallelNoIpFallback = getConfigBoolean("settings.authentication.session.parallel-no-ip-fallback", DEFAULT_PARALLEL_NO_IP_FALLBACK);
+        String lookupIp = sessionLookupIp(
+                clientIP,
+                this.netLoginHandler.getMinecraftServer().preventProxyConnections);
+        boolean bindClientIp = lookupIp != null;
 
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
             if (!this.loginProcessHandler.isLoginActive() || Thread.currentThread().isInterrupted()) {
                 break;
             }
-            List<SessionAPI.ModernSessionResponse> responses = queryModernSessionWithFallback(playerName, serverId, clientIP, !isLocalhost && parallelNoIpFallback);
+            List<SessionAPI.ModernSessionResponse> responses = queryModernSessionWithFallback(
+                    playerName,
+                    serverId,
+                    lookupIp,
+                    bindClientIp && parallelNoIpFallback);
 
             boolean sawRetryableError = false;
+            boolean sawDefinitiveRejection = false;
 
             for (SessionAPI.ModernSessionResponse response : responses) {
                 if (response == null) {
@@ -140,33 +154,34 @@ public class ThreadLoginVerifier extends Thread {
 
                 int responseCode = response.getResponseCode();
                 if (responseCode == 204) {
+                    sawDefinitiveRejection = true;
                     continue;
                 }
 
                 if (responseCode == 200) {
-                    // Username match is case-insensitive per Mojang protocol docs.
-                    if (!playerName.equalsIgnoreCase(response.getUsername())) {
-                        return "Failed to verify username!";
+                    UUID profileUuid = validatedProfileUuid(playerName, response);
+                    if (profileUuid == null) {
+                        return INVALID_SESSION_MESSAGE;
                     }
-
-                    // For non-localhost, verify IP if Mojang returned one.
-                    String mojangIP = response.getIp();
-                    if (!isLocalhost && mojangIP != null && !mojangIP.isEmpty() && !"noip".equalsIgnoreCase(mojangIP)) {
-                        if (!clientIP.equals(mojangIP)) {
-                            return "Failed to verify username! (IP mismatch)";
-                        }
-                    }
-
+                    this.verifiedProfileUuid = profileUuid;
                     return null;
                 }
 
                 if (SessionAPI.isRetryableStatusCode(responseCode)) {
                     sawRetryableError = true;
+                } else {
+                    sawDefinitiveRejection = true;
                 }
             }
 
-            if (!sawRetryableError || attempt >= maxAttempts) {
-                break;
+            if (sawDefinitiveRejection) {
+                return INVALID_SESSION_MESSAGE;
+            }
+            if (!sawRetryableError) {
+                return INVALID_SESSION_MESSAGE;
+            }
+            if (attempt >= maxAttempts) {
+                return sessionFailureMessage(true, false);
             }
 
             int delayMs = calculateBackoffDelay(attempt, retryDelayMs, maxRetryDelayMs);
@@ -180,7 +195,7 @@ public class ThreadLoginVerifier extends Thread {
             }
         }
 
-        return "Failed to verify username!";
+        return sessionFailureMessage(true, false);
     }
 
     private List<SessionAPI.ModernSessionResponse> queryModernSessionWithFallback(String playerName, String serverId, String clientIP, boolean includeNoIpFallback) {
@@ -189,9 +204,9 @@ public class ThreadLoginVerifier extends Thread {
         responses.add(primary);
 
         // Avoid doubling every request by default. Only do no-IP fallback when the primary
-        // result was inconclusive/transient, which significantly reduces Mojang auth rate-limit hits.
+        // result failed transiently, which significantly reduces Mojang auth rate-limit hits.
         if (includeNoIpFallback && shouldTryNoIpFallback(primary)) {
-            responses.add(lookupModernSession(playerName, serverId, "127.0.0.1"));
+            responses.add(lookupModernSession(playerName, serverId, null));
         }
 
         return responses;
@@ -214,13 +229,35 @@ public class ThreadLoginVerifier extends Thread {
         }
     }
 
-    private boolean shouldTryNoIpFallback(SessionAPI.ModernSessionResponse response) {
+    static boolean shouldTryNoIpFallback(SessionAPI.ModernSessionResponse response) {
         if (response == null) {
             return true;
         }
 
         int responseCode = response.getResponseCode();
-        return responseCode == 204 || SessionAPI.isRetryableStatusCode(responseCode);
+        return SessionAPI.isRetryableStatusCode(responseCode);
+    }
+
+    static UUID validatedProfileUuid(String expectedName, SessionAPI.ModernSessionResponse response) {
+        if (expectedName == null || response == null || response.getResponseCode() != HttpURLConnection.HTTP_OK) {
+            return null;
+        }
+        if (!expectedName.equalsIgnoreCase(response.getUsername())) {
+            return null;
+        }
+        return response.getProfileUuid();
+    }
+
+    static String sessionLookupIp(String clientIp, boolean preventProxyConnections) {
+        return preventProxyConnections && clientIp != null && !clientIp.isEmpty()
+                ? clientIp
+                : null;
+    }
+
+    static String sessionFailureMessage(boolean sawRetryableError, boolean sawDefinitiveRejection) {
+        return sawRetryableError && !sawDefinitiveRejection
+                ? AUTHENTICATION_UNAVAILABLE_MESSAGE
+                : INVALID_SESSION_MESSAGE;
     }
 
     private int calculateBackoffDelay(int attempt, int retryDelayMs, int maxRetryDelayMs) {

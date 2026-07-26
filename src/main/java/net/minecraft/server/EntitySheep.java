@@ -37,8 +37,7 @@ public class EntitySheep extends EntityAnimal {
     }
 
     public boolean damageEntity(Entity entity, int i) {
-        // uberbukkit
-        if (UberbukkitConfig.getInstance().getBoolean("mechanics.sheep_drop_wool_on_punch", false)) {
+        if (this.world.worldData != null && this.world.worldData.getPunchSheepForWool()) {
             if (!this.world.isStatic && !this.isSheared() && entity instanceof EntityLiving) {
                 this.setSheared(true);
                 int j = 1 + this.random.nextInt(3);

@@ -5,8 +5,6 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.Random;
 
-import uk.betacraft.uberbukkit.UberbukkitConfig;
-
 public class BlockTNT extends Block {
 
     private static final long TNT_OWNER_MAX_AGE_MS = 7L * 24L * 60L * 60L * 1000L;
@@ -91,12 +89,7 @@ public class BlockTNT extends Block {
     }
 
     public void b(World world, int i, int j, int k, EntityHuman entityhuman) {
-        boolean shouldIgnite = false;
-        
-        // uberbukkit
-        if (!UberbukkitConfig.getInstance().getBoolean("mechanics.tnt_require_lighter", true)) {
-            shouldIgnite = true;
-        }
+        boolean shouldIgnite = world.worldData != null && world.worldData.getPunchToPrimeTNT();
 
         if ((entityhuman.G() != null && entityhuman.G().id == Item.FLINT_AND_STEEL.id)) {
             shouldIgnite = true;
