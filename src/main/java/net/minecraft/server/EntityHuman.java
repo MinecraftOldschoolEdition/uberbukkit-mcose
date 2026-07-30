@@ -65,6 +65,14 @@ public abstract class EntityHuman extends EntityLiving {
     public float F;
     // Project Poseidon compatibility: 0 = survival, 1 = creative
     public int gameMode = 0;
+
+    public boolean isSpectator() {
+        return GameType.byId(this.gameMode).isSpectator();
+    }
+
+    public boolean isCreative() {
+        return GameType.byId(this.gameMode).isCreative();
+    }
     private int d = 0;
     public EntityFish hookedFish = null;
     
@@ -236,7 +244,7 @@ public abstract class EntityHuman extends EntityLiving {
 
         this.o += (f - this.o) * 0.4F;
         this.aj += (f1 - this.aj) * 0.8F;
-        if (this.health > 0) {
+        if (this.health > 0 && !this.isSpectator()) {
             List list = this.world.b((Entity) this, this.boundingBox.b(1.0D, 0.0D, 1.0D));
 
             if (list != null) {
@@ -251,7 +259,7 @@ public abstract class EntityHuman extends EntityLiving {
         }
 
         // Immediately extinguish Creative players when exiting lava or fire
-        if (this.gameMode == 1) {
+        if (this.gameMode == 1 || this.isSpectator()) {
             boolean inLava = this.ae();
             boolean inFire = this.world.d(this.boundingBox.shrink(0.0010D, 0.0010D, 0.0010D));
             if (!inLava && !inFire && this.fireTicks > 0) {
@@ -416,7 +424,7 @@ public abstract class EntityHuman extends EntityLiving {
 
         // Project Poseidon - Load gamemode from NBT
         if (nbttagcompound.hasKey("GameType")) {
-            this.gameMode = nbttagcompound.e("GameType");
+            this.gameMode = GameType.byId(nbttagcompound.e("GameType")).getId();
         }
 
         // CraftBukkit start
@@ -575,6 +583,25 @@ public abstract class EntityHuman extends EntityLiving {
                 return super.damageEntity(entity, i);
             }
         }
+    }
+
+    @Override
+    public boolean l_() {
+        return !this.isSpectator() && super.l_();
+    }
+
+    @Override
+    public boolean d_() {
+        return !this.isSpectator() && super.d_();
+    }
+
+    @Override
+    public boolean T() {
+        return !this.isSpectator() && super.T();
+    }
+
+    protected boolean n() {
+        return !this.isSpectator() && super.n();
     }
 
     protected boolean j_() {

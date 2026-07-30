@@ -229,7 +229,7 @@ public class EntityWolf extends EntityAnimal {
         // Clear anger if target switched to creative mode
         if (this.isAngry() && this.target instanceof EntityHuman) {
             EntityHuman targetPlayer = (EntityHuman) this.target;
-            if (targetPlayer.gameMode == 1) {
+            if (targetPlayer.gameMode == 1 || targetPlayer.isSpectator()) {
                 this.setAngry(false);
                 this.target = null;
             }
@@ -400,7 +400,8 @@ public class EntityWolf extends EntityAnimal {
             return false;
         } else {
             // Don't retaliate against creative mode players
-            if (entity instanceof EntityHuman && ((EntityHuman) entity).gameMode == 1) {
+            if (entity instanceof EntityHuman
+                    && (((EntityHuman) entity).gameMode == 1 || ((EntityHuman) entity).isSpectator())) {
                 return true;
             }
             

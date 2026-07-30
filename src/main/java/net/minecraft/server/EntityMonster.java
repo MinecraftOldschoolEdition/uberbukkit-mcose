@@ -67,7 +67,8 @@ public class EntityMonster extends EntityCreature implements IMonster {
             if (this.passenger != entity && this.vehicle != entity) {
                 if (entity != this) {
                     // Do not retaliate against creative players - they can punch but mobs won't fight back
-                    if (entity instanceof EntityHuman && ((EntityHuman) entity).gameMode == 1) {
+                    if (entity instanceof EntityHuman
+                            && (((EntityHuman) entity).gameMode == 1 || ((EntityHuman) entity).isSpectator())) {
                         // Take damage but don't target the player
                         return true;
                     }

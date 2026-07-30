@@ -183,9 +183,8 @@ public class Pathfinder {
                                 return -2;
                             }
                         } else {
-                            int l1 = this.a.getData(l, i1, j1);
-
-                            if (!BlockDoor.e(l1)) {
+                            BlockDoor blockdoor = (BlockDoor)Block.byId[k1];
+                            if (!blockdoor.isDoorLogicallyOpen(this.a, l, i1, j1)) {
                                 return 0;
                             }
                         }

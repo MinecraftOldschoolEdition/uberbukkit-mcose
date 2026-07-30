@@ -31,7 +31,7 @@ public class EntityCreature extends EntityLiving {
         // Clear target if player switched to creative mode
         if (this.target instanceof EntityHuman) {
             EntityHuman targetPlayer = (EntityHuman) this.target;
-            if (targetPlayer.gameMode == 1) {
+            if (targetPlayer.gameMode == 1 || targetPlayer.isSpectator()) {
                 this.target = null;
                 this.pathEntity = null;
             }
@@ -42,7 +42,8 @@ public class EntityCreature extends EntityLiving {
             Entity target = this.findTarget();
             if (target != null) {
                 // Ignore creative players as targets
-                if (target instanceof EntityHuman && ((EntityHuman) target).gameMode == 1) {
+                if (target instanceof EntityHuman
+                        && (((EntityHuman) target).gameMode == 1 || ((EntityHuman) target).isSpectator())) {
                     target = null;
                 }
 
@@ -95,7 +96,8 @@ public class EntityCreature extends EntityLiving {
 
         if (!this.e && this.target != null && (this.pathEntity == null || this.random.nextInt(20) == 0)) {
             // If target is a creative player, forget it
-            if (this.target instanceof EntityHuman && ((EntityHuman) this.target).gameMode == 1) {
+            if (this.target instanceof EntityHuman
+                    && (((EntityHuman) this.target).gameMode == 1 || ((EntityHuman) this.target).isSpectator())) {
                 this.target = null;
             }
             if (this.target != null) {

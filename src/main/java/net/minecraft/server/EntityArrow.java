@@ -308,6 +308,9 @@ public class EntityArrow extends Entity {
     }
 
     public void b(EntityHuman entityhuman) {
+        if (entityhuman == null || entityhuman.isSpectator()) {
+            return;
+        }
         if (!this.world.isStatic) {
 
             // uberbukkit

@@ -162,9 +162,7 @@ public class PoseidonConfig extends Configuration {
 
         //Hardcore Mode
         generateConfigOption("world-settings.hardcore.enabled", false);
-        generateConfigOption("world-settings.hardcore.info", "When enabled, players are banned from the server upon death. This can be overridden per-world using the world's level.dat hardcore setting.");
-        generateConfigOption("world-settings.hardcore.ban-message", "You died! Game over, man, game over!");
-        generateConfigOption("world-settings.hardcore.death-kick-message", "\u00A7cYou have been banned from this hardcore server!");
+        generateConfigOption("world-settings.hardcore.info", "Hardcore deaths can only respawn into spectator mode, matching modern Minecraft. This can be overridden per-world using the world's level.dat hardcore setting.");
 
         // Death Messages
         generateConfigOption("settings.death-messages.enabled", true);

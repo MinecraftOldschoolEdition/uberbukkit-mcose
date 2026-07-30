@@ -87,7 +87,7 @@ public class EntitySlime extends EntityLiving implements IMonster {
         this.U();
         EntityHuman entityhuman = this.world.findNearbyPlayer(this, 16.0D);
         // Ignore creative players
-        if (entityhuman != null && entityhuman.gameMode == 1) {
+        if (entityhuman != null && (entityhuman.gameMode == 1 || entityhuman.isSpectator())) {
             entityhuman = null;
         }
 
@@ -139,7 +139,8 @@ public class EntitySlime extends EntityLiving implements IMonster {
     public void b(EntityHuman entityhuman) {
         int i = this.getSize();
 
-        if (i > 1 && entityhuman != null && entityhuman.gameMode != 1 && this.e(entityhuman) && (double) this.f(entityhuman) < 0.6D * (double) i && entityhuman.damageEntity(this, i)) {
+        if (i > 1 && entityhuman != null && entityhuman.gameMode != 1 && !entityhuman.isSpectator()
+                && this.e(entityhuman) && (double) this.f(entityhuman) < 0.6D * (double) i && entityhuman.damageEntity(this, i)) {
             this.world.makeSound(this, "mob.slimeattack", 1.0F, (this.random.nextFloat() - this.random.nextFloat()) * 0.2F + 1.0F);
         }
     }

@@ -231,9 +231,7 @@ world:
 world-settings:
     hardcore:
         enabled: false
-        info: When enabled, players are banned from the server upon death. This can be overridden per-world using the world's level.dat hardcore setting.
-        ban-message: You died! Game over, man, game over!
-        death-kick-message: §cYou have been banned from this hardcore server!
+        info: Hardcore deaths can only respawn into spectator mode, matching modern Minecraft. This can be overridden per-world using the world's level.dat hardcore setting.
     optimized-explosions: false
     send-explosion-velocity: true
     randomize-spawn: true

@@ -173,7 +173,7 @@ public class ServerConfigurationManager {
         
         // Apply default gamemode from server.properties for new players only
         if (isNewPlayer && this.server.defaultGameMode != 0) {
-            entityplayer.gameMode = this.server.defaultGameMode;
+            entityplayer.setGameMode(this.server.defaultGameMode);
             if (this.server.defaultGameMode == 2) {
                 a.info("[Hardcore] New player " + entityplayer.name + " will be in hardcore mode");
             }
@@ -183,8 +183,8 @@ public class ServerConfigurationManager {
         // If server is no longer hardcore but player was in hardcore mode, switch them to survival
         if (this.server.defaultGameMode != 2 && entityplayer.gameMode == 2) {
             a.info("[GameMode] Player " + entityplayer.name + " was in hardcore but server is now " + 
-                   (this.server.defaultGameMode == 1 ? "creative" : "survival") + " - switching player to match");
-            entityplayer.gameMode = this.server.defaultGameMode;
+                   GameType.byId(this.server.defaultGameMode).getName() + " - switching player to match");
+            entityplayer.setGameMode(this.server.defaultGameMode);
             // Reset death state so they can play normally
             if (entityplayer.health <= 0) {
                 entityplayer.health = 20;
@@ -194,27 +194,25 @@ public class ServerConfigurationManager {
         }
 
         // UberBukkit - On relog, keep non-OP players on server default gamemode.
-        if (!isNewPlayer && !isOperator && entityplayer.gameMode != this.server.defaultGameMode) {
+        if (!isNewPlayer
+                && !isOperator
+                && entityplayer.gameMode != this.server.defaultGameMode
+                && !shouldPreserveHardcoreSpectator(this.server.defaultGameMode, entityplayer.gameMode)) {
             a.info("[GameMode] Non-op player " + entityplayer.name + " relogged in " +
-                   (entityplayer.gameMode == 1 ? "creative" : entityplayer.gameMode == 2 ? "hardcore" : "survival") +
+                   GameType.byId(entityplayer.gameMode).getName() +
                    " - resetting to server default " +
-                   (this.server.defaultGameMode == 1 ? "creative" : this.server.defaultGameMode == 2 ? "hardcore" : "survival"));
-            entityplayer.gameMode = this.server.defaultGameMode;
+                   GameType.byId(this.server.defaultGameMode).getName());
+            entityplayer.setGameMode(this.server.defaultGameMode);
         }
         
-        // MCOSE - Check if this is an unbanned hardcore player who died
-        // If they were unbanned by an admin, reset their health so they can play again
-        // They stay in hardcore mode - they'll be banned again if they die
+        // A player who disconnected before pressing "Spectate World" still
+        // resumes as a spectator when their dead Hardcore save is loaded.
         if (entityplayer.gameMode == 2 && entityplayer.health <= 0) {
-            boolean isBanned = this.banByName.contains(entityplayer.name.toLowerCase());
-            if (!isBanned) {
-                // Player was in hardcore, died, but is no longer banned - admin unbanned them
-                a.info("[Hardcore] Player " + entityplayer.name + " was unbanned - resetting health (staying in hardcore mode)");
-                entityplayer.health = 20;
-                entityplayer.dead = false;
-                entityplayer.deathTicks = 0;
-                // DO NOT change gameMode - they should stay in hardcore and be banned again if they die
-            }
+            a.info("[Hardcore] Restoring dead player " + entityplayer.name + " in spectator mode");
+            entityplayer.setGameMode(GameType.SPECTATOR.getId());
+            entityplayer.health = 20;
+            entityplayer.dead = false;
+            entityplayer.deathTicks = 0;
         }
         
         // MCOSE - Ensure players with dead=true but health>0 are reset
@@ -237,6 +235,11 @@ public class ServerConfigurationManager {
 
         // UberBukkit - Record player join in server-wide statistics
         ServerStatistics.getInstance().recordPlayerJoin(entityplayer.name);
+    }
+
+    static boolean shouldPreserveHardcoreSpectator(int defaultGameMode, int loadedGameMode) {
+        return defaultGameMode == GameType.HARDCORE.getId()
+                && loadedGameMode == GameType.SPECTATOR.getId();
     }
 
     private void applyLocalLanOwnerSnapshot(EntityPlayer entityplayer) {
@@ -1346,11 +1349,7 @@ public class ServerConfigurationManager {
         // Poseidon parity: ensure HUD matches gamemode on world attach
         try {
             entityplayer.updateContainer();
-            if (entityplayer.gameMode == 1) {
-                entityplayer.netServerHandler.sendPacket(new Packet70Bed(3));
-            } else {
-                entityplayer.netServerHandler.sendPacket(new Packet70Bed(4));
-            }
+            entityplayer.syncGameModeToClient();
             if (worldserver.worldData != null && worldserver.worldData.getTerrainType() == 3) {
                 entityplayer.netServerHandler.sendPacket(new Packet70Bed(2));
             }

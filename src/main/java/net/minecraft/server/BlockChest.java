@@ -182,6 +182,15 @@ public class BlockChest extends BlockContainer {
         return world.getTypeId(i, j, k) != this.id ? false : (world.getTypeId(i - 1, j, k) == this.id ? true : (world.getTypeId(i + 1, j, k) == this.id ? true : (world.getTypeId(i, j, k - 1) == this.id ? true : world.getTypeId(i, j, k + 1) == this.id)));
     }
 
+    static boolean blocksChestOpening(int aboveBlockId, int chestBlockId, boolean normalCube) {
+        return normalCube && aboveBlockId != chestBlockId;
+    }
+
+    private boolean isChestBlocked(World world, int i, int j, int k) {
+        int aboveBlockId = world.getTypeId(i, j + 1, k);
+        return blocksChestOpening(aboveBlockId, this.id, world.e(i, j + 1, k));
+    }
+
     public void remove(World world, int i, int j, int k) {
         TileEntityChest tileentitychest = (TileEntityChest) world.getTileEntity(i, j, k);
 
@@ -219,15 +228,15 @@ public class BlockChest extends BlockContainer {
     public boolean interact(World world, int i, int j, int k, EntityHuman entityhuman) {
         Object object = (TileEntityChest) world.getTileEntity(i, j, k);
 
-        if (world.e(i, j + 1, k)) {
+        if (this.isChestBlocked(world, i, j, k)) {
             return true;
-        } else if (world.getTypeId(i - 1, j, k) == this.id && world.e(i - 1, j + 1, k)) {
+        } else if (world.getTypeId(i - 1, j, k) == this.id && this.isChestBlocked(world, i - 1, j, k)) {
             return true;
-        } else if (world.getTypeId(i + 1, j, k) == this.id && world.e(i + 1, j + 1, k)) {
+        } else if (world.getTypeId(i + 1, j, k) == this.id && this.isChestBlocked(world, i + 1, j, k)) {
             return true;
-        } else if (world.getTypeId(i, j, k - 1) == this.id && world.e(i, j + 1, k - 1)) {
+        } else if (world.getTypeId(i, j, k - 1) == this.id && this.isChestBlocked(world, i, j, k - 1)) {
             return true;
-        } else if (world.getTypeId(i, j, k + 1) == this.id && world.e(i, j + 1, k + 1)) {
+        } else if (world.getTypeId(i, j, k + 1) == this.id && this.isChestBlocked(world, i, j, k + 1)) {
             return true;
         } else {
             if (world.getTypeId(i - 1, j, k) == this.id) {

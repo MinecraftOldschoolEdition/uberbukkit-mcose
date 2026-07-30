@@ -2,6 +2,7 @@ package org.bukkit.command;
 
 import net.minecraft.server.EntityItem;
 import net.minecraft.server.EntityPainting;
+import net.minecraft.server.GameType;
 import net.minecraft.server.registry.BlockRegistry;
 import net.minecraft.server.registry.EntityTypeRegistry;
 import net.minecraft.server.registry.ItemRegistry;
@@ -73,9 +74,7 @@ public final class CommandAutocompleteRegistry {
 
     private static final String[] INTEGER_GAMERULES = new String[] { "spawnRadius", "spawnProtectionRadius" };
 
-    private static final String[] GAMEMODE_VALUES = new String[] {
-        "survival", "creative", "hardcore", "s", "c", "h", "0", "1", "2"
-    };
+    private static final String[] GAMEMODE_VALUES = GameType.getCommandSuggestions();
 
     private static final String[] WEATHER_VALUES = new String[] {
         "clear", "rain", "thunder", "downfall", "storm"

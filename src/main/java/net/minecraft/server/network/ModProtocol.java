@@ -28,6 +28,7 @@ public final class ModProtocol {
     public static final int FEATURE_SKIN_PARTS_SYNC = 1 << 7;
     public static final int FEATURE_CLOUD_TIME_SYNC = 1 << 8;
     public static final int FEATURE_CONTAINER_INPUTS = 1 << 9;
+    public static final int FEATURE_SPECTATOR_MODE = 1 << 10;
 
     public static final String CHANNEL_HELLO = "MCOSE|MOD_HELLO";
     public static final String CHANNEL_HELLO_ACK = "MCOSE|MOD_HELLO_ACK";
@@ -35,6 +36,7 @@ public final class ModProtocol {
     public static final String CHANNEL_REGISTRY_REQUEST = "MCOSE|REG_REQ";
     public static final String CHANNEL_SKIN_PARTS = "MCOSE|SKINPARTS";
     public static final String CHANNEL_CLOUD_TIME = "MCOSE|CLOUD_TIME";
+    public static final String CHANNEL_SPECTATOR = "MCOSE|SPECTATE";
 
     private ModProtocol() {}
 
@@ -101,7 +103,8 @@ public final class ModProtocol {
                 | FEATURE_REGIONCORE_ENTITIES
                 | FEATURE_SKIN_PARTS_SYNC
                 | FEATURE_CLOUD_TIME_SYNC
-                | FEATURE_CONTAINER_INPUTS;
+                | FEATURE_CONTAINER_INPUTS
+                | FEATURE_SPECTATOR_MODE;
         if (net.minecraft.server.ZstdRuntime.isAvailable()) {
             features |= FEATURE_CHUNK_ZSTD;
         }
@@ -137,6 +140,33 @@ public final class ModProtocol {
             return gameTime;
         } catch (Throwable ignored) {
             return Long.MIN_VALUE;
+        }
+    }
+
+    public static byte[] createSpectatorTargetPayload(int entityId) {
+        try {
+            ByteArrayOutputStream baos = new ByteArrayOutputStream(4);
+            DataOutputStream out = new DataOutputStream(baos);
+            out.writeInt(entityId);
+            out.flush();
+            return baos.toByteArray();
+        } catch (Throwable t) {
+            return new byte[0];
+        }
+    }
+
+    public static int readSpectatorTargetPayload(byte[] payload) {
+        if (payload == null || payload.length != 4) {
+            return Integer.MIN_VALUE;
+        }
+
+        try {
+            DataInputStream in = new DataInputStream(new ByteArrayInputStream(payload));
+            int entityId = in.readInt();
+            in.close();
+            return entityId;
+        } catch (Throwable ignored) {
+            return Integer.MIN_VALUE;
         }
     }
 

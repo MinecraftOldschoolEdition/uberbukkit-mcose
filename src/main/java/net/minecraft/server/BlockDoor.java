@@ -117,7 +117,7 @@ public class BlockDoor extends Block {
                 this.setDoor(world, i, j - 1, k, flag);
             }
         } else {
-            boolean flag1 = (world.getData(i, j, k) & 4) > 0;
+            boolean flag1 = this.isDoorLogicallyOpen(world, i, j, k);
 
             if (flag1 != flag) {
                 if (world.getTypeId(i, j + 1, k) == this.id) {
@@ -129,6 +129,36 @@ public class BlockDoor extends Block {
                 world.a((EntityHuman) null, 1003, i, j, k, 0);
             }
         }
+    }
+
+    public boolean isDoorLogicallyOpen(IBlockAccess blockAccess, int i, int j, int k) {
+        if ((blockAccess.getData(i, j, k) & 8) != 0) {
+            --j;
+        }
+
+        // Beta encodes the mirrored leaf as raw-open so it can fake a second
+        // hinge direction. In a double door that bit is therefore inverted.
+        boolean rawOpen = (blockAccess.getData(i, j, k) & 4) != 0;
+        return rawOpen ^ this.isMirroredDoubleDoorLeaf(blockAccess, i, j, k);
+    }
+
+    private boolean isMirroredDoubleDoorLeaf(IBlockAccess blockAccess, int i, int j, int k) {
+        int partnerRotation = (blockAccess.getData(i, j, k) + 1) & 3;
+        int partnerX = i;
+        int partnerZ = k;
+        if (partnerRotation == 0) {
+            --partnerZ;
+        } else if (partnerRotation == 1) {
+            ++partnerX;
+        } else if (partnerRotation == 2) {
+            ++partnerZ;
+        } else {
+            --partnerX;
+        }
+
+        return blockAccess.getTypeId(partnerX, j, partnerZ) == this.id
+                && (blockAccess.getData(partnerX, j, partnerZ) & 8) == 0
+                && (blockAccess.getData(partnerX, j, partnerZ) & 3) == partnerRotation;
     }
 
     public void doPhysics(World world, int i, int j, int k, int l) {
@@ -171,7 +201,7 @@ public class BlockDoor extends Block {
                 int power = block.getBlockPower();
                 int powerTop = blockTop.getBlockPower();
                 if (powerTop > power) power = powerTop;
-                int oldPower = (world.getData(i, j, k) & 4) > 0 ? 15 : 0;
+                int oldPower = this.isDoorLogicallyOpen(world, i, j, k) ? 15 : 0;
 
                 if (oldPower == 0 ^ power == 0) {
                     BlockRedstoneEvent eventRedstone = new BlockRedstoneEvent(block, oldPower, power);

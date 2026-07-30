@@ -318,6 +318,14 @@ public class EntityTrackerEntry {
 
     public void b(EntityPlayer entityplayer) {
         if (entityplayer != this.tracker) {
+            if (this.tracker instanceof EntityPlayer
+                    && !spectatorVisibilityAllowsTracking(
+                            ((EntityPlayer)this.tracker).isSpectator(),
+                            entityplayer.isSpectator())) {
+                this.a(entityplayer);
+                return;
+            }
+
             double d0 = entityplayer.locX - (double) this.d / 32.0D;
             double d1 = entityplayer.locZ - (double) this.f / 32.0D;
 
@@ -438,6 +446,10 @@ public class EntityTrackerEntry {
 
     private boolean d(EntityPlayer entityplayer) {
         return entityplayer.getWorldServer().getPlayerManager().a(entityplayer, this.tracker.bH, this.tracker.bJ);
+    }
+
+    static boolean spectatorVisibilityAllowsTracking(boolean trackedPlayerSpectator, boolean observerSpectator) {
+        return !trackedPlayerSpectator || observerSpectator;
     }
 
     public void scanPlayers(List list) {

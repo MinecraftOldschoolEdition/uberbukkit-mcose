@@ -26,6 +26,7 @@ import uk.betacraft.uberbukkit.UberbukkitConfig;
 import uk.betacraft.uberbukkit.alpha.inventory.ProcessPacket5;
 import uk.betacraft.uberbukkit.packet.Packet62Sound;
 import net.minecraft.server.registry.PlayerCapabilityRegistryApi;
+import net.minecraft.server.network.ModProtocol;
 import uk.betacraft.uberbukkit.protocol.Protocol;
 
 // CraftBukkit start
@@ -60,6 +61,7 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
     public ProcessPacket5 packet5;
     public boolean isInWorkbench = false; // uberbukkit pvn < 7
     private int skinModelPartMask = 0x7F;
+    private EntityLiving spectatorTarget;
 
     public EntityPlayer(MinecraftServer minecraftserver, World world, String s, ItemInWorldManager iteminworldmanager, int pvn) {
         super(world);
@@ -136,12 +138,94 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
     }
 
     public void setGameMode(int gameMode) {
+        gameMode = GameType.byId(gameMode).getId();
         int previous = this.gameMode;
         this.gameMode = gameMode;
         if (previous != gameMode) {
             PlayerCapabilityRegistryApi.handleGameModeUpdate(this, previous, gameMode);
         }
+        this.bt = this.isSpectator();
+        this.setSpectatorVisibilityFlag(this.isSpectator());
+        if (this.isSpectator() && this.vehicle != null) {
+            this.mount(null);
+        }
+        if (!this.isSpectator()) {
+            this.setSpectatorTarget(null);
+        }
+        if (previous != gameMode && this.world instanceof WorldServer) {
+            EntityTracker entityTracker = ((WorldServer)this.world).tracker;
+            if (entityTracker != null) {
+                entityTracker.refreshPlayerVisibility(this);
+            }
+        }
         this.updateContainer();
+    }
+
+    public void syncGameModeToClient() {
+        if (this.netServerHandler == null) {
+            return;
+        }
+        if (this.isSpectator()) {
+            this.netServerHandler.sendPacket(new Packet70Bed(22));
+        } else if (this.isCreative()) {
+            this.netServerHandler.sendPacket(new Packet70Bed(3));
+        } else {
+            this.netServerHandler.sendPacket(new Packet70Bed(4));
+        }
+        this.netServerHandler.sendPacket(new Packet70Bed(this.shouldShowHardcoreWorldState() ? 17 : 18));
+        this.syncSpectatorTargetToClient();
+    }
+
+    public EntityLiving getSpectatorTarget() {
+        return this.spectatorTarget;
+    }
+
+    public void setSpectatorTarget(EntityLiving target) {
+        EntityLiving previousTarget = this.spectatorTarget;
+        if (!this.isSpectator() || target == this || target != null && (target.dead || target.world != this.world)) {
+            target = null;
+        }
+        this.spectatorTarget = target;
+        this.syncSpectatorTargetToClient();
+        if (previousTarget != null && target == null && this.netServerHandler != null) {
+            this.netServerHandler.a(this.locX, this.locY, this.locZ, this.yaw, this.pitch);
+        }
+    }
+
+    private void syncSpectatorTargetToClient() {
+        if (this.netServerHandler == null || !this.netServerHandler.supportsSpectatorMode()) {
+            return;
+        }
+        int entityId = this.spectatorTarget == null ? -1 : this.spectatorTarget.id;
+        this.netServerHandler.sendPacket(new Packet250CustomPayload(
+                ModProtocol.CHANNEL_SPECTATOR,
+                ModProtocol.createSpectatorTargetPayload(entityId)));
+    }
+
+    private void updateSpectatorState() {
+        this.bt = this.isSpectator();
+        this.setSpectatorVisibilityFlag(this.isSpectator());
+        if (!this.isSpectator()) {
+            this.spectatorTarget = null;
+            return;
+        }
+
+        this.onGround = false;
+        this.fallDistance = 0.0F;
+        this.fireTicks = 0;
+        EntityLiving target = this.spectatorTarget;
+        if (target == null) {
+            return;
+        }
+        if (target.dead || target.world != this.world) {
+            this.setSpectatorTarget(null);
+            return;
+        }
+
+        this.setPositionRotation(target.locX, target.locY, target.locZ, target.yaw, target.pitch);
+        this.motX = 0.0D;
+        this.motY = 0.0D;
+        this.motZ = 0.0D;
     }
 
     public void spawnIn(World world) {
@@ -194,6 +278,7 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
     }
 
     public void m_() {
+        this.updateSpectatorState();
         this.itemInWorldManager.a();
         --this.bM;
         if (this.bowPoseTicks > 0) {
@@ -308,17 +393,6 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
 
         this.y();
 
-        // Hardcore mode: ban player on death
-        if (this.isHardcoreMode()) {
-            String banMessage = PoseidonConfig.getInstance().getConfigString("world-settings.hardcore.ban-message");
-            String kickMessage = PoseidonConfig.getInstance().getConfigString("world-settings.hardcore.death-kick-message");
-            // Ban the player
-            this.b.serverConfigurationManager.a(this.name);
-            // Kick with the hardcore death message
-            if (this.netServerHandler != null) {
-                this.netServerHandler.disconnect(kickMessage != null ? kickMessage : "You died in hardcore mode!");
-            }
-        }
         // CraftBukkit end
     }
 
@@ -334,6 +408,18 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
         // If player is in survival or creative, they are NOT hardcore
         // (their mode was explicitly set via /gamemode or from saved data)
         return this.gameMode == 2;
+    }
+
+    /**
+     * Hardcore is a world property in modern Minecraft, while MCOSE also
+     * retains its legacy per-player game-mode ID. Either source must keep the
+     * Hardcore death screen and post-death spectator transition active.
+     */
+    public boolean shouldShowHardcoreWorldState() {
+        return this.isHardcoreMode()
+                || this.world != null
+                && this.world.worldData != null
+                && this.world.worldData.isHardcore();
     }
 
     public boolean damageEntity(Entity entity, int i) {

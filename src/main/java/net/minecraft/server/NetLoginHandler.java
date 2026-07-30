@@ -355,11 +355,7 @@ public class NetLoginHandler extends NetHandler {
                 
                 entityplayer.syncInventory();
                 entityplayer.updateContainer();
-                if (entityplayer.gameMode == 1) {
-                    netserverhandler.sendPacket(new Packet70Bed(3)); // creative HUD/flight enable
-                } else {
-                    netserverhandler.sendPacket(new Packet70Bed(4)); // survival HUD
-                }
+                entityplayer.syncGameModeToClient();
                 // If SKY terrain, refresh the client-side terrain type after containers/gamemode sync.
                 if (hasSkyTerrainType(worldserver)) {
                     netserverhandler.sendPacket(new Packet70Bed(6));
@@ -406,7 +402,7 @@ public class NetLoginHandler extends NetHandler {
                 this.server.chatRoomManager.sendSnapshot(entityplayer);
                 
                 // Send hardcore mode indicator to client for heart display
-                if (entityplayer.isHardcoreMode()) {
+                if (entityplayer.shouldShowHardcoreWorldState()) {
                     netserverhandler.sendPacket(new Packet70Bed(17)); // Hardcore mode enabled
                 } else {
                     netserverhandler.sendPacket(new Packet70Bed(18)); // Hardcore mode disabled

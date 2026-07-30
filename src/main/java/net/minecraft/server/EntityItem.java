@@ -128,6 +128,9 @@ public class EntityItem extends Entity {
     }
 
     public void b(EntityHuman entityhuman) {
+        if (entityhuman == null || entityhuman.isSpectator()) {
+            return;
+        }
         if (!this.world.isStatic) {
             int i = this.itemStack.count;
 

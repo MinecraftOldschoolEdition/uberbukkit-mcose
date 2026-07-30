@@ -569,6 +569,32 @@ public class EntityTracker {
         }
     }
 
+    /**
+     * Re-evaluates both sides of the 1.22 spectator visibility contract:
+     * normal players stop tracking a spectator immediately, while a spectator
+     * observer can track other spectators as floating heads.
+     */
+    public synchronized void refreshPlayerVisibility(EntityPlayer player) {
+        if (player == null) {
+            return;
+        }
+
+        WorldServer worldServer = this.c.getWorldServer(this.e);
+        List players = worldServer == null ? null : worldServer.players;
+        EntityTrackerEntry playerEntry = (EntityTrackerEntry)this.b.a(player.id);
+        if (playerEntry != null && players != null) {
+            playerEntry.scanPlayers(players);
+        }
+
+        Iterator iterator = this.a.iterator();
+        while (iterator.hasNext()) {
+            EntityTrackerEntry entry = (EntityTrackerEntry)iterator.next();
+            if (entry.tracker != player) {
+                entry.b(player);
+            }
+        }
+    }
+
     // CraftBukkit - synchronized
     public synchronized void untrackPlayer(EntityPlayer entityplayer) {
         Iterator iterator = this.a.iterator();

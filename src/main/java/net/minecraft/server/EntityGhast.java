@@ -97,7 +97,7 @@ public class EntityGhast extends EntityFlying implements IMonster {
         // Clear target if player switched to creative mode
         if (this.target instanceof EntityHuman) {
             EntityHuman targetPlayer = (EntityHuman) this.target;
-            if (targetPlayer.gameMode == 1) {
+            if (targetPlayer.gameMode == 1 || targetPlayer.isSpectator()) {
                 this.target = null;
                 this.f = 0; // Reset attack counter
             }
@@ -109,7 +109,7 @@ public class EntityGhast extends EntityFlying implements IMonster {
             // Ignore creative mode players (ghasts should not target creative players)
             if (target != null && target instanceof EntityHuman) {
                 EntityHuman player = (EntityHuman) target;
-                if (player.gameMode == 1) {
+                if (player.gameMode == 1 || player.isSpectator()) {
                     target = null; // Ignore creative players
                 }
             }

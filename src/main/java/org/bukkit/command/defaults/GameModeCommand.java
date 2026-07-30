@@ -6,6 +6,7 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.command.PlayerArgumentResolver;
 import org.bukkit.entity.Player;
 import net.minecraft.server.EntityPlayer;
+import net.minecraft.server.GameType;
 import net.minecraft.server.Packet70Bed;
 import net.minecraft.server.WorldServer;
 
@@ -13,7 +14,7 @@ public class GameModeCommand extends VanillaCommand {
     public GameModeCommand() {
         super("gamemode");
         this.description = "Changes the player to a specific game mode";
-        this.usageMessage = "/gamemode <player> <survival|creative|hardcore|s|c|h|0|1|2>";
+        this.usageMessage = "/gamemode <player> <survival|creative|hardcore|spectator|s|c|h|sp|0|1|2|3>";
         this.setPermission("bukkit.command.gamemode");
     }
 
@@ -87,59 +88,32 @@ public class GameModeCommand extends VanillaCommand {
         EntityPlayer entityPlayer = ((org.bukkit.craftbukkit.entity.CraftPlayer) target).getHandle();
         WorldServer worldserver = ((org.bukkit.craftbukkit.CraftServer)entityPlayer.world.getServer()).getServer().getWorldServer(entityPlayer.dimension);
 
-        if (gameMode == 1) {
-            entityPlayer.gameMode = 1;
-            entityPlayer.updateContainer();
-            entityPlayer.netServerHandler.sendPacket(new Packet70Bed(3));
-            entityPlayer.netServerHandler.sendPacket(new Packet70Bed(18)); // Disable hardcore hearts
-            if (worldserver.worldData != null && worldserver.worldData.getTerrainType() == 3) {
-                entityPlayer.netServerHandler.sendPacket(new Packet70Bed(2));
-            }
-            target.sendMessage(ChatColor.GRAY + "Your game mode has been updated to creative mode");
-            return "creative";
+        entityPlayer.setGameMode(gameMode);
+        entityPlayer.syncGameModeToClient();
+        if (worldserver.worldData != null && worldserver.worldData.getTerrainType() == 3) {
+            entityPlayer.netServerHandler.sendPacket(new Packet70Bed(2));
         }
 
-        if (gameMode == 2) {
-            // Hardcore mode: uses survival mechanics but player is banned on death
-            entityPlayer.gameMode = 2;
-            entityPlayer.updateContainer();
-            entityPlayer.netServerHandler.sendPacket(new Packet70Bed(4)); // Same HUD as survival
-            entityPlayer.netServerHandler.sendPacket(new Packet70Bed(17)); // Enable hardcore hearts
-            if (worldserver.worldData != null && worldserver.worldData.getTerrainType() == 3) {
-                entityPlayer.netServerHandler.sendPacket(new Packet70Bed(2));
-            }
+        GameType selected = GameType.byId(gameMode);
+        if (selected == GameType.HARDCORE) {
             target.sendMessage(ChatColor.DARK_RED + "Your game mode has been updated to HARDCORE mode!");
             target.sendMessage(ChatColor.RED + "Warning: Death is permanent - you will be banned if you die!");
             return "hardcore";
         }
-
-        entityPlayer.gameMode = 0;
-        entityPlayer.updateContainer();
-        entityPlayer.netServerHandler.sendPacket(new Packet70Bed(4));
-        entityPlayer.netServerHandler.sendPacket(new Packet70Bed(18)); // Disable hardcore hearts
-        if (worldserver.worldData != null && worldserver.worldData.getTerrainType() == 3) {
-            entityPlayer.netServerHandler.sendPacket(new Packet70Bed(2));
+        if (selected == GameType.SPECTATOR) {
+            target.sendMessage(ChatColor.GRAY + "Your game mode has been updated to spectator mode");
+            return "spectator";
         }
-        target.sendMessage(ChatColor.GRAY + "Your game mode has been updated to survival mode");
-        return "survival";
+        target.sendMessage(ChatColor.GRAY + "Your game mode has been updated to " + selected.getName() + " mode");
+        return selected.getName();
     }
 
     private int parseGameMode(String token) {
-        String modeString = token == null ? "" : token.toLowerCase();
-        if (modeString.equals("survival") || modeString.equals("s") || modeString.equals("0")) {
-            return 0;
-        }
-        if (modeString.equals("creative") || modeString.equals("c") || modeString.equals("1")) {
-            return 1;
-        }
-        if (modeString.equals("hardcore") || modeString.equals("h") || modeString.equals("2")) {
-            return 2;
-        }
-        return -1;
+        return GameType.parse(token);
     }
 
     private void addModeSuggestions(java.util.List<String> completions, String prefix) {
-        String[] modes = {"survival", "creative", "hardcore", "s", "c", "h", "0", "1", "2"};
+        String[] modes = GameType.getCommandSuggestions();
         for (String mode : modes) {
             if (mode.startsWith(prefix)) {
                 completions.add(mode);

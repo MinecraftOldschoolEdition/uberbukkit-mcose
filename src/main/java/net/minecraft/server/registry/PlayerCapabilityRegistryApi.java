@@ -38,16 +38,22 @@ public final class PlayerCapabilityRegistryApi {
         if (player == null) {
             return false;
         }
+        if (player.isSpectator()) {
+            return true;
+        }
         CapabilityState state = state(player, false);
         if (state != null && state.allowFlying != null) {
             return state.allowFlying.booleanValue();
         }
-        return player.gameMode == 1;
+        return player.gameMode == 1 || player.gameMode == 3;
     }
 
     public static boolean isFlying(EntityPlayer player) {
         if (player == null) {
             return false;
+        }
+        if (player.isSpectator()) {
+            return true;
         }
         CapabilityState state = state(player, false);
         if (state != null && state.flying != null) {
@@ -60,15 +66,21 @@ public final class PlayerCapabilityRegistryApi {
         if (player == null) {
             return false;
         }
+        if (player.isSpectator()) {
+            return true;
+        }
         CapabilityState state = state(player, false);
         if (state != null && state.invulnerable != null) {
             return state.invulnerable.booleanValue();
         }
-        return player.gameMode == 1;
+        return player.gameMode == 1 || player.gameMode == 3;
     }
 
     public static boolean canInstabuild(EntityPlayer player) {
         if (player == null) {
+            return false;
+        }
+        if (player.isSpectator()) {
             return false;
         }
         CapabilityState state = state(player, false);
@@ -155,9 +167,13 @@ public final class PlayerCapabilityRegistryApi {
         }
 
         CapabilityState state = state(player, true);
-        boolean previousCanFly = state.allowFlying != null ? state.allowFlying.booleanValue() : previousGameMode == 1;
+        boolean previousCanFly = previousGameMode == 3 || (state.allowFlying != null
+                ? state.allowFlying.booleanValue()
+                : previousGameMode == 1);
         boolean previousFlying = state.flying != null ? state.flying.booleanValue() : (previousCanFly && !player.onGround);
-        boolean currentCanFly = state.allowFlying != null ? state.allowFlying.booleanValue() : newGameMode == 1;
+        boolean currentCanFly = newGameMode == 3 || (state.allowFlying != null
+                ? state.allowFlying.booleanValue()
+                : newGameMode == 1);
 
         if (!currentCanFly && previousFlying) {
             boolean resolved = applyFlightToggle(player, true, false, "gamemode");

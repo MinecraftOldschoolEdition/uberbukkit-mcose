@@ -47,9 +47,14 @@ public final class SpawnerCreature {
 
             int i;
             int j;
+            int eligiblePlayerCount = 0;
 
             for (i = 0; i < world.players.size(); ++i) {
                 EntityHuman entityhuman = (EntityHuman) world.players.get(i);
+                if (entityhuman == null || entityhuman.isSpectator()) {
+                    continue;
+                }
+                ++eligiblePlayerCount;
                 int k = MathHelper.floor(entityhuman.locX / 16.0D);
 
                 j = MathHelper.floor(entityhuman.locZ / 16.0D);
@@ -61,6 +66,9 @@ public final class SpawnerCreature {
                     }
                 }
             }
+            if (eligiblePlayerCount == 0) {
+                return 0;
+            }
 
             i = 0;
             ChunkCoordinates chunkcoordinates = world.getSpawn();
@@ -69,7 +77,7 @@ public final class SpawnerCreature {
             j = aenumcreaturetype.length;
 
             boolean useSkyWorldMobCaps = usesSkyWorldMobCaps(world);
-            int playerCount = world.players.size();
+            int playerCount = eligiblePlayerCount;
 
             labelTypes:
             for (int j1 = 0; j1 < j; ++j1) {
@@ -300,6 +308,9 @@ public final class SpawnerCreature {
 
         for (int i = 0; i < world.players.size(); ++i) {
             EntityHuman entityhuman = (EntityHuman) world.players.get(i);
+            if (entityhuman == null || entityhuman.isSpectator()) {
+                continue;
+            }
             AxisAlignedBB localSpawnArea = AxisAlignedBB.b(
                     entityhuman.locX - PLAYER_SPAWN_RADIUS_BLOCKS,
                     0.0D,
@@ -327,6 +338,9 @@ public final class SpawnerCreature {
 
         for (int i = 0; i < world.players.size(); ++i) {
             EntityHuman entityhuman = (EntityHuman) world.players.get(i);
+            if (entityhuman == null || entityhuman.isSpectator()) {
+                continue;
+            }
             Integer count = (Integer) counts.get(entityhuman);
 
             if (count == null || count.intValue() >= cap) {

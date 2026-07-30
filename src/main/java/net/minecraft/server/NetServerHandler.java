@@ -132,6 +132,10 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     private static final int SKIN_PART_UPDATES_PER_WINDOW = 4;
     private final FixedWindowRateLimiter skinPartUpdateLimiter =
             new FixedWindowRateLimiter(SKIN_PART_UPDATE_WINDOW_MS, SKIN_PART_UPDATES_PER_WINDOW);
+    private static final long SPECTATOR_ACTION_WINDOW_MS = 2000L;
+    private static final int SPECTATOR_ACTIONS_PER_WINDOW = 12;
+    private final FixedWindowRateLimiter spectatorActionLimiter =
+            new FixedWindowRateLimiter(SPECTATOR_ACTION_WINDOW_MS, SPECTATOR_ACTIONS_PER_WINDOW);
     private static final long FRIEND_REQUEST_WINDOW_MS = 2000L;
     private static final int FRIEND_REQUESTS_PER_WINDOW = 8;
     private final FixedWindowRateLimiter friendRequestLimiter =
@@ -201,6 +205,11 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     public boolean supportsContainerInputs() {
         return this.modProtocolNegotiated
             && (this.negotiatedModFeatures & ModProtocol.FEATURE_CONTAINER_INPUTS) != 0;
+    }
+
+    public boolean supportsSpectatorMode() {
+        return this.modProtocolNegotiated
+            && (this.negotiatedModFeatures & ModProtocol.FEATURE_SPECTATOR_MODE) != 0;
     }
 
     public void sendCloudTimeSync() {
@@ -658,6 +667,23 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         int movementPacketsThisTick = recordMovementPacketThisTick();
 
         WorldServer worldserver = this.minecraftServer.getWorldServer(this.player.dimension);
+        EntityLiving spectatorTarget = this.player.getSpectatorTarget();
+        if (this.player.isSpectator() && spectatorTarget != null) {
+            if (spectatorTarget.dead || spectatorTarget.world != this.player.world) {
+                this.player.setSpectatorTarget(null);
+            } else {
+                this.player.setPositionRotation(
+                        spectatorTarget.locX,
+                        spectatorTarget.locY,
+                        spectatorTarget.locZ,
+                        spectatorTarget.yaw,
+                        spectatorTarget.pitch);
+                this.player.motX = 0.0D;
+                this.player.motY = 0.0D;
+                this.player.motZ = 0.0D;
+            }
+            return;
+        }
 
         this.i = true;
         double d0;
@@ -777,7 +803,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
 
                 }
                 PlayerCapabilityRegistryApi.handleGroundStateUpdate(this.player, packet10flying.g);
-                this.player.onGround = packet10flying.g;
+                this.player.onGround = this.player.isSpectator() ? false : packet10flying.g;
                 this.player.a(true);
                 this.player.move(d5, 0.0D, d4);
                 this.player.setLocation(d1, d2, d3, f, f1);
@@ -889,7 +915,9 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
 
             // MCOSE: Be more lenient with position checks for creative/flying players
             // When landing from flight, there can be position discrepancies due to client/server desync
-            boolean isCreativeOrCanFly = this.player.gameMode == 1;
+            boolean isCreativeOrCanFly = this.player.gameMode == 1
+                    || this.player.isSpectator()
+                    || PlayerCapabilityRegistryApi.canFly(this.player);
             if (!isCreativeOrCanFly && isStaffExemptFromFlyKick) {
                 Player bukkitPlayer = (Player) this.player.getBukkitEntity();
                 isCreativeOrCanFly = bukkitPlayer.isOp() || bukkitPlayer.hasPermission("uberbukkit.fly");
@@ -946,7 +974,8 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
                 playerBox.f + supportExpand
             ) || this.player.p();
             if (!this.minecraftServer.allowFlight && !supported && !bool) {
-                boolean creativeBypass = this.player != null && this.player instanceof EntityPlayer && ((EntityPlayer) this.player).gameMode == 1;
+                boolean creativeBypass = this.player != null
+                        && (this.player.gameMode == 1 || this.player.isSpectator());
                 // Consider real downward motion as falling, not hovering/flying.
                 // This avoids false positives on long descents in non-LAN conditions.
                 boolean falling = d6 < -0.03125D || this.player.motY < -0.08D || this.player.fallDistance > 0.0F;
@@ -964,7 +993,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
                 this.h = 0;
             }
             PlayerCapabilityRegistryApi.handleGroundStateUpdate(this.player, packet10flying.g);
-            this.player.onGround = packet10flying.g;
+            this.player.onGround = this.player.isSpectator() ? false : packet10flying.g;
             this.minecraftServer.serverConfigurationManager.d(this.player);
             this.player.b(this.player.locY - d0, packet10flying.g);
         }
@@ -1583,6 +1612,11 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         }
 
         if (this.player.dead) return; // CraftBukkit
+        if (this.player.isSpectator()) {
+            this.mineExpire = 0L;
+            this.lastMine = 0L;
+            return;
+        }
         if (uk.betacraft.uberbukkit.AdminRegistry.isFrozen(this.player.name)) {
             // Cancel digging while frozen
             return;
@@ -1831,6 +1865,20 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
 
         // CraftBukkit start
         if (this.player.dead) return;
+        if (this.player.isSpectator()) {
+            if (packet15place.face != 255
+                    && this.isDigTargetUsable(worldserver, packet15place.a, packet15place.b, packet15place.c, 36.0D)) {
+                int blockId = worldserver.getTypeIdIfLoaded(packet15place.a, packet15place.b, packet15place.c);
+                Block block = blockId > 0 && blockId < Block.byId.length ? Block.byId[blockId] : null;
+                if (block instanceof BlockChest
+                        || block instanceof BlockFurnace
+                        || block instanceof BlockDispenser
+                        || block instanceof BlockWorkbench) {
+                    block.interact(worldserver, packet15place.a, packet15place.b, packet15place.c, this.player);
+                }
+            }
+            return;
+        }
 
         // uberbukkit: noptch what the fuck have you done
         if (this.networkManager.pvn == 7) {
@@ -2570,6 +2618,14 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         Entity entity = worldserver.getEntity(packet7useentity.target);
         ItemStack itemInHand = this.player.inventory.getItemInHand();
 
+        if (this.player.isSpectator()) {
+            if (packet7useentity.c == 0 && entity instanceof EntityMinecart
+                    && ((EntityMinecart) entity).type == 1 && this.player.g(entity) < 36.0D) {
+                this.player.a((IInventory) entity);
+            }
+            return;
+        }
+
         if (!PlayerCapabilityRegistryApi.canAffectEntities(this.player)) {
             return;
         }
@@ -2639,22 +2695,8 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         if (event.isCancelled()) return;
 
         if (this.player.dead || this.player.health <= 0) {
-            // Hardcore mode: check if player is still banned
-            if (this.player.isHardcoreMode()) {
-                // Check if player is currently banned - if NOT banned, they were unbanned by admin
-                boolean isBanned = this.minecraftServer.serverConfigurationManager.banByName.contains(this.player.name.toLowerCase());
-                
-                if (isBanned) {
-                    // Still banned - kick them
-                    String kickMessage = PoseidonConfig.getInstance().getConfigString("world-settings.hardcore.death-kick-message");
-                    this.disconnect(kickMessage != null ? kickMessage : "You died in hardcore mode!");
-                    return;
-                }
-                
-                // Player was unbanned - allow them to respawn but KEEP them in hardcore mode
-                // They should still be playing hardcore and will be banned again if they die
-                a.info("[Hardcore] " + this.player.name + " was unbanned and may respawn in hardcore mode");
-            }
+            boolean spectateAfterRespawn = shouldEnterSpectatorAfterRespawn(
+                    true, this.player.shouldShowHardcoreWorldState());
 
             try {
                 this.player = this.minecraftServer.serverConfigurationManager.moveToWorld(this.player, 0);
@@ -2663,6 +2705,13 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
                     this.player.deathTicks = 0;
                     if (this.player.health <= 0) {
                         this.player.health = 20;
+                    }
+                    if (spectateAfterRespawn) {
+                        // 1.22 performs this after recreating the dead player:
+                        // the ordinary respawn request becomes "Spectate World"
+                        // on Hardcore death and the server remains authoritative.
+                        this.player.setGameMode(GameType.SPECTATOR.getId());
+                        this.player.syncGameModeToClient();
                     }
                 }
 
@@ -2675,6 +2724,10 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
                 this.disconnect("Respawn failed. Please reconnect.");
             }
         }
+    }
+
+    static boolean shouldEnterSpectatorAfterRespawn(boolean dead, boolean hardcore) {
+        return dead && hardcore;
     }
 
     public void a(Packet101CloseWindow packet101closewindow) {
@@ -2690,6 +2743,11 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
 
     public void a(Packet102WindowClick packet102windowclick) {
         if (this.player.dead) return; // CraftBukkit
+        if (this.player.isSpectator()) {
+            this.player.activeContainer.a();
+            this.player.z();
+            return;
+        }
         Container validatedContainer = this.player.activeContainer;
         if (validatedContainer == null
                 || validatedContainer.windowId != packet102windowclick.a
@@ -3123,6 +3181,9 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
                         ModProtocol.createHelloAckPayload(ackVersion, this.negotiatedModFeatures)));
                 this.sendCloudTimeSync();
                 this.sendSkinPartSnapshotToClient();
+                if (this.player != null && this.player.isSpectator()) {
+                    this.player.setSpectatorTarget(this.player.getSpectatorTarget());
+                }
             }
             return;
         }
@@ -3150,6 +3211,34 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
 
         if (ModProtocol.CHANNEL_SKIN_PARTS.equals(packet250custompayload.channel)) {
             this.handleSkinPartsPacket(packet250custompayload);
+            return;
+        }
+
+        if (ModProtocol.CHANNEL_SPECTATOR.equals(packet250custompayload.channel)) {
+            if (!this.supportsSpectatorMode() || this.player == null || !this.player.isSpectator()
+                    || !this.spectatorActionLimiter.tryAcquire(System.currentTimeMillis())) {
+                return;
+            }
+            int targetId = ModProtocol.readSpectatorTargetPayload(packet250custompayload.data);
+            if (targetId == Integer.MIN_VALUE) {
+                return;
+            }
+            if (targetId < 0) {
+                this.player.setSpectatorTarget(null);
+                return;
+            }
+
+            WorldServer world = this.minecraftServer.getWorldServer(this.player.dimension);
+            Entity target = world == null ? null : world.getEntity(targetId);
+            if (!(target instanceof EntityLiving) || target == this.player || target.dead) {
+                return;
+            }
+            // Match the direct 1.22 spectator action: a click can only attach to
+            // an entity within normal interaction reach and the active world.
+            if (target.world != this.player.world || this.player.g(target) > 36.0D) {
+                return;
+            }
+            this.player.setSpectatorTarget((EntityLiving) target);
             return;
         }
 

@@ -716,7 +716,7 @@ public abstract class Entity implements SyncedDataHolder {
                         for (int k2 = j1; k2 <= l1; ++k2) {
                             int l2 = this.world.getTypeId(i2, j2, k2);
 
-                            if (l2 > 0) {
+                            if (l2 > 0 && (!(this instanceof EntityHuman) || !((EntityHuman) this).isSpectator())) {
                                 Block.byId[l2].a(this.world, i2, j2, k2, this);
                             }
                         }
@@ -1394,6 +1394,17 @@ public abstract class Entity implements SyncedDataHolder {
 
     public void setSneak(boolean flag) {
         this.a(1, flag);
+    }
+
+    public boolean hasSpectatorVisibilityFlag() {
+        if (this.synchedEntityData == null && this.datawatcher == null) {
+            return false;
+        }
+        return this.d(5);
+    }
+
+    public void setSpectatorVisibilityFlag(boolean spectator) {
+        this.a(5, spectator);
     }
 
     protected boolean d(int i) {

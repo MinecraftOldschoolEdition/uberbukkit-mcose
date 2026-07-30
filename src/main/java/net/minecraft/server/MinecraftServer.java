@@ -103,7 +103,7 @@ public class MinecraftServer implements Runnable, ICommandListener {
     public ConsoleReader reader;
     public static int currentTick;
     public String configuredLevelType; // Added for server.properties level-type
-    public int defaultGameMode = 0; // 0=survival, 1=creative, 2=hardcore
+    public int defaultGameMode = 0; // 0=survival, 1=creative, 2=hardcore, 3=spectator
     public boolean allowCommandsForAllPlayers = false;
     private File worldContainer = new File(".");
     private boolean singleplayerLayout = false;
@@ -254,21 +254,15 @@ public class MinecraftServer implements Runnable, ICommandListener {
         }
         this.configuredLevelType = this.propertyManager.getString("level-type", "DEFAULT").toUpperCase(); // Added
         
-        // Parse default gamemode from server.properties (survival, creative, or hardcore)
+        // Parse stable save/protocol IDs, including modern spectator ID 3.
         String gamemodeStr = this.propertyManager.getString("gamemode", "survival").toLowerCase();
-        if (gamemodeStr.equals("creative") || gamemodeStr.equals("c") || gamemodeStr.equals("1")) {
-            this.defaultGameMode = 1;
-            log.info("Default game mode: Creative");
-        } else if (gamemodeStr.equals("hardcore") || gamemodeStr.equals("h") || gamemodeStr.equals("2")) {
-            this.defaultGameMode = 2;
-            log.info("Default game mode: HARDCORE - Death is permanent!");
+        int parsedGameMode = GameType.parse(gamemodeStr);
+        if (parsedGameMode >= 0) {
+            this.defaultGameMode = parsedGameMode;
+            log.info("Default game mode: " + GameType.byId(parsedGameMode).getName());
         } else {
             this.defaultGameMode = 0;
-            if (!gamemodeStr.equals("survival") && !gamemodeStr.equals("s") && !gamemodeStr.equals("0")) {
-                log.warning("Unknown gamemode '" + gamemodeStr + "' in server.properties. Defaulting to survival.");
-            } else {
-                log.info("Default game mode: Survival");
-            }
+            log.warning("Unknown gamemode '" + gamemodeStr + "' in server.properties. Defaulting to survival.");
         }
 
         boolean legacyAllowCommands = this.propertyManager.properties.containsKey("allow-commands")

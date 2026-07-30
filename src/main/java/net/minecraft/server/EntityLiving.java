@@ -544,7 +544,7 @@ public abstract class EntityLiving extends Entity {
         boolean bypassFluids = false;
         if (this instanceof EntityHuman) {
             EntityHuman ph = (EntityHuman) this;
-            if (ph.gameMode == 1 && !this.onGround) {
+            if ((ph.gameMode == 1 || ph.isSpectator()) && !this.onGround) {
                 bypassFluids = true;
             }
         }
@@ -769,6 +769,9 @@ public abstract class EntityLiving extends Entity {
         this.aA *= 0.98F;
         this.aB *= 0.9F;
         this.a(this.az, this.aA);
+        if (this instanceof EntityHuman && ((EntityHuman) this).isSpectator()) {
+            return;
+        }
         int collisionLimit = getMaxEntityCollisions();
         this.numCollisions = Math.max(0, this.numCollisions - collisionLimit);
         if (collisionLimit <= 0 || this.numCollisions >= collisionLimit) {

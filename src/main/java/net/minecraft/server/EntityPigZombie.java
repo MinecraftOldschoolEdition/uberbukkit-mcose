@@ -26,7 +26,7 @@ public class EntityPigZombie extends EntityZombie {
         // Clear anger if target switched to creative mode
         if (this.target instanceof EntityHuman) {
             EntityHuman targetPlayer = (EntityHuman) this.target;
-            if (targetPlayer.gameMode == 1) {
+            if (targetPlayer.gameMode == 1 || targetPlayer.isSpectator()) {
                 this.target = null;
                 this.angerLevel = 0;
             }
@@ -64,7 +64,8 @@ public class EntityPigZombie extends EntityZombie {
 
     public boolean damageEntity(Entity entity, int i) {
         // Don't become angry at creative mode players
-        if (entity instanceof EntityHuman && ((EntityHuman) entity).gameMode != 1) {
+        if (entity instanceof EntityHuman && ((EntityHuman) entity).gameMode != 1
+                && !((EntityHuman) entity).isSpectator()) {
             List list = this.world.b((Entity) this, this.boundingBox.b(32.0D, 32.0D, 32.0D));
 
             for (int j = 0; j < list.size(); ++j) {

@@ -8,7 +8,7 @@ public final class Sensors {
         if (self == null || self.world == null) return null;
         net.minecraft.server.EntityHuman p = self.world.findNearbyPlayer(self, range);
         if (p == null) return null;
-        if (p.gameMode == 1) return null; // ignore creative
+        if (p.gameMode == 1 || p.isSpectator()) return null; // ignore creative/spectator
         return p;
     }
 
@@ -23,5 +23,4 @@ public final class Sensors {
         try { return world.d(); } catch (Throwable ignored) { return true; }
     }
 }
-
 

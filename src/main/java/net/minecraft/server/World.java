@@ -2832,7 +2832,7 @@ public class World implements IBlockAccess {
             boolean bypassWaterPush = false;
             if (material == Material.WATER && entity instanceof EntityHuman) {
                 EntityHuman ph = (EntityHuman) entity;
-                if (ph.gameMode == 1 && !entity.onGround) {
+                if ((ph.gameMode == 1 || ph.isSpectator()) && !entity.onGround) {
                     bypassWaterPush = true;
                 }
             }
@@ -4061,7 +4061,7 @@ public class World implements IBlockAccess {
         for (int i = 0; i < this.players.size(); ++i) {
             EntityHuman entityhuman1 = (EntityHuman) this.players.get(i);
             // CraftBukkit start - fixed an NPE
-            if (entityhuman1 == null || entityhuman1.dead) {
+            if (entityhuman1 == null || entityhuman1.dead || entityhuman1.isSpectator()) {
                 continue;
             }
             // CraftBukkit end
@@ -4217,18 +4217,24 @@ public class World implements IBlockAccess {
     }
 
     public void everyoneSleeping() {
-        this.J = !this.players.isEmpty();
+        this.J = false;
+        boolean foundSleepEligiblePlayer = false;
         Iterator iterator = this.players.iterator();
 
         while (iterator.hasNext()) {
             EntityHuman entityhuman = (EntityHuman) iterator.next();
+            if (entityhuman.isSpectator()) {
+                continue;
+            }
+            foundSleepEligiblePlayer = true;
 
             // CraftBukkit
             if (!entityhuman.isSleeping() && !entityhuman.fauxSleeping) {
                 this.J = false;
-                break;
+                return;
             }
         }
+        this.J = foundSleepEligiblePlayer;
     }
 
     // CraftBukkit start
@@ -4272,11 +4278,14 @@ public class World implements IBlockAccess {
                 }
 
                 entityhuman = (EntityHuman) iterator.next();
+                if (entityhuman.isSpectator()) {
+                    continue;
+                }
                 // CraftBukkit start
                 if (entityhuman.isDeeplySleeping()) {
                     foundActualSleepers = true;
                 }
-            } while (entityhuman.isDeeplySleeping() || entityhuman.fauxSleeping);
+            } while (entityhuman.isSpectator() || entityhuman.isDeeplySleeping() || entityhuman.fauxSleeping);
             // CraftBukkit end
 
             return false;
