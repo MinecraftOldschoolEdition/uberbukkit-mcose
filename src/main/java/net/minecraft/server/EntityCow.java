@@ -58,14 +58,25 @@ public class EntityCow extends EntityAnimal {
 
             CraftItemStack itemInHand = (CraftItemStack) event.getItemStack();
             byte data = itemInHand.getData() == null ? (byte) 0 : itemInHand.getData().getData();
-            itemstack = new ItemStack(itemInHand.getTypeId(), itemInHand.getAmount(), data);
-
-            entityhuman.inventory.setItem(entityhuman.inventory.itemInHandIndex, itemstack);
+            ItemStack milkBucket = new ItemStack(itemInHand.getTypeId(), itemInHand.getAmount(), data);
+            giveMilkBucket(entityhuman, itemstack, milkBucket);
             // CraftBukkit end
 
             return true;
         } else {
             return false;
+        }
+    }
+
+    static void giveMilkBucket(EntityHuman entityhuman, ItemStack heldItem, ItemStack milkBucket) {
+        if (heldItem.count > 1) {
+            --heldItem.count;
+            ItemStack toInsert = milkBucket.cloneItemStack();
+            if (!entityhuman.inventory.pickup(toInsert) && toInsert.count > 0) {
+                entityhuman.b(toInsert);
+            }
+        } else {
+            entityhuman.inventory.setItem(entityhuman.inventory.itemInHandIndex, milkBucket);
         }
     }
 }

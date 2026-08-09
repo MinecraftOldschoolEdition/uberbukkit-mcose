@@ -72,7 +72,7 @@ public class Packet5EntityEquipment extends Packet {
                         throw new IOException("Invalid item id " + short2 + " in legacy inventory packet");
                     }
 
-                    int maxStackSize = Item.byId[short2].getMaxStackSize();
+                    int maxStackSize = new ItemStack(short2, 1, 0).getNetworkMaxStackSize();
                     if (b0 <= 0 || b0 > maxStackSize) {
                         throw new IOException("Invalid item count " + b0 + " for item " + short2 + " in legacy inventory packet (expected 1-" + maxStackSize + ")");
                     }

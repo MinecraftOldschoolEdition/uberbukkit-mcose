@@ -8,12 +8,13 @@ import org.bukkit.craftbukkit.entity.CraftPlayer;
 import org.bukkit.entity.Player;
 import net.minecraft.server.WorldData;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.GameRuleSync;
 import java.util.Locale;
 
 public class GameruleCommand extends VanillaCommand {
     
     // Boolean gamerules
-    private static final String[] BOOLEAN_RULES = {"doDayNightCycle", "tntexplodes", "mobGriefing", "doWeatherCycle", "doFireTick", "showDeathMessages", "sleepEnabled", "advertiseAchievements", "keepInventory", "punchToPrimeTNT", "punchSheepForWool"};
+    private static final String[] BOOLEAN_RULES = {"doDayNightCycle", "tntexplodes", "mobGriefing", "doWeatherCycle", "doFireTick", "showDeathMessages", "sleepEnabled", "advertiseAchievements", "keepInventory", "punchToPrimeTNT", "punchSheepForWool", "toggleFoodStacking"};
     // Integer gamerules
     private static final String[] INTEGER_RULES = {"spawnRadius", "spawnProtectionRadius"};
     
@@ -83,6 +84,9 @@ public class GameruleCommand extends VanillaCommand {
         if (ruleName.equalsIgnoreCase("punchSheepForWool")) {
             return Boolean.valueOf(worldData.getPunchSheepForWool());
         }
+        if (ruleName.equalsIgnoreCase("toggleFoodStacking")) {
+            return Boolean.valueOf(worldData.getToggleFoodStacking());
+        }
         return null;
     }
 
@@ -112,6 +116,8 @@ public class GameruleCommand extends VanillaCommand {
             worldData.setPunchToPrimeTNT(value);
         } else if (ruleName.equalsIgnoreCase("punchSheepForWool")) {
             worldData.setPunchSheepForWool(value);
+        } else if (ruleName.equalsIgnoreCase("toggleFoodStacking")) {
+            worldData.setToggleFoodStacking(value);
         } else {
             return false;
         }
@@ -229,6 +235,9 @@ public class GameruleCommand extends VanillaCommand {
                 if (!setBooleanRuleValue(worldData, ruleName, value)) {
                     sender.sendMessage(ChatColor.RED + "Unknown game rule: " + args[0]);
                     return false;
+                }
+                if (ruleName.equalsIgnoreCase("toggleFoodStacking")) {
+                    GameRuleSync.broadcast(mcServer, worldData);
                 }
                 
                 sender.sendMessage("Game rule " + args[0] + " has been set to " + value);

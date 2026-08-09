@@ -11,6 +11,9 @@ import java.util.Set;
 
 public class EntityTracker {
 
+    static final int MINECART_TRACKING_RANGE = 8 * 16;
+    static final int BOAT_TRACKING_RANGE = 10 * 16;
+
     private Set a = new HashSet();
     public EntityList b = new EntityList(); //Project Poseidon: private -> public
     private LongHashtable<Set> trackedEntriesByChunk = new LongHashtable<Set>();
@@ -222,9 +225,9 @@ public class EntityTracker {
         } else if (entity instanceof EntityItem) {
             this.a(entity, 64, itemUpdateFrequency, true);
         } else if (entity instanceof EntityMinecart) {
-            this.a(entity, 80, this.vehicleUpdateFrequency, true); // uberbukkit - smoother vehicles
+            this.a(entity, MINECART_TRACKING_RANGE, this.vehicleUpdateFrequency, true);
         } else if (entity instanceof EntityBoat) {
-            this.a(entity, 80, this.vehicleUpdateFrequency, true); // uberbukkit - smoother vehicles
+            this.a(entity, BOAT_TRACKING_RANGE, this.vehicleUpdateFrequency, true);
         } else if (entity instanceof EntitySquid) {
             this.a(entity, 64, this.mobUpdateFrequency, true); // uberbukkit - smoother mobs
         } else if (entity instanceof EntitySnowman) {
@@ -354,8 +357,11 @@ public class EntityTracker {
         return pressure;
     }
 
-    private boolean isPressureThrottleCandidate(Entity entity) {
+    static boolean isPressureThrottleCandidate(Entity entity) {
         if (entity instanceof EntityPlayer) {
+            return false;
+        }
+        if (entity.vehicle != null || entity.passenger != null) {
             return false;
         }
         return entity instanceof EntityLiving || entity instanceof EntityBoat || entity instanceof EntityMinecart;

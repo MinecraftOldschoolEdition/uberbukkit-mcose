@@ -316,6 +316,7 @@ public class NetLoginHandler extends NetHandler {
             
             // MCOSE: Signal modded server - enables modern fence collision and other compatibility flags
             netserverhandler.sendPacket(new Packet70Bed(19));
+            GameRuleSync.send(entityplayer);
 
             // Poseidon parity: signal client to enable special visuals on overworld attach.
             try {

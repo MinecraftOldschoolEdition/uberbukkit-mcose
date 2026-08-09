@@ -69,6 +69,20 @@ public class ContainerInputBehaviorTest {
     }
 
     @Test
+    public void foodPickupUsesTheCurrentWorldStackingRule() throws Exception {
+        TestHuman disabledPlayer = playerWithFoodStacking(false);
+        assertTrue(disabledPlayer.inventory.pickup(new ItemStack(Item.APPLE, 4)));
+        for (int slot = 0; slot < 4; ++slot) {
+            assertEquals(1, disabledPlayer.inventory.getItem(slot).count);
+        }
+
+        TestHuman enabledPlayer = playerWithFoodStacking(true);
+        assertTrue(enabledPlayer.inventory.pickup(new ItemStack(Item.APPLE, 4)));
+        assertEquals(4, enabledPlayer.inventory.getItem(0).count);
+        assertNull(enabledPlayer.inventory.getItem(1));
+    }
+
+    @Test
     public void quickCraftEvenlyDistributesAndKeepsRemainder() throws Exception {
         TestHuman player = player();
         TestContainer container = new TestContainer();
@@ -241,6 +255,15 @@ public class ContainerInputBehaviorTest {
         TestHuman player = (TestHuman)unsafe().allocateInstance(TestHuman.class);
         player.inventory = new InventoryPlayer(player);
         player.gameMode = 0;
+        return player;
+    }
+
+    private static TestHuman playerWithFoodStacking(boolean enabled) throws Exception {
+        TestHuman player = player();
+        World world = (World)unsafe().allocateInstance(World.class);
+        world.worldData = new WorldData(1234L, "food-stacking-test");
+        world.worldData.setToggleFoodStacking(enabled);
+        player.world = world;
         return player;
     }
 

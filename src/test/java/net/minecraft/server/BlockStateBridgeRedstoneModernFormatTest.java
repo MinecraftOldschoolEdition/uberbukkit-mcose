@@ -10,6 +10,25 @@ import static org.junit.Assert.assertTrue;
 
 public class BlockStateBridgeRedstoneModernFormatTest {
     @Test
+    public void wallClockSignalStaysFullStrengthWheneverDaylightPowersIt() {
+        boolean sawPoweredTime = false;
+        boolean sawUnpoweredTime = false;
+        for (long worldTime = 0L; worldTime < 24000L; ++worldTime) {
+            int power = BlockWallClock.getPowerLevelForWorldTime(worldTime);
+            assertTrue("clock power at " + worldTime, power == 0 || power == 15);
+            sawPoweredTime |= power == 15;
+            sawUnpoweredTime |= power == 0;
+        }
+
+        assertTrue(sawPoweredTime);
+        assertTrue(sawUnpoweredTime);
+        assertEquals(15, BlockWallClock.getPowerLevelForWorldTime(0L));
+        assertEquals(15, BlockWallClock.getPowerLevelForWorldTime(6000L));
+        assertEquals(15, BlockWallClock.getPowerLevelForWorldTime(12000L));
+        assertEquals(0, BlockWallClock.getPowerLevelForWorldTime(18000L));
+    }
+
+    @Test
     public void runtimeMetadataUsesSnapshotStyleCanonicalStates() {
         assertState(Block.PISTON.id, 10, Block.PISTON.id,
                 "minecraft:piston", "facing", "north", "extended", "true");

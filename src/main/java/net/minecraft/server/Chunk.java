@@ -126,6 +126,37 @@ public class Chunk {
         this.o = true;
     }
 
+    /**
+     * Repairs the invariant that every emissive block stores at least its own
+     * declared block-light value. Terrain generators write directly into the
+     * backing block array, so those sources otherwise bypass the normal block
+     * mutation hook which seeds block-light propagation.
+     *
+     * @return true when one or more underlit sources were repaired
+     */
+    public boolean seedUnderlitBlockLightSources() {
+        if (this.b == null || this.g == null) {
+            return false;
+        }
+
+        boolean repaired = false;
+        for (int blockIndex = 0; blockIndex < this.b.length; ++blockIndex) {
+            int emittedLight = Block.s[this.b[blockIndex] & 255];
+            if (emittedLight <= 0) {
+                continue;
+            }
+
+            int localX = blockIndex >> 11;
+            int localZ = blockIndex >> 7 & 15;
+            int y = blockIndex & 127;
+            if (this.g.a(localX, y, localZ) < emittedLight) {
+                this.a(EnumSkyBlock.BLOCK, localX, y, localZ, emittedLight);
+                repaired = true;
+            }
+        }
+        return repaired;
+    }
+
     public void loadNOP() {
     }
 

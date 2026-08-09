@@ -138,6 +138,7 @@ public class ChunkProviderServer implements IChunkProvider {
 
             this.chunks.put(i, j, chunk); // CraftBukkit
             this.chunkList.add(chunk);
+            this.initializeChunkBlockLightingAfterInstall(chunk);
             if (chunk != null) {
                 chunk.loadNOP();
                 chunk.addEntities();
@@ -173,6 +174,43 @@ public class ChunkProviderServer implements IChunkProvider {
         }
 
         return chunk;
+    }
+
+    /**
+     * Enforces emitted block-light validity at the common install boundary so
+     * synchronous generation, async generation, Nether generation, and legacy
+     * chunk loads all receive the same repair before chunk data is sent.
+     */
+    void initializeChunkBlockLightingAfterInstall(Chunk chunk) {
+        if (chunk == null || chunk.isEmpty()) {
+            return;
+        }
+
+        int minX = chunk.x << 4;
+        int minZ = chunk.z << 4;
+        int maxX = minX + 15;
+        int maxZ = minZ + 15;
+        if (chunk.seedUnderlitBlockLightSources()) {
+            // A full column is exactly the legacy light engine's 32768-cell
+            // limit. The pre-seeded sources make this an increase-only repair.
+            this.world.a(EnumSkyBlock.BLOCK, minX, 0, minZ, maxX, 127, maxZ);
+        }
+
+        // Revisit both sides of each newly available boundary. This repays
+        // propagation that was intentionally skipped while either neighbor was
+        // absent, including emissive sources on a chunk edge.
+        if (this.isChunkLoaded(chunk.x - 1, chunk.z)) {
+            this.world.a(EnumSkyBlock.BLOCK, minX - 1, 0, minZ, minX, 127, maxZ);
+        }
+        if (this.isChunkLoaded(chunk.x + 1, chunk.z)) {
+            this.world.a(EnumSkyBlock.BLOCK, maxX, 0, minZ, maxX + 1, 127, maxZ);
+        }
+        if (this.isChunkLoaded(chunk.x, chunk.z - 1)) {
+            this.world.a(EnumSkyBlock.BLOCK, minX, 0, minZ - 1, maxX, 127, minZ);
+        }
+        if (this.isChunkLoaded(chunk.x, chunk.z + 1)) {
+            this.world.a(EnumSkyBlock.BLOCK, minX, 0, maxZ, maxX, 127, maxZ + 1);
+        }
     }
 
     public Chunk getOrCreateChunk(int i, int j) {

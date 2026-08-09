@@ -201,8 +201,28 @@ public final class ItemStack {
         return this.getItem().getMaxStackSize();
     }
 
+    /** Returns the stack limit that applies under the target world's gamerules. */
+    public int getMaxStackSize(World world) {
+        boolean foodStacking = world != null && world.worldData != null
+                && world.worldData.getToggleFoodStacking();
+        return this.getMaxStackSize(foodStacking);
+    }
+
+    public int getMaxStackSize(boolean foodStacking) {
+        return foodStacking && this.getItem() instanceof ItemFood ? 4 : this.getMaxStackSize();
+    }
+
+    /** Packet decoding must accept food stacks that are valid in enabled worlds. */
+    public int getNetworkMaxStackSize() {
+        return this.getItem() instanceof ItemFood ? Math.max(4, this.getMaxStackSize()) : this.getMaxStackSize();
+    }
+
     public boolean isStackable() {
         return this.getMaxStackSize() > 1 && (!this.d() || !this.f());
+    }
+
+    public boolean isStackable(World world) {
+        return this.getMaxStackSize(world) > 1 && (!this.d() || !this.f());
     }
 
     public boolean d() {

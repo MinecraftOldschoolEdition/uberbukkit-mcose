@@ -69,7 +69,8 @@ public final class CommandAutocompleteRegistry {
         "advertiseAchievements",
         "keepInventory",
         "punchToPrimeTNT",
-        "punchSheepForWool"
+        "punchSheepForWool",
+        "toggleFoodStacking"
     };
 
     private static final String[] INTEGER_GAMERULES = new String[] { "spawnRadius", "spawnProtectionRadius" };

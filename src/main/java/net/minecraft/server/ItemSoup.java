@@ -8,6 +8,13 @@ public class ItemSoup extends ItemFood {
 
     public ItemStack a(ItemStack itemstack, World world, EntityHuman entityhuman) {
         super.a(itemstack, world, entityhuman);
-        return new ItemStack(Item.BOWL);
+        ItemStack bowl = new ItemStack(Item.BOWL);
+        if (itemstack.count <= 0) {
+            return bowl;
+        }
+        if (!entityhuman.inventory.pickup(bowl)) {
+            entityhuman.a(bowl, false);
+        }
+        return itemstack;
     }
 }

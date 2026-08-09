@@ -47,6 +47,7 @@ public class WorldData {
         if (gameRules.hasKey("keepInventory")) this.keepInventory = gameRules.m("keepInventory");
         if (gameRules.hasKey("punchToPrimeTNT")) this.punchToPrimeTNT = gameRules.m("punchToPrimeTNT");
         if (gameRules.hasKey("punchSheepForWool")) this.punchSheepForWool = gameRules.m("punchSheepForWool");
+        if (gameRules.hasKey("toggleFoodStacking")) this.toggleFoodStacking = gameRules.m("toggleFoodStacking");
         if (gameRules.hasKey("spawnRadius")) this.spawnRadius = Math.max(0, gameRules.e("spawnRadius"));
     }
 
@@ -121,6 +122,7 @@ public class WorldData {
             this.punchSheepForWool = nbttagcompound.m("PunchSheepForWool");
             hasPunchSheepForWool = true;
         }
+        if (nbttagcompound.hasKey("ToggleFoodStacking")) this.toggleFoodStacking = nbttagcompound.m("ToggleFoodStacking");
         // Migrate the old server-wide compatibility settings into worlds that predate these rules.
         if (!hasPunchToPrimeTNT) {
             this.punchToPrimeTNT = !UberbukkitConfig.getInstance().getBoolean("mechanics.tnt_require_lighter", true);
@@ -171,6 +173,7 @@ public class WorldData {
         this.keepInventory = worlddata.keepInventory;
         this.punchToPrimeTNT = worlddata.punchToPrimeTNT;
         this.punchSheepForWool = worlddata.punchSheepForWool;
+        this.toggleFoodStacking = worlddata.toggleFoodStacking;
         this.spawnRadius = worlddata.spawnRadius;
     }
 
@@ -236,6 +239,7 @@ public class WorldData {
         nbttagcompound.a("KeepInventory", this.keepInventory);
         nbttagcompound.a("PunchToPrimeTNT", this.punchToPrimeTNT);
         nbttagcompound.a("PunchSheepForWool", this.punchSheepForWool);
+        nbttagcompound.a("ToggleFoodStacking", this.toggleFoodStacking);
         // Integer gamerules
         nbttagcompound.a("SpawnRadius", this.spawnRadius);
 
@@ -252,6 +256,7 @@ public class WorldData {
         gameRules.a("keepInventory", this.keepInventory);
         gameRules.a("punchToPrimeTNT", this.punchToPrimeTNT);
         gameRules.a("punchSheepForWool", this.punchSheepForWool);
+        gameRules.a("toggleFoodStacking", this.toggleFoodStacking);
         gameRules.a("spawnRadius", this.spawnRadius);
         nbttagcompound.a("GameRules", gameRules);
     }
@@ -387,6 +392,7 @@ public class WorldData {
     private boolean keepInventory = false; // If true, players keep inventory on death
     private boolean punchToPrimeTNT = false;
     private boolean punchSheepForWool = false;
+    private boolean toggleFoodStacking = false;
     
     // Gamerules (integer)
     private int spawnRadius = 10; // Vanilla default spawn randomization radius
@@ -414,6 +420,8 @@ public class WorldData {
     public void setPunchToPrimeTNT(boolean v) { this.punchToPrimeTNT = v; }
     public boolean getPunchSheepForWool() { return this.punchSheepForWool; }
     public void setPunchSheepForWool(boolean v) { this.punchSheepForWool = v; }
+    public boolean getToggleFoodStacking() { return this.toggleFoodStacking; }
+    public void setToggleFoodStacking(boolean v) { this.toggleFoodStacking = v; }
     
     // Integer gamerules
     public int getSpawnRadius() { return this.spawnRadius; }

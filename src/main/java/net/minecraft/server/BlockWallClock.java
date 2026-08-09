@@ -146,16 +146,11 @@ public class BlockWallClock extends Block {
             daylightFactor = 1.0D;
         }
 
-        int power = (int) Math.round(daylightFactor * 15.0D);
-        if (power < 0) {
-            return 0;
-        }
-
-        if (power > 15) {
-            return 15;
-        }
-
-        return power;
+        int daylightPower = (int) Math.round(daylightFactor * 15.0D);
+        // The clock is a day/night switch, not an analog daylight sensor. Keep its
+        // existing twilight activation window, but never let a powered redstone line
+        // retreat one block at a time as the sun moves away from noon.
+        return daylightPower > 0 ? 15 : 0;
     }
 
     public int resolvePlacementMetadata(World world, int i, int j, int k, int l, boolean allowGlass) {

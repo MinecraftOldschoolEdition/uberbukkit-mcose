@@ -16,6 +16,8 @@ import java.util.List;
 
 public class EntityFireball extends Entity {
 
+    static final int REFLECTED_GHAST_DAMAGE = 1000;
+
     private int f = -1;
     private int g = -1;
     private int h = -1;
@@ -144,13 +146,14 @@ public class EntityFireball extends Entity {
                         hitGhast = (EntityGhast) movingobjectposition.entity;
                         wasGhastAlive = hitGhast.health > 0;
                     }
+                    int directDamage = getDirectImpactDamage(hitGhast != null, this.deflectedBy != null);
                     boolean stick;
                     if (movingobjectposition.entity instanceof EntityLiving) {
                         org.bukkit.entity.Entity damagee = movingobjectposition.entity.getBukkitEntity();
                         Projectile projectile = (Projectile) this.getBukkitEntity();
 
                         // TODO @see EntityArrow#162
-                        EntityDamageByEntityEvent event = new EntityDamageByEntityEvent(projectile, damagee, EntityDamageEvent.DamageCause.PROJECTILE, 0);
+                        EntityDamageByEntityEvent event = new EntityDamageByEntityEvent(projectile, damagee, EntityDamageEvent.DamageCause.PROJECTILE, directDamage);
                         this.world.getServer().getPluginManager().callEvent(event);
 
                         this.shooter = (projectile.getShooter() == null) ? null : ((CraftLivingEntity) projectile.getShooter()).getHandle();
@@ -233,6 +236,10 @@ public class EntityFireball extends Entity {
         this.motZ *= (double) f2;
         this.world.a("smoke", this.locX, this.locY + 0.5D, this.locZ, 0.0D, 0.0D, 0.0D);
         this.setPosition(this.locX, this.locY, this.locZ);
+    }
+
+    static int getDirectImpactDamage(boolean hitGhast, boolean playerDeflected) {
+        return hitGhast && playerDeflected ? REFLECTED_GHAST_DAMAGE : 0;
     }
 
     public void b(NBTTagCompound nbttagcompound) {

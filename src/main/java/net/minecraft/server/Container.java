@@ -20,6 +20,7 @@ public abstract class Container {
     private int quickCraftStatus;
     private int quickCraftType;
     private Set quickCraftSlots = new java.util.LinkedHashSet();
+    private World stackLimitWorld;
 
     public Container() {
     }
@@ -115,7 +116,14 @@ public abstract class Container {
                     if (i < 0 || i >= this.e.size() || !((Slot) this.e.get(i)).canTakeStack()) {
                         return null;
                     }
-                    ItemStack itemstack1 = this.a(i);
+                    World previousStackLimitWorld = this.stackLimitWorld;
+                    this.stackLimitWorld = entityhuman.world;
+                    ItemStack itemstack1;
+                    try {
+                        itemstack1 = this.a(i);
+                    } finally {
+                        this.stackLimitWorld = previousStackLimitWorld;
+                    }
 
                     if (itemstack1 != null) {
                         int l = itemstack1.count;
@@ -145,9 +153,7 @@ public abstract class Container {
                         if (itemstack2 == null) {
                             if (itemstack3 != null && slot1.isAllowed(itemstack3)) {
                                 k = j == 0 ? itemstack3.count : 1;
-                                if (k > slot1.d()) {
-                                    k = slot1.d();
-                                }
+                                k = Math.min(k, Math.min(slot1.d(), itemstack3.getMaxStackSize(entityhuman.world)));
 
                                 slot1.c(itemstack3.a(k));
                                 if (itemstack3.count == 0) {
@@ -171,8 +177,8 @@ public abstract class Container {
                                     k = slot1.d() - itemstack2.count;
                                 }
 
-                                if (k > itemstack3.getMaxStackSize() - itemstack2.count) {
-                                    k = itemstack3.getMaxStackSize() - itemstack2.count;
+                                if (k > itemstack3.getMaxStackSize(entityhuman.world) - itemstack2.count) {
+                                    k = itemstack3.getMaxStackSize(entityhuman.world) - itemstack2.count;
                                 }
 
                                 itemstack3.a(k);
@@ -185,9 +191,9 @@ public abstract class Container {
                                 slot1.c(itemstack3);
                                 inventoryplayer.b(itemstack2);
                             }
-                        } else if (itemstack3 != null && slot1.canTakeStack() && itemstack2.id == itemstack3.id && itemstack3.getMaxStackSize() > 1 && (!itemstack2.usesData() || itemstack2.getData() == itemstack3.getData())) {
+                        } else if (itemstack3 != null && slot1.canTakeStack() && itemstack2.id == itemstack3.id && itemstack3.getMaxStackSize(entityhuman.world) > 1 && (!itemstack2.usesData() || itemstack2.getData() == itemstack3.getData())) {
                             k = itemstack2.count;
-                            if (k > 0 && k + itemstack3.count <= itemstack3.getMaxStackSize()) {
+                            if (k > 0 && k + itemstack3.count <= itemstack3.getMaxStackSize(entityhuman.world)) {
                                 itemstack3.count += k;
                                 itemstack2.a(k);
                                 if (itemstack2.count == 0) {
@@ -258,7 +264,7 @@ public abstract class Container {
             }
         } else if (targetStack == null) {
             if (target.isAllowed(hotbarStack)) {
-                int amount = Math.min(hotbarStack.count, target.d());
+                int amount = Math.min(hotbarStack.count, Math.min(target.d(), hotbarStack.getMaxStackSize(player.world)));
                 ItemStack placed = hotbarStack.a(amount);
                 target.c(placed);
                 if (hotbarStack.count == 0) {
@@ -266,7 +272,7 @@ public abstract class Container {
                 }
             }
         } else if (target.canTakeStack() && target.isAllowed(hotbarStack)) {
-            int limit = Math.min(target.d(), hotbarStack.getMaxStackSize());
+            int limit = Math.min(target.d(), hotbarStack.getMaxStackSize(player.world));
             if (hotbarStack.count <= limit) {
                 player.inventory.setItem(hotbarIndex, targetStack);
                 target.c(hotbarStack);
@@ -295,7 +301,7 @@ public abstract class Container {
         }
         ItemStack result = slot.getItem().cloneItemStack();
         ItemStack carried = result.cloneItemStack();
-        carried.count = carried.getMaxStackSize();
+        carried.count = carried.getMaxStackSize(player.world);
         player.inventory.b(carried);
         return result;
     }
@@ -351,7 +357,7 @@ public abstract class Container {
         if (this.quickCraftStatus == 1) {
             if (slotIndex >= 0 && slotIndex < this.e.size()) {
                 Slot slot = (Slot) this.e.get(slotIndex);
-                if (this.canQuickCraftInto(slot, carried)
+                if (this.canQuickCraftInto(slot, carried, player.world)
                         && (this.quickCraftType == 2 || carried.count > this.quickCraftSlots.size())) {
                     this.quickCraftSlots.add(slot);
                 }
@@ -377,14 +383,14 @@ public abstract class Container {
         int slotCount = this.quickCraftSlots.size();
         for (Object value : this.quickCraftSlots) {
             Slot slot = (Slot) value;
-            if (!this.canQuickCraftInto(slot, carried)) {
+            if (!this.canQuickCraftInto(slot, carried, player.world)) {
                 continue;
             }
             ItemStack existing = slot.getItem();
             int existingCount = existing == null ? 0 : existing.count;
             int perSlot = this.quickCraftType == 0 ? source.count / slotCount
-                    : this.quickCraftType == 1 ? 1 : source.getMaxStackSize();
-            int max = Math.min(source.getMaxStackSize(), slot.d());
+                    : this.quickCraftType == 1 ? 1 : source.getMaxStackSize(player.world);
+            int max = Math.min(source.getMaxStackSize(player.world), slot.d());
             int newCount = Math.min(existingCount + perSlot, max);
             int added = newCount - existingCount;
             if (added <= 0 || this.quickCraftType != 2 && added > remaining) {
@@ -402,13 +408,13 @@ public abstract class Container {
         }
     }
 
-    private boolean canQuickCraftInto(Slot slot, ItemStack carried) {
+    private boolean canQuickCraftInto(Slot slot, ItemStack carried, World world) {
         if (slot == null || carried == null || !slot.isAllowed(carried)) {
             return false;
         }
         ItemStack existing = slot.getItem();
         return existing == null || this.canStacksMerge(existing, carried)
-                && existing.count < Math.min(existing.getMaxStackSize(), slot.d());
+                && existing.count < Math.min(existing.getMaxStackSize(world), slot.d());
     }
 
     private ItemStack pickupAll(int slotIndex, int button, EntityHuman player) {
@@ -425,18 +431,18 @@ public abstract class Container {
         }
         int start = button == 0 ? 0 : this.e.size() - 1;
         int step = button == 0 ? 1 : -1;
-        for (int pass = 0; pass < 2 && carried.count < carried.getMaxStackSize(); ++pass) {
-            for (int i = start; i >= 0 && i < this.e.size() && carried.count < carried.getMaxStackSize(); i += step) {
+        for (int pass = 0; pass < 2 && carried.count < carried.getMaxStackSize(player.world); ++pass) {
+            for (int i = start; i >= 0 && i < this.e.size() && carried.count < carried.getMaxStackSize(player.world); i += step) {
                 Slot slot = (Slot) this.e.get(i);
                 ItemStack stack = slot == null ? null : slot.getItem();
                 if (stack == null || !this.canStacksMerge(stack, carried) || !slot.canTakeStack()
                         || !this.canTakeItemForPickAll(slot)) {
                     continue;
                 }
-                if (pass == 0 && stack.count == stack.getMaxStackSize()) {
+                if (pass == 0 && stack.count == stack.getMaxStackSize(player.world)) {
                     continue;
                 }
-                int amount = Math.min(stack.count, carried.getMaxStackSize() - carried.count);
+                int amount = Math.min(stack.count, carried.getMaxStackSize(player.world) - carried.count);
                 ItemStack removed = slot.a(amount);
                 if (removed != null) {
                     carried.count += removed.count;
@@ -491,6 +497,10 @@ public abstract class Container {
     public abstract boolean b(EntityHuman entityhuman);
 
     protected void a(ItemStack itemstack, int i, int j, boolean flag) {
+        this.a(itemstack, i, j, flag, this.stackLimitWorld);
+    }
+
+    protected void a(ItemStack itemstack, int i, int j, boolean flag, World world) {
         int k = i;
 
         if (flag) {
@@ -500,20 +510,20 @@ public abstract class Container {
         Slot slot;
         ItemStack itemstack1;
 
-        if (itemstack.isStackable()) {
+        if (itemstack.isStackable(world)) {
             while (itemstack.count > 0 && (!flag && k < j || flag && k >= i)) {
                 slot = (Slot) this.e.get(k);
                 itemstack1 = slot.getItem();
                 if (itemstack1 != null && itemstack1.id == itemstack.id && (!itemstack.usesData() || itemstack.getData() == itemstack1.getData())) {
                     int l = itemstack1.count + itemstack.count;
 
-                    if (l <= itemstack.getMaxStackSize()) {
+                    if (l <= itemstack.getMaxStackSize(world)) {
                         itemstack.count = 0;
                         itemstack1.count = l;
                         slot.c();
-                    } else if (itemstack1.count < itemstack.getMaxStackSize()) {
-                        itemstack.count -= itemstack.getMaxStackSize() - itemstack1.count;
-                        itemstack1.count = itemstack.getMaxStackSize();
+                    } else if (itemstack1.count < itemstack.getMaxStackSize(world)) {
+                        itemstack.count -= itemstack.getMaxStackSize(world) - itemstack1.count;
+                        itemstack1.count = itemstack.getMaxStackSize(world);
                         slot.c();
                     }
                 }
@@ -537,9 +547,11 @@ public abstract class Container {
                 slot = (Slot) this.e.get(k);
                 itemstack1 = slot.getItem();
                 if (itemstack1 == null) {
-                    slot.c(itemstack.cloneItemStack());
+                    ItemStack placed = itemstack.cloneItemStack();
+                    placed.count = Math.min(itemstack.count, Math.min(itemstack.getMaxStackSize(world), slot.d()));
+                    slot.c(placed);
                     slot.c();
-                    itemstack.count = 0;
+                    itemstack.count -= placed.count;
                     break;
                 }
 

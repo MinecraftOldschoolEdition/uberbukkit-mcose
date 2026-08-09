@@ -53,7 +53,7 @@ public class InventoryPlayer implements IInventory {
 
     private int firstPartial(ItemStack itemstack) {
         for (int i = 0; i < this.items.length; ++i) {
-            if (this.items[i] != null && this.items[i].id == itemstack.id && this.items[i].isStackable() && this.items[i].count < this.items[i].getMaxStackSize() && this.items[i].count < this.getMaxStackSize() && (!this.items[i].usesData() || this.items[i].getData() == itemstack.getData())) {
+            if (this.items[i] != null && this.items[i].id == itemstack.id && this.items[i].isStackable(this.d.world) && this.items[i].count < this.items[i].getMaxStackSize(this.d.world) && this.items[i].count < this.getMaxStackSize() && (!this.items[i].usesData() || this.items[i].getData() == itemstack.getData())) {
                 return i;
             }
         }
@@ -68,8 +68,8 @@ public class InventoryPlayer implements IInventory {
             if (this.items[i] == null) return itemstack.count;
 
             // Taken from firstPartial(ItemStack)
-            if (this.items[i] != null && this.items[i].id == itemstack.id && this.items[i].isStackable() && this.items[i].count < this.items[i].getMaxStackSize() && this.items[i].count < this.getMaxStackSize() && (!this.items[i].usesData() || this.items[i].getData() == itemstack.getData())) {
-                remains -= (this.items[i].getMaxStackSize() < this.getMaxStackSize() ? this.items[i].getMaxStackSize() : this.getMaxStackSize()) - this.items[i].count;
+            if (this.items[i] != null && this.items[i].id == itemstack.id && this.items[i].isStackable(this.d.world) && this.items[i].count < this.items[i].getMaxStackSize(this.d.world) && this.items[i].count < this.getMaxStackSize() && (!this.items[i].usesData() || this.items[i].getData() == itemstack.getData())) {
+                remains -= (this.items[i].getMaxStackSize(this.d.world) < this.getMaxStackSize() ? this.items[i].getMaxStackSize(this.d.world) : this.getMaxStackSize()) - this.items[i].count;
             }
             if (remains <= 0) return itemstack.count;
         }
@@ -109,8 +109,8 @@ public class InventoryPlayer implements IInventory {
 
             int l = j;
 
-            if (j > this.items[k].getMaxStackSize() - this.items[k].count) {
-                l = this.items[k].getMaxStackSize() - this.items[k].count;
+            if (j > this.items[k].getMaxStackSize(this.d.world) - this.items[k].count) {
+                l = this.items[k].getMaxStackSize(this.d.world) - this.items[k].count;
             }
 
             if (l > this.getMaxStackSize() - this.items[k].count) {

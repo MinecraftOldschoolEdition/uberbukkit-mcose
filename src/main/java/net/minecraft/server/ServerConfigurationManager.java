@@ -782,6 +782,7 @@ public class ServerConfigurationManager {
         entityplayer1.netServerHandler.sendPacket(new Packet9Respawn(actualDimension, worldserver.getSeed()));
         entityplayer1.spawnIn(worldserver);
         entityplayer1.dead = false;
+        GameRuleSync.send(entityplayer1);
         entityplayer1.netServerHandler.teleport(new Location(worldserver.getWorld(), entityplayer1.locX, entityplayer1.locY, entityplayer1.locZ, entityplayer1.yaw, entityplayer1.pitch));
         // CraftBukkit end
         this.a(entityplayer1, worldserver);

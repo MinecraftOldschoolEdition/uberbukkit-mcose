@@ -13,6 +13,13 @@ public class EntityTrackerEntry {
     private static final double VELOCITY_PACKET_FORCE_DELTA = 0.09D;
     private static final int VELOCITY_PACKET_MIN_INTERVAL_TICKS = 3;
     private static final int LIVING_RELATIVE_SYNC_MAX_TICKS = 120;
+    private static final int MAX_PASSENGER_TRACKING_DEPTH = 16;
+
+    enum PassengerPositionSyncMode {
+        NORMAL,
+        RIDING_ROTATION_ONLY,
+        DISMOUNT_ABSOLUTE
+    }
 
     public Entity tracker;
     // uberbukkit
@@ -38,6 +45,9 @@ public class EntityTrackerEntry {
     private boolean isMoving;
     private int t = 0;
     private int velocityPacketCooldown = 0;
+    private Entity lastTrackedVehicle;
+    private boolean wasRiding;
+    private int lastEffectiveTrackingRange;
     public boolean m = false;
     public Set trackedPlayers = new HashSet();
     boolean hasTrackedChunkKey;
@@ -53,6 +63,9 @@ public class EntityTrackerEntry {
         this.f = MathHelper.floor(entity.locZ * 32.0D);
         this.g = MathHelper.d(entity.yaw * 256.0F / 360.0F);
         this.h = MathHelper.d(entity.pitch * 256.0F / 360.0F);
+        this.lastTrackedVehicle = entity.vehicle;
+        this.wasRiding = entity.vehicle != null;
+        this.lastEffectiveTrackingRange = i;
     }
 
     public boolean equals(Object object) {
@@ -68,6 +81,52 @@ public class EntityTrackerEntry {
             return null;
         }
         return ((WorldServer) this.tracker.world).tracker;
+    }
+
+    static PassengerPositionSyncMode resolvePassengerPositionSyncMode(boolean riding, boolean wasRiding) {
+        if (riding) {
+            return PassengerPositionSyncMode.RIDING_ROTATION_ONLY;
+        }
+        return wasRiding ? PassengerPositionSyncMode.DISMOUNT_ABSOLUTE : PassengerPositionSyncMode.NORMAL;
+    }
+
+    static int effectiveTrackingRange(int baseRange, Entity passenger, EntityList trackedEntries) {
+        int effectiveRange = baseRange;
+        int depth = 0;
+        while (passenger != null && depth++ < MAX_PASSENGER_TRACKING_DEPTH) {
+            EntityTrackerEntry passengerEntry = trackedEntries == null
+                    ? null
+                    : (EntityTrackerEntry) trackedEntries.a(passenger.id);
+            if (passengerEntry != null && passengerEntry.b > effectiveRange) {
+                effectiveRange = passengerEntry.b;
+            }
+            passenger = passenger.passenger;
+        }
+        return effectiveRange;
+    }
+
+    private int getEffectiveTrackingRange() {
+        EntityTracker entityTracker = this.resolveEntityTracker();
+        return effectiveTrackingRange(this.b, this.tracker.passenger, entityTracker == null ? null : entityTracker.b);
+    }
+
+    private void sendVehicleLinkIfChanged() {
+        Entity vehicle = this.tracker.vehicle;
+        if (vehicle != this.lastTrackedVehicle) {
+            this.lastTrackedVehicle = vehicle;
+            this.a(new Packet39AttachEntity(this.tracker, vehicle));
+        }
+    }
+
+    private boolean isEntityKnownToPlayer(Entity entity, EntityPlayer player) {
+        if (entity == player) {
+            return true;
+        }
+        EntityTracker entityTracker = this.resolveEntityTracker();
+        EntityTrackerEntry entry = entityTracker == null
+                ? null
+                : (EntityTrackerEntry) entityTracker.b.a(entity.id);
+        return entry != null && entry.trackedPlayers.contains(player);
     }
 
     private boolean isNearAnyPlayer(List players, int nearChunkRadius) {
@@ -93,6 +152,12 @@ public class EntityTrackerEntry {
 
     public void track(List list) {
         this.m = false;
+        this.sendVehicleLinkIfChanged();
+        int effectiveTrackingRange = this.getEffectiveTrackingRange();
+        if (effectiveTrackingRange != this.lastEffectiveTrackingRange) {
+            this.lastEffectiveTrackingRange = effectiveTrackingRange;
+            this.scanPlayers(list);
+        }
         if (!this.r || this.tracker.e(this.o, this.p, this.q) > 16.0D) {
             this.o = this.tracker.locX;
             this.p = this.tracker.locY;
@@ -130,6 +195,7 @@ public class EntityTrackerEntry {
             int encodedDiffZ = newEncodedPosZ - this.f;
             int maxRelativeSyncTicks = this.tracker instanceof EntityLiving && !(this.tracker instanceof EntityPlayer) ? LIVING_RELATIVE_SYNC_MAX_TICKS : 400;
             Object packet = null;
+            PassengerPositionSyncMode passengerPositionSyncMode = resolvePassengerPositionSyncMode(this.tracker.vehicle != null, this.wasRiding);
             // mob movement fix, credit to Oldmana#7086 from the Modification Station discord server
             // https://discordapp.com/channels/397834523028488203/397839387465089054/684637208199823377
             int movementUpdateTreshold = 1;
@@ -151,7 +217,17 @@ public class EntityTrackerEntry {
             }
             // CraftBukkit end
 
-            if (encodedDiffX >= -128 && encodedDiffX < 128 && encodedDiffY >= -128 && encodedDiffY < 128 && encodedDiffZ >= -128 && encodedDiffZ < 128 && this.t <= maxRelativeSyncTicks) {
+            if (passengerPositionSyncMode == PassengerPositionSyncMode.RIDING_ROTATION_ONLY) {
+                this.t = 0;
+                if (needsRotationUpdate) {
+                    packet = new Packet32EntityLook(this.tracker.id, (byte) newEncodedRotationYaw, (byte) newEncodedRotationPitch);
+                }
+                this.wasRiding = true;
+            } else if (passengerPositionSyncMode == PassengerPositionSyncMode.NORMAL
+                    && encodedDiffX >= -128 && encodedDiffX < 128
+                    && encodedDiffY >= -128 && encodedDiffY < 128
+                    && encodedDiffZ >= -128 && encodedDiffZ < 128
+                    && this.t <= maxRelativeSyncTicks) {
                 // entity has moved less than 4 blocks
                 if (needsPositionUpdate && needsRotationUpdate) {
                     packet = new Packet33RelEntityMoveLook(this.tracker.id, (byte) encodedDiffX, (byte) encodedDiffY, (byte) encodedDiffZ, (byte) newEncodedRotationYaw, (byte) newEncodedRotationPitch);
@@ -160,6 +236,7 @@ public class EntityTrackerEntry {
                 } else if (needsRotationUpdate) {
                     packet = new Packet32EntityLook(this.tracker.id, (byte) newEncodedRotationYaw, (byte) newEncodedRotationPitch);
                 }
+                this.wasRiding = false;
             } else {
                 this.t = 0;
                 // minecart clipping fix
@@ -175,9 +252,10 @@ public class EntityTrackerEntry {
                 // CraftBukkit end
 
                 packet = new Packet34EntityTeleport(this.tracker.id, newEncodedPosX, newEncodedPosY, newEncodedPosZ, (byte) newEncodedRotationYaw, (byte) newEncodedRotationPitch);
+                this.wasRiding = false;
             }
 
-            if (this.isMoving) {
+            if (this.isMoving && passengerPositionSyncMode != PassengerPositionSyncMode.RIDING_ROTATION_ONLY) {
                 double d0 = this.tracker.motX - this.i;
                 double d1 = this.tracker.motY - this.j;
                 double d2 = this.tracker.motZ - this.k;
@@ -329,7 +407,9 @@ public class EntityTrackerEntry {
             double d0 = entityplayer.locX - (double) this.d / 32.0D;
             double d1 = entityplayer.locZ - (double) this.f / 32.0D;
 
-            if (d0 >= (double) (-this.b) && d0 <= (double) this.b && d1 >= (double) (-this.b) && d1 <= (double) this.b) {
+            int effectiveTrackingRange = this.getEffectiveTrackingRange();
+            if (d0 >= (double) (-effectiveTrackingRange) && d0 <= (double) effectiveTrackingRange
+                    && d1 >= (double) (-effectiveTrackingRange) && d1 <= (double) effectiveTrackingRange) {
                 if (!this.trackedPlayers.contains(entityplayer) && this.d(entityplayer)) {
                     // CraftBukkit start
                     if (tracker instanceof EntityPlayer) {
@@ -373,13 +453,13 @@ public class EntityTrackerEntry {
                         entityplayer.netServerHandler.sendPacket(new Packet28EntityVelocity(this.tracker.id, this.tracker.motX, this.tracker.motY, this.tracker.motZ));
                     }
 
-                    if (this.tracker.vehicle != null) {
+                    if (this.tracker.vehicle != null && this.isEntityKnownToPlayer(this.tracker.vehicle, entityplayer)) {
                         entityplayer.netServerHandler.sendPacket(new Packet39AttachEntity(this.tracker, this.tracker.vehicle));
                     }
                     // Poseidon end
 
                     // CraftBukkit start
-                    if (this.tracker.passenger != null) {
+                    if (this.tracker.passenger != null && this.isEntityKnownToPlayer(this.tracker.passenger, entityplayer)) {
                         entityplayer.netServerHandler.sendPacket(new Packet39AttachEntity(this.tracker.passenger, this.tracker));
                     }
                     // CraftBukkit end

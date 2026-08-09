@@ -2515,7 +2515,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         if (packet.itemStack != null && stack == null) return;
         if (packet.slot == -1) {
             if (stack != null) {
-                int max = Math.min(64, stack.getMaxStackSize());
+                int max = Math.min(64, stack.getMaxStackSize(this.player.world));
                 if (stack.count < 1) stack.count = 1;
                 if (stack.count > max) stack.count = max;
                 this.player.a(stack, true);
@@ -2524,7 +2524,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         }
         int slot = packet.slot;
         if (stack != null) {
-            int max = Math.min(64, stack.getMaxStackSize());
+            int max = Math.min(64, stack.getMaxStackSize(this.player.world));
             if (stack.count < 1) stack.count = 1;
             if (stack.count > max) stack.count = max;
         }
@@ -2549,7 +2549,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         }
 
         if (stack.getItem() != null) {
-            int max = Math.min(64, stack.getMaxStackSize());
+            int max = Math.min(64, stack.getMaxStackSize(this.player.world));
             return stack.count >= 1 && stack.count <= max ? stack : null;
         }
 
@@ -2557,7 +2557,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         if (stack.id == 150 && Block.FENCE_GATE != null && Item.byId[Block.FENCE_GATE.id] != null) {
             stack.id = Block.FENCE_GATE.id;
             if (stack.getItem() != null) {
-                int max = Math.min(64, stack.getMaxStackSize());
+                int max = Math.min(64, stack.getMaxStackSize(this.player.world));
                 return stack.count >= 1 && stack.count <= max ? stack : null;
             }
         }

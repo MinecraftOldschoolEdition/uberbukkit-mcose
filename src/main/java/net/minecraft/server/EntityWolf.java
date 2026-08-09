@@ -20,6 +20,11 @@ public class EntityWolf extends EntityAnimal {
     private static final int LEASH_FLEE_DURATION_TICKS = 100;
     private static final int LEASH_FLEE_REPATH_INTERVAL_TICKS = 10;
     private static final double LEASH_FLEE_TARGET_DISTANCE = 12.0D;
+    private static final int OWNER_FOLLOW_REPATH_INTERVAL_TICKS = 10;
+    private static final int OWNER_TELEPORT_ATTEMPTS = 10;
+    private static final double OWNER_FOLLOW_START_DISTANCE_SQ = 100.0D;
+    private static final double OWNER_FOLLOW_STOP_DISTANCE_SQ = 4.0D;
+    private static final double OWNER_TELEPORT_DISTANCE_SQ = 144.0D;
 
     private static final EntityDataAccessor<Byte> DATA_WOLF_FLAGS_ID = new EntityDataAccessor<Byte>(16, EntityDataSerializers.BYTE);
     private static final EntityDataAccessor<String> DATA_WOLF_OWNER_ID = new EntityDataAccessor<String>(17, EntityDataSerializers.STRING);
@@ -37,6 +42,8 @@ public class EntityWolf extends EntityAnimal {
     private Entity leashFleeSource;
     private int leashFleeTicks;
     private int leashFleeRepathTicks;
+    private boolean followingOwner;
+    private int ownerFollowRepathTicks;
 
     public EntityWolf(World world) {
         super(world);
@@ -244,19 +251,22 @@ public class EntityWolf extends EntityAnimal {
         }
 
         super.c_();
-        if (!this.e && !this.C() && this.isTamed() && this.vehicle == null) {
+        if (!this.e && this.target == null && this.isTamed() && this.vehicle == null && !this.isLeashed()) {
             EntityHuman entityhuman = this.getOwnerEntity();
 
-            if (entityhuman != null) {
-                float f = entityhuman.f(this);
-
-                if (f > 5.0F) {
-                    this.c(entityhuman, f);
+            if (entityhuman != null && !entityhuman.isSpectator()) {
+                this.updateOwnerFollowing(entityhuman);
+            } else {
+                this.stopFollowingOwner(this.followingOwner);
+                if (entityhuman == null && !this.C() && !this.ad()) {
+                    this.setSitting(true);
                 }
-            } else if (!this.ad()) {
-                this.setSitting(true);
             }
-        } else if (this.target == null && !this.C() && !this.isTamed() && this.world.random.nextInt(100) == 0) {
+        } else {
+            this.stopFollowingOwner(this.followingOwner && this.target == null);
+        }
+
+        if (this.target == null && !this.C() && !this.isTamed() && this.world.random.nextInt(100) == 0) {
             List list = this.world.a(EntitySheep.class, AxisAlignedBB.b(this.locX, this.locY, this.locZ, this.locX + 1.0D, this.locY + 1.0D, this.locZ + 1.0D).b(16.0D, 4.0D, 16.0D));
 
             if (!list.isEmpty()) {
@@ -365,25 +375,141 @@ public class EntityWolf extends EntityAnimal {
         return this.isSitting() ? 20 : super.u();
     }
 
-    private void c(Entity entity, float f) {
-        PathEntity pathentity = this.world.findPath(this, entity, 16.0F);
+    private void updateOwnerFollowing(EntityHuman owner) {
+        double distanceSq = this.g(owner);
+        if (this.followingOwner && !this.C()) {
+            this.stopFollowingOwner(false);
+        }
 
-        if (pathentity == null && f > 12.0F) {
-            int i = MathHelper.floor(entity.locX) - 2;
-            int j = MathHelper.floor(entity.locZ) - 2;
-            int k = MathHelper.floor(entity.boundingBox.b);
+        if (!this.followingOwner) {
+            if (!shouldStartFollowingOwner(distanceSq)) {
+                return;
+            }
 
-            for (int l = 0; l <= 4; ++l) {
-                for (int i1 = 0; i1 <= 4; ++i1) {
-                    if ((l < 1 || i1 < 1 || l > 3 || i1 > 3) && this.world.e(i + l, k - 1, j + i1) && !this.world.e(i + l, k, j + i1) && !this.world.e(i + l, k + 1, j + i1)) {
-                        this.setPositionRotation((double) ((float) (i + l) + 0.5F), (double) k, (double) ((float) (j + i1) + 0.5F), this.yaw, this.pitch);
-                        return;
+            this.followingOwner = true;
+            this.ownerFollowRepathTicks = 0;
+        }
+
+        if (!shouldKeepFollowingOwner(distanceSq)) {
+            this.stopFollowingOwner(true);
+            return;
+        }
+
+        if (--this.ownerFollowRepathTicks <= 0) {
+            this.ownerFollowRepathTicks = OWNER_FOLLOW_REPATH_INTERVAL_TICKS;
+            if (shouldTeleportToOwner(distanceSq)) {
+                if (this.tryToTeleportToOwner(owner)) {
+                    this.stopFollowingOwner(false);
+                }
+            } else {
+                this.setPathEntity(this.world.findPath(this, owner, 16.0F));
+            }
+        }
+    }
+
+    private void stopFollowingOwner(boolean clearPath) {
+        this.followingOwner = false;
+        this.ownerFollowRepathTicks = 0;
+        if (clearPath) {
+            this.setPathEntity((PathEntity) null);
+        }
+    }
+
+    private boolean tryToTeleportToOwner(EntityHuman owner) {
+        int ownerX = MathHelper.floor(owner.locX);
+        int ownerY = MathHelper.floor(owner.locY);
+        int ownerZ = MathHelper.floor(owner.locZ);
+        for (int attempt = 0; attempt < OWNER_TELEPORT_ATTEMPTS; ++attempt) {
+            int offsetX = this.random.nextInt(7) - 3;
+            int offsetZ = this.random.nextInt(7) - 3;
+            if (isTeleportOffsetOutsideInnerSquare(offsetX, offsetZ)) {
+                int offsetY = this.random.nextInt(3) - 1;
+                if (this.maybeTeleportTo(ownerX + offsetX, ownerY + offsetY, ownerZ + offsetZ)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private boolean maybeTeleportTo(int x, int y, int z) {
+        if (!this.canTeleportTo(x, y, z)) {
+            return false;
+        }
+
+        this.setPositionRotation((double) x + 0.5D, (double) y, (double) z + 0.5D, this.yaw, this.pitch);
+        this.setPathEntity((PathEntity) null);
+        return true;
+    }
+
+    private boolean canTeleportTo(int x, int y, int z) {
+        boolean destinationPassable = this.isTeleportSpacePassable(x, y, z) && this.isTeleportSpacePassable(x, y + 1, z);
+        int supportBlockId = this.world.getTypeId(x, y - 1, z);
+        Block supportBlock = supportBlockId <= 0 ? null : Block.byId[supportBlockId];
+        boolean supportWalkable = supportBlock != null && supportBlock.material.isSolid() && !supportBlock.material.isLiquid() && !isDangerousTeleportBlock(supportBlockId);
+        boolean supportLeaves = supportBlockId == Block.LEAVES.id;
+        boolean dangerNearby = this.hasTeleportDangerNearby(x, y, z);
+        int currentX = MathHelper.floor(this.locX);
+        int currentY = MathHelper.floor(this.locY);
+        int currentZ = MathHelper.floor(this.locZ);
+        AxisAlignedBB movedBox = this.boundingBox.c((double) (x - currentX), (double) (y - currentY), (double) (z - currentZ));
+        boolean collisionFree = !this.world.hasCollision(this, movedBox);
+        return isWalkableTeleportLanding(destinationPassable, supportWalkable, supportLeaves, dangerNearby, collisionFree);
+    }
+
+    private boolean isTeleportSpacePassable(int x, int y, int z) {
+        int blockId = this.world.getTypeId(x, y, z);
+        if (blockId == 0) {
+            return true;
+        }
+
+        Block block = Block.byId[blockId];
+        return block != null && !block.material.isSolid() && !block.material.isLiquid() && !isDangerousTeleportBlock(blockId);
+    }
+
+    private boolean hasTeleportDangerNearby(int x, int y, int z) {
+        for (int offsetX = -1; offsetX <= 1; ++offsetX) {
+            for (int offsetY = -1; offsetY <= 1; ++offsetY) {
+                for (int offsetZ = -1; offsetZ <= 1; ++offsetZ) {
+                    if (offsetX != 0 || offsetZ != 0) {
+                        int blockId = this.world.getTypeId(x + offsetX, y + offsetY, z + offsetZ);
+                        if (blockId > 0) {
+                            Block block = Block.byId[blockId];
+                            if (block != null && (block.material.isLiquid() || isDangerousTeleportBlock(blockId))) {
+                                return true;
+                            }
+                        }
                     }
                 }
             }
-        } else {
-            this.setPathEntity(pathentity);
         }
+
+        return false;
+    }
+
+    private static boolean isDangerousTeleportBlock(int blockId) {
+        return blockId == Block.FIRE.id || blockId == Block.CACTUS.id || blockId == Block.STATIONARY_LAVA.id || blockId == Block.LAVA.id;
+    }
+
+    static boolean shouldStartFollowingOwner(double distanceSq) {
+        return distanceSq >= OWNER_FOLLOW_START_DISTANCE_SQ;
+    }
+
+    static boolean shouldKeepFollowingOwner(double distanceSq) {
+        return distanceSq > OWNER_FOLLOW_STOP_DISTANCE_SQ;
+    }
+
+    static boolean shouldTeleportToOwner(double distanceSq) {
+        return distanceSq >= OWNER_TELEPORT_DISTANCE_SQ;
+    }
+
+    static boolean isTeleportOffsetOutsideInnerSquare(int offsetX, int offsetZ) {
+        return Math.abs(offsetX) <= 3 && Math.abs(offsetZ) <= 3 && (Math.abs(offsetX) >= 2 || Math.abs(offsetZ) >= 2);
+    }
+
+    static boolean isWalkableTeleportLanding(boolean destinationPassable, boolean supportWalkable, boolean supportLeaves, boolean dangerNearby, boolean collisionFree) {
+        return destinationPassable && supportWalkable && !supportLeaves && !dangerNearby && collisionFree;
     }
 
     protected boolean w() {
