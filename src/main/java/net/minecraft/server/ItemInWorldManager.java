@@ -417,7 +417,7 @@ public class ItemInWorldManager {
                     ((EntityPlayer) entityhuman).netServerHandler.sendPacket(new Packet53BlockChange(i, j + (bottom ? 1 : -1), k, world));
                 }
                 result = (event.useItemInHand() != Event.Result.ALLOW);
-            } else {
+            } else if (!shouldSuppressBlockUse(entityhuman.isSneaking(), itemstack != null && itemstack.count > 0)) {
                 result = Block.byId[i1].interact(world, i, j, k, entityhuman);
             }
 
@@ -439,5 +439,9 @@ public class ItemInWorldManager {
         }
         return result;
         // CraftBukkit end
+    }
+
+    static boolean shouldSuppressBlockUse(boolean secondaryUseActive, boolean haveSomethingInHand) {
+        return secondaryUseActive && haveSomethingInHand;
     }
 }

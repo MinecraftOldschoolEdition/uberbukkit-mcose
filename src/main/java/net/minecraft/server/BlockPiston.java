@@ -17,13 +17,61 @@ public class BlockPiston extends Block {
     private static final double HIPPOPLATIMUS_PISTON_LAUNCH = 1.1999999731779099D;
     private static final double HIPPOPLATIMUS_STICKY_PISTON_LAUNCH = 0.7199999839067459D;
     private boolean a;
-    private boolean b;
+    private static final ThreadLocal<ArrayList<PistonTransition>> ACTIVE_TRANSITIONS = new ThreadLocal<ArrayList<PistonTransition>>();
 
     public BlockPiston(int i, int j, boolean flag) {
         super(i, j, Material.PISTON);
         this.a = flag;
         this.a(h);
         this.c(0.5F);
+    }
+
+    private static final class PistonTransition {
+        final World world;
+        final int x;
+        final int y;
+        final int z;
+
+        PistonTransition(World world, int x, int y, int z) {
+            this.world = world;
+            this.x = x;
+            this.y = y;
+            this.z = z;
+        }
+    }
+
+    private static void beginTransition(World world, int x, int y, int z) {
+        ArrayList<PistonTransition> transitions = ACTIVE_TRANSITIONS.get();
+        if (transitions == null) {
+            transitions = new ArrayList<PistonTransition>();
+            ACTIVE_TRANSITIONS.set(transitions);
+        }
+        transitions.add(new PistonTransition(world, x, y, z));
+    }
+
+    private static void endTransition() {
+        ArrayList<PistonTransition> transitions = ACTIVE_TRANSITIONS.get();
+        if (transitions == null) {
+            return;
+        }
+        transitions.remove(transitions.size() - 1);
+        if (transitions.isEmpty()) {
+            ACTIVE_TRANSITIONS.remove();
+        }
+    }
+
+    private static boolean isTransitionActive(World world, int x, int y, int z) {
+        ArrayList<PistonTransition> transitions = ACTIVE_TRANSITIONS.get();
+        if (transitions == null) {
+            return false;
+        }
+        for (int index = transitions.size() - 1; index >= 0; --index) {
+            PistonTransition transition = transitions.get(index);
+            if (transition.world == world && transition.x == x && transition.y == y && transition.z == z) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public int a(int i, int j) {
@@ -50,7 +98,7 @@ public class BlockPiston extends Block {
     }
 
     public void doPhysics(World world, int i, int j, int k, int l) {
-        if (!world.isStatic && !this.b) {
+        if (!world.isStatic && !isTransitionActive(world, i, j, k)) {
             this.g(world, i, j, k);
         }
     }
@@ -87,7 +135,6 @@ public class BlockPiston extends Block {
                     }
                     // CraftBukkit end
 
-                    CriticalBlockStateAccess.setMetadata(world, i, j, k, i1 | 8, false);
                     world.playNote(i, j, k, 0, i1);
                 }
             } else if (!flag && d(l)) {
@@ -102,7 +149,6 @@ public class BlockPiston extends Block {
                 }
                 // CraftBukkit end
 
-                CriticalBlockStateAccess.setMetadata(world, i, j, k, i1, false);
                 world.playNote(i, j, k, this.resolveRetractionEvent(world, i, j, k, i1), i1);
             }
         }
@@ -134,68 +180,91 @@ public class BlockPiston extends Block {
     }
 
     public void a(World world, int i, int j, int k, int l, int i1) {
-        this.b = true;
-        if (l == 0) {
-            if (this.i(world, i, j, k, i1)) {
-                CriticalBlockStateAccess.setMetadata(world, i, j, k, i1 | 8, true);
-                world.makeSound((double) i + 0.5D, (double) j + 0.5D, (double) k + 0.5D, "tile.piston.out", 0.5F, world.random.nextFloat() * 0.25F + 0.6F);
+        this.playBlockEvent(world, i, j, k, l, i1);
+    }
+
+    public boolean playBlockEvent(World world, int i, int j, int k, int l, int i1) {
+        if (i1 < 0 || i1 > 5) {
+            return false;
+        }
+        if (!world.isStatic) {
+            boolean powered = this.f(world, i, j, k, i1);
+            if (powered && (l == 1 || l == 2)) {
+                CriticalBlockStateAccess.setMetadata(world, i, j, k, i1 | 8, false);
+                return false;
             }
-        } else if (l == 1 || l == 2) {
-            TileEntity tileentity = world.getTileEntity(i + PistonBlockTextures.b[i1], j + PistonBlockTextures.c[i1], k + PistonBlockTextures.d[i1]);
-
-            if (tileentity != null && tileentity instanceof TileEntityPiston) {
-                ((TileEntityPiston) tileentity).k();
+            if (!powered && l == 0) {
+                return false;
             }
-
-            world.setRawTypeIdAndData(i, j, k, Block.PISTON_MOVING.id, i1 | (this.a ? 8 : 0));
-            world.setTileEntity(i, j, k, BlockPistonMoving.a(this.id, i1, i1, false, true));
-			if (this.a) {
-                int j1 = i + PistonBlockTextures.b[i1] * 2;
-                int k1 = j + PistonBlockTextures.c[i1] * 2;
-                int l1 = k + PistonBlockTextures.d[i1] * 2;
-                int i2 = world.getTypeId(j1, k1, l1);
-                int j2 = world.getData(j1, k1, l1);
-                boolean flag = false;
-
-                if (i2 == Block.PISTON_MOVING.id) {
-                    TileEntity tileentity1 = world.getTileEntity(j1, k1, l1);
-
-                    if (tileentity1 != null && tileentity1 instanceof TileEntityPiston) {
-                        TileEntityPiston tileentitypiston = (TileEntityPiston) tileentity1;
-
-                        if (tileentitypiston.d() == i1 && tileentitypiston.c()) {
-                            tileentitypiston.k();
-                            i2 = tileentitypiston.a();
-                            j2 = tileentitypiston.e();
-                            flag = true;
-                        }
-                    }
-                }
-
-				if (!flag && l == 1 && i2 > 0 && a(i2, world, j1, k1, l1, false) && (Block.byId[i2].e() == 0 || i2 == Block.PISTON.id || i2 == Block.PISTON_STICKY.id)) {
-                    this.b = false;
-                    world.setTypeId(j1, k1, l1, 0);
-                    this.b = true;
-                    i += PistonBlockTextures.b[i1];
-                    j += PistonBlockTextures.c[i1];
-                    k += PistonBlockTextures.d[i1];
-                    world.setRawTypeIdAndData(i, j, k, Block.PISTON_MOVING.id, i1);
-                    world.setTileEntity(i, j, k, BlockPistonMoving.a(i2, j2, i1, false, false));
-                } else if (!flag) {
-                    this.b = false;
-                    world.setTypeId(i + PistonBlockTextures.b[i1], j + PistonBlockTextures.c[i1], k + PistonBlockTextures.d[i1], 0);
-                    this.b = true;
-                }
-            } else {
-                this.b = false;
-                world.setTypeId(i + PistonBlockTextures.b[i1], j + PistonBlockTextures.c[i1], k + PistonBlockTextures.d[i1], 0);
-                this.b = true;
-            }
-
-            world.makeSound((double) i + 0.5D, (double) j + 0.5D, (double) k + 0.5D, "tile.piston.in", 0.5F, world.random.nextFloat() * 0.15F + 0.6F);
         }
 
-        this.b = false;
+        final int pistonX = i;
+        final int pistonY = j;
+        final int pistonZ = k;
+        beginTransition(world, i, j, k);
+        try {
+            if (l == 0) {
+                if (this.i(world, i, j, k, i1)) {
+                    CriticalBlockStateAccess.setMetadata(world, i, j, k, i1 | 8, true);
+                    world.makeSound((double) i + 0.5D, (double) j + 0.5D, (double) k + 0.5D, "tile.piston.out", 0.5F, world.random.nextFloat() * 0.25F + 0.6F);
+                    return true;
+                }
+                return false;
+            } else if (l == 1 || l == 2) {
+                TileEntity tileentity = world.getTileEntity(i + PistonBlockTextures.b[i1], j + PistonBlockTextures.c[i1], k + PistonBlockTextures.d[i1]);
+
+                if (tileentity != null && tileentity instanceof TileEntityPiston) {
+                    ((TileEntityPiston) tileentity).k();
+                }
+
+                world.setRawTypeIdAndData(i, j, k, Block.PISTON_MOVING.id, i1 | (this.a ? 8 : 0));
+                world.setTileEntity(i, j, k, BlockPistonMoving.a(this.id, i1, i1, false, true));
+                world.notify(i, j, k);
+                world.applyPhysics(i, j, k, Block.PISTON_MOVING.id);
+                if (this.a) {
+                    int j1 = i + PistonBlockTextures.b[i1] * 2;
+                    int k1 = j + PistonBlockTextures.c[i1] * 2;
+                    int l1 = k + PistonBlockTextures.d[i1] * 2;
+                    int i2 = world.getTypeId(j1, k1, l1);
+                    int j2 = world.getData(j1, k1, l1);
+                    boolean flag = false;
+
+                    if (i2 == Block.PISTON_MOVING.id) {
+                        TileEntity tileentity1 = world.getTileEntity(j1, k1, l1);
+
+                        if (tileentity1 != null && tileentity1 instanceof TileEntityPiston) {
+                            TileEntityPiston tileentitypiston = (TileEntityPiston) tileentity1;
+
+                            if (tileentitypiston.d() == i1 && tileentitypiston.c()) {
+                                tileentitypiston.k();
+                                i2 = tileentitypiston.a();
+                                j2 = tileentitypiston.e();
+                                flag = true;
+                            }
+                        }
+                    }
+
+                    if (!flag && l == 1 && i2 > 0 && a(i2, world, j1, k1, l1, false) && (Block.byId[i2].e() == 0 || i2 == Block.PISTON.id || i2 == Block.PISTON_STICKY.id)) {
+                        world.setTypeId(j1, k1, l1, 0);
+                        i += PistonBlockTextures.b[i1];
+                        j += PistonBlockTextures.c[i1];
+                        k += PistonBlockTextures.d[i1];
+                        world.setRawTypeIdAndData(i, j, k, Block.PISTON_MOVING.id, i1);
+                        world.setTileEntity(i, j, k, BlockPistonMoving.a(i2, j2, i1, false, false));
+                    } else if (!flag) {
+                        world.setTypeId(i + PistonBlockTextures.b[i1], j + PistonBlockTextures.c[i1], k + PistonBlockTextures.d[i1], 0);
+                    }
+                } else {
+                    world.setTypeId(i + PistonBlockTextures.b[i1], j + PistonBlockTextures.c[i1], k + PistonBlockTextures.d[i1], 0);
+                }
+
+                world.makeSound((double) pistonX + 0.5D, (double) pistonY + 0.5D, (double) pistonZ + 0.5D, "tile.piston.in", 0.5F, world.random.nextFloat() * 0.15F + 0.6F);
+                return true;
+            }
+            return false;
+        } finally {
+            endTransition();
+        }
     }
 
     public void a(IBlockAccess iblockaccess, int i, int j, int k) {

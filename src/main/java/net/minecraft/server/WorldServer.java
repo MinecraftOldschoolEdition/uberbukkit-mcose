@@ -194,9 +194,10 @@ public class WorldServer extends World implements BlockChangeDelegate {
     }
 
     public void playNote(int i, int j, int k, int l, int i1) {
-        super.playNote(i, j, k, l, i1);
-        // CraftBukkit
-        this.server.serverConfigurationManager.sendPacketNearby((double) i, (double) j, (double) k, 64.0D, this.dimension, new Packet54PlayNoteBlock(i, j, k, l, i1));
+        if (this.playBlockEvent(i, j, k, l, i1)) {
+            // Only accepted block events are broadcast, matching modern server behavior.
+            this.server.serverConfigurationManager.sendPacketNearby((double) i, (double) j, (double) k, 64.0D, this.dimension, new Packet54PlayNoteBlock(i, j, k, l, i1));
+        }
     }
 
     public void saveLevel() {

@@ -4201,11 +4201,17 @@ public class World implements IBlockAccess {
     }
 
     public void playNote(int i, int j, int k, int l, int i1) {
+        this.playBlockEvent(i, j, k, l, i1);
+    }
+
+    protected boolean playBlockEvent(int i, int j, int k, int l, int i1) {
         int j1 = this.getTypeId(i, j, k);
 
         if (j1 > 0) {
-            Block.byId[j1].a(this, i, j, k, l, i1);
+            return Block.byId[j1].playBlockEvent(this, i, j, k, l, i1);
         }
+
+        return false;
     }
 
     public IDataManager p() {

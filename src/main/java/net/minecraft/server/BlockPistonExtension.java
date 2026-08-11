@@ -15,9 +15,10 @@ public class BlockPistonExtension extends Block {
 
     public void remove(World world, int i, int j, int k) {
         super.remove(world, i, j, k);
-        int l = CriticalBlockStateAccess.getPistonMetadata(world, i, j, k);
-        if (l < 0 || l == 6 || l == 7 || l > 13) return; // CraftBukkit - fixed a piston AIOOBE issue.
-        int i1 = PistonBlockTextures.a[b(l)];
+        int headMetadata = CriticalBlockStateAccess.getPistonMetadata(world, i, j, k);
+        if (headMetadata < 0 || headMetadata == 6 || headMetadata == 7 || headMetadata > 13) return; // CraftBukkit - fixed a piston AIOOBE issue.
+        int headFacing = b(headMetadata);
+        int i1 = PistonBlockTextures.a[headFacing];
 
         i += PistonBlockTextures.b[i1];
         j += PistonBlockTextures.c[i1];
@@ -25,9 +26,9 @@ public class BlockPistonExtension extends Block {
         int j1 = world.getTypeId(i, j, k);
 
         if (j1 == Block.PISTON.id || j1 == Block.PISTON_STICKY.id) {
-            l = CriticalBlockStateAccess.getPistonMetadata(world, i, j, k);
-            if (BlockPiston.d(l)) {
-                Block.byId[j1].g(world, i, j, k, l);
+            int baseMetadata = CriticalBlockStateAccess.getPistonMetadata(world, i, j, k);
+            if (BlockPiston.d(baseMetadata) && BlockPiston.c(baseMetadata) == headFacing) {
+                Block.byId[j1].g(world, i, j, k, baseMetadata);
                 world.setTypeId(i, j, k, 0);
             }
         }
@@ -140,13 +141,24 @@ public class BlockPistonExtension extends Block {
     public void doPhysics(World world, int i, int j, int k, int l) {
         int i1 = b(CriticalBlockStateAccess.getPistonMetadata(world, i, j, k));
         if (i1 > 5 || i1 < 0) return; // CraftBukkit - fixed a piston AIOOBE issue.
-        int j1 = world.getTypeId(i - PistonBlockTextures.b[i1], j - PistonBlockTextures.c[i1], k - PistonBlockTextures.d[i1]);
+        int baseX = i - PistonBlockTextures.b[i1];
+        int baseY = j - PistonBlockTextures.c[i1];
+        int baseZ = k - PistonBlockTextures.d[i1];
+        int j1 = world.getTypeId(baseX, baseY, baseZ);
 
-        if (j1 != Block.PISTON.id && j1 != Block.PISTON_STICKY.id) {
+        if (!isFittingBase(world, baseX, baseY, baseZ, j1, i1)) {
             world.setTypeId(i, j, k, 0);
         } else {
-            Block.byId[j1].doPhysics(world, i - PistonBlockTextures.b[i1], j - PistonBlockTextures.c[i1], k - PistonBlockTextures.d[i1], l);
+            Block.byId[j1].doPhysics(world, baseX, baseY, baseZ, l);
         }
+    }
+
+    private static boolean isFittingBase(World world, int x, int y, int z, int blockId, int facing) {
+        int metadata = CriticalBlockStateAccess.getPistonMetadata(world, x, y, z);
+        if (blockId == Block.PISTON.id || blockId == Block.PISTON_STICKY.id) {
+            return BlockPiston.d(metadata) && BlockPiston.c(metadata) == facing;
+        }
+        return blockId == Block.PISTON_MOVING.id && b(metadata) == facing;
     }
 
     public static int b(int i) {

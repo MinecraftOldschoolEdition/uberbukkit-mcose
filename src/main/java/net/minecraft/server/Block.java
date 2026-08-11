@@ -552,6 +552,15 @@ public class Block {
     public void a(World world, int i, int j, int k, int l, int i1) {
     }
 
+    /**
+     * Executes a block event and reports whether it should be forwarded to
+     * clients. Pistons override this to reject stale power transitions.
+     */
+    public boolean playBlockEvent(World world, int i, int j, int k, int l, int i1) {
+        this.a(world, i, j, k, l, i1);
+        return true;
+    }
+
     public boolean m() {
         return this.br;
     }

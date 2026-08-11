@@ -81,6 +81,7 @@ public class NetworkManager implements Packet.LoginPhaseState {
     private final Object encryptionLock = new Object();
     private volatile boolean encryptionReadPaused = false;
     private volatile boolean encryptionEnabled = false;
+    private volatile boolean statusReadPaused = false;
 
     private final boolean spamDetection;
 
@@ -657,6 +658,9 @@ public class NetworkManager implements Packet.LoginPhaseState {
             if (this.readOnly) {
                 return false;
             }
+            if (this.statusReadPaused) {
+                return false;
+            }
             if (this.encryptionReadPaused && !this.encryptionEnabled) {
                 return false;
             }
@@ -668,6 +672,12 @@ public class NetworkManager implements Packet.LoginPhaseState {
                     // Stop the reader at the exact plaintext/encrypted boundary. The
                     // login handler enables AES after validating this packet.
                     this.encryptionReadPaused = true;
+                }
+                if (packet instanceof Packet254ServerPing && this.p instanceof NetLoginHandler) {
+                    // A legacy status request owns the connection. Do not let bytes
+                    // following 0xFE race into the login packet decoder before the
+                    // main thread sends the status response and closes the socket.
+                    this.statusReadPaused = true;
                 }
                 if (!recordInboundPacketRate()) {
                     return false;

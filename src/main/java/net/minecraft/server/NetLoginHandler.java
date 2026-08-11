@@ -44,6 +44,7 @@ public class NetLoginHandler extends NetHandler {
     private volatile LoginProcessHandler loginProcessHandler;
     private int rawConnectionType;
     private boolean receivedKeepAlive = false;
+    private LoginState loginState = LoginState.HELLO;
 
     // Modern authentication fields
     private boolean modernAuthEnabled = false;
@@ -116,7 +117,7 @@ public class NetLoginHandler extends NetHandler {
     }
 
     public void a(Packet2Handshake packet2handshake) {
-        if (this.receivedHandshake) {
+        if (this.loginState != LoginState.HELLO || this.receivedHandshake) {
             this.disconnect("Multiple handshake packets received.");
             return;
         }
@@ -128,6 +129,7 @@ public class NetLoginHandler extends NetHandler {
         }
 
         this.receivedHandshake = true;
+        this.f = 0;
         this.handshakeUsername = packet2handshake.a;
         this.g = packet2handshake.a;
 
@@ -143,16 +145,19 @@ public class NetLoginHandler extends NetHandler {
 
                 KeyPair keyPair = CryptoHelper.getServerKeyPair();
                 this.serverId = ""; // Empty string for modern auth
+                this.loginState = LoginState.KEY;
                 this.networkManager.queue(new Packet253EncryptionRequest(this.serverId, keyPair.getPublic(), this.verifyToken));
                 return;
             }
             // Cracked allowlist bypasses auth
             a.fine("[AUTH] Cracked allowlist user '" + packet2handshake.a + "' bypassing authentication");
+            this.loginState = LoginState.LOGIN;
             this.networkManager.queue(new Packet2Handshake("-", packet2handshake.pvn11));
             return;
         }
 
         // Offline mode - no authentication
+        this.loginState = LoginState.LOGIN;
         this.networkManager.queue(new Packet2Handshake("-", packet2handshake.pvn11));
     }
 
@@ -162,7 +167,7 @@ public class NetLoginHandler extends NetHandler {
 
     // Handler for modern authentication response
     public void a(Packet252SharedKey packet252SharedKey) {
-        if (!this.modernAuthEnabled || !this.server.onlineMode || this.receivedSharedKey) {
+        if (this.loginState != LoginState.KEY || !this.modernAuthEnabled || !this.server.onlineMode || this.receivedSharedKey) {
             this.disconnect("Protocol error");
             return;
         }
@@ -187,6 +192,7 @@ public class NetLoginHandler extends NetHandler {
             this.networkManager.enableEncryption(this.sharedSecret);
             this.f = 0; // reset timeout
             this.receivedLoginPacket = false;
+            this.loginState = LoginState.LOGIN;
         } catch (Exception e) {
             a.warning("Error handling encryption response: " + e.getMessage());
             this.disconnect("Encryption error");
@@ -210,7 +216,12 @@ public class NetLoginHandler extends NetHandler {
             this.disconnect("Authentication response required.");
             return;
         }
+        if (this.loginState != LoginState.LOGIN) {
+            this.disconnect("Protocol error");
+            return;
+        }
         receivedLoginPacket = true;
+        this.loginState = LoginState.VERIFYING;
         this.g = packet1login.name;
 
         this.networkManager.pvn = packet1login.pvn; // uberbukkit
@@ -288,6 +299,7 @@ public class NetLoginHandler extends NetHandler {
         EntityPlayer entityplayer = this.server.serverConfigurationManager.a(this, packet1login.name);
 
         if (entityplayer != null) {
+            this.loginState = LoginState.ACCEPTED;
             this.server.serverConfigurationManager.b(entityplayer);
             // entityplayer.a((World) this.server.a(entityplayer.dimension)); // CraftBukkit - set by Entity
             // CraftBukkit - add world and location to 'logged in' message.
@@ -443,26 +455,19 @@ public class NetLoginHandler extends NetHandler {
     // Legacy server list ping (0xFE and 0xFE 0x01)
     public void a(Packet254ServerPing ping) {
         try {
+            if (ping == null || !ping.valid || this.loginState != LoginState.HELLO || this.receivedHandshake) {
+                this.disconnect("Protocol error");
+                return;
+            }
+            this.loginState = LoginState.STATUS;
             int online = this.server.serverConfigurationManager.players.size();
             int max = this.server.serverConfigurationManager.maxPlayers;
             String motd = this.server.propertyManager.getString("motd", "A Minecraft Server");
             if (motd == null || motd.trim().length() == 0) {
                 motd = "A Minecraft Server";
-                try {
-                    // Persist a default if empty to avoid blank MOTD
-                    this.server.propertyManager.properties.setProperty("motd", motd);
-                    this.server.propertyManager.savePropertiesFile();
-                } catch (Throwable ignored) {}
             }
 
-            String response;
-            if (ping.extended) {
-                String protocol = "14";
-                String version = "b1.7.3";
-                response = "\u00a71\u0000" + protocol + "\u0000" + version + "\u0000" + motd + "\u0000" + online + "\u0000" + max;
-            } else {
-                response = motd + "\u00a7" + online + "\u00a7" + max;
-            }
+            String response = createLegacyPingResponse(ping.extended, motd, online, max);
 
             this.networkManager.queue(new Packet255KickDisconnect(response));
             this.networkManager.d();
@@ -472,6 +477,14 @@ public class NetLoginHandler extends NetHandler {
             try { this.networkManager.d(); } catch (Throwable ignore) {}
             this.c = true;
         }
+    }
+
+    static String createLegacyPingResponse(boolean extended, String motd, int online, int max) {
+        String safeMotd = motd == null || motd.trim().length() == 0 ? "A Minecraft Server" : motd;
+        if (extended) {
+            return "\u00a71\u000014\u0000b1.7.3\u0000" + safeMotd + "\u0000" + online + "\u0000" + max;
+        }
+        return safeMotd + "\u00a7" + online + "\u00a7" + max;
     }
 
     public String b() {
@@ -540,6 +553,15 @@ public class NetLoginHandler extends NetHandler {
 
     public static Packet1Login a(NetLoginHandler netloginhandler, Packet1Login packet1login) {
         return netloginhandler.h = packet1login;
+    }
+
+    private enum LoginState {
+        HELLO,
+        KEY,
+        LOGIN,
+        VERIFYING,
+        ACCEPTED,
+        STATUS
     }
 
     private static boolean isAlphaVisualTerrain(int terrainType) {

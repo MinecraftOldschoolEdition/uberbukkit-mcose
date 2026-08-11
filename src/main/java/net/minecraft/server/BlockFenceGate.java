@@ -42,6 +42,7 @@ public class BlockFenceGate extends Block {
 
 	@Override // Assuming this is the intended override based on common practice
 	public boolean canPlace(World var1, int var2, int var3, int var4) { // Renamed from canPlaceBlockAt, super call changed
+		// Modern fence gates are self-supporting and only require a replaceable target.
 		return super.canPlace(var1, var2, var3, var4);
 	}
 

@@ -185,6 +185,24 @@ public abstract class EntityHuman extends EntityLiving {
         return this.health <= 0 || this.isSleeping();
     }
 
+    protected void a(double d0, boolean flag) {
+        if (this.isInWaterForFallDamage()) {
+            this.fallDistance = 0.0F;
+            return;
+        }
+
+        super.a(d0, flag);
+    }
+
+    /**
+     * Samples the post-move bounds so shallow-water landings are safe on the
+     * same tick the player enters the water.
+     */
+    protected boolean isInWaterForFallDamage() {
+        return this.bA || this.world != null && this.boundingBox != null
+                && this.world.a(this.boundingBox.shrink(0.001D, 0.001D, 0.001D), Material.WATER);
+    }
+
     protected void y() {
         this.activeContainer = this.defaultContainer;
     }
