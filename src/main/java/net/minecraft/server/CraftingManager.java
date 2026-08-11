@@ -111,6 +111,7 @@ public class CraftingManager {
             ladder = new ItemStack(Block.LADDER, 1);
         }
         this.registerShapedRecipe(ladder, new Object[] { "# #", "###", "# #", Character.valueOf('#'), Item.STICK });
+        this.registerShapedRecipe(new ItemStack(Block.WEB, 1), new Object[] { "X X", " X ", "X X", Character.valueOf('X'), Item.STRING });
 
         this.registerShapedRecipe(new ItemStack(Item.WOOD_DOOR, 1), new Object[] { "##", "##", "##", Character.valueOf('#'), Block.WOOD });
         if (Uberbukkit.getTargetPVN() >= 12) {

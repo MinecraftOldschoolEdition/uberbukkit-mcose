@@ -758,6 +758,40 @@ public class ChunkProviderSky implements IChunkProvider {
             (new WorldGenFlowers("minecraft:red_mushroom")).a(this.p, this.j, i2, j2, k2);
         }
 
+        byte b3 = 0;
+
+        if (biomebase == BiomeBase.FOREST) {
+            b3 = 2;
+        }
+
+        if (biomebase == BiomeBase.RAINFOREST) {
+            b3 = 10;
+        }
+
+        if (biomebase == BiomeBase.SEASONAL_FOREST) {
+            b3 = 2;
+        }
+
+        if (biomebase == BiomeBase.TAIGA) {
+            b3 = 1;
+        }
+
+        if (biomebase == BiomeBase.PLAINS) {
+            b3 = 10;
+        }
+
+        for (i2 = 0; i2 < b3; ++i2) {
+            byte b4 = 1;
+            if (biomebase == BiomeBase.RAINFOREST && this.j.nextInt(3) != 0) {
+                b4 = 2;
+            }
+
+            j2 = k + this.j.nextInt(16) + 8;
+            l2 = this.j.nextInt(128);
+            k2 = l + this.j.nextInt(16) + 8;
+            (new WorldGenGrass(Block.LONG_GRASS.id, b4)).a(this.p, this.j, j2, l2, k2);
+        }
+
         for (i2 = 0; i2 < 10; ++i2) {
             j2 = k + this.j.nextInt(16) + 8;
             k2 = this.j.nextInt(128);

@@ -27,6 +27,9 @@ public class Packet107CreativeSetSlot extends Packet {
         if (itemId == 150 && Block.FENCE_GATE != null) {
             return Block.FENCE_GATE.id;
         }
+        if (itemId == Block.DOUBLE_STEP.id) {
+            return Block.STEP.id;
+        }
         return itemId;
     }
 
