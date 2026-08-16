@@ -14,7 +14,6 @@ public class ItemDoor extends Item {
     public ItemDoor(int i, Material material) {
         super(i);
         this.a = material;
-        this.maxStackSize = 1;
     }
 
     public boolean a(ItemStack itemstack, EntityHuman entityhuman, World world, int i, int j, int k, int l) {

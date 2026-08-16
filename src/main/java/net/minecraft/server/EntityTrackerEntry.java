@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Set;
 
 import org.bukkit.entity.Player;
+import net.minecraft.server.network.ModProtocol;
 
 public class EntityTrackerEntry {
 
@@ -424,7 +425,7 @@ public class EntityTrackerEntry {
 
                     this.trackedPlayers.add(entityplayer);
                     // Poseidon start
-                    Packet packet = this.b(entityplayer.netServerHandler.networkManager.pvn);
+                    Packet packet = this.createSpawnPacket(entityplayer);
                     entityplayer.netServerHandler.sendPacket(packet);
 
                     // uberbukkit
@@ -632,6 +633,46 @@ public class EntityTrackerEntry {
                     throw new IllegalArgumentException("Don\'t know how to add " + this.tracker.getClass() + "!");
                 }
             }
+        }
+    }
+
+    private Packet createSpawnPacket(EntityPlayer observer) {
+        boolean supportsNativeModels = observer != null
+                && observer.netServerHandler != null
+                && observer.netServerHandler.supportsBlockModelVisuals();
+        if (shouldUseNativeBlockModelSpawn(this.tracker, supportsNativeModels)) {
+            return createNativePaintingVisualPacket((EntityPainting) this.tracker);
+        }
+        int pvn = observer == null || observer.netServerHandler == null
+                ? 0
+                : observer.netServerHandler.networkManager.pvn;
+        return this.b(pvn);
+    }
+
+    static boolean shouldUseNativeBlockModelSpawn(Entity entity, boolean supportsNativeModels) {
+        return entity instanceof EntityPainting && supportsNativeModels;
+    }
+
+    static Packet250CustomPayload createNativePaintingVisualPacket(EntityPainting painting) {
+        return new Packet250CustomPayload(
+                ModProtocol.CHANNEL_BLOCK_MODEL_VISUAL,
+                ModProtocol.createPaintingVisualPayload(
+                        painting.id,
+                        painting.b,
+                        painting.c,
+                        painting.d,
+                        painting.a,
+                        painting.e.A));
+    }
+
+    void syncNativeBlockModelVisual(EntityPlayer observer) {
+        if (this.tracker instanceof EntityPainting
+                && observer != null
+                && this.trackedPlayers.contains(observer)
+                && observer.netServerHandler != null
+                && observer.netServerHandler.supportsBlockModelVisuals()) {
+            observer.netServerHandler.sendPacket(
+                    createNativePaintingVisualPacket((EntityPainting) this.tracker));
         }
     }
 

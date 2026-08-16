@@ -1951,8 +1951,25 @@ public class World implements IBlockAccess {
         this.u.add(iworldaccess);
     }
 
+    private boolean hasClassicWorldBoundary() {
+        if (this.worldData != null && this.worldData.getTerrainType() == 6) {
+            return true;
+        }
+        return this.worldProvider instanceof WorldProviderHell
+                && ((WorldProviderHell) this.worldProvider).getNetherVariantTerrainType() == 6;
+    }
+
+    public boolean isOutsideClassicWorldBoundary(AxisAlignedBB box) {
+        return this.hasClassicWorldBoundary() && ClassicWorldBoundary.intersectsBoundary(box);
+    }
+
     public List getEntities(Entity entity, AxisAlignedBB axisalignedbb) {
         this.K.clear();
+        ClassicWorldBoundary.addCollisionBoxes(
+                this.hasClassicWorldBoundary(),
+                axisalignedbb,
+                this.K
+        );
         int i = MathHelper.floor(axisalignedbb.a);
         int j = MathHelper.floor(axisalignedbb.d + 1.0D);
         int k = MathHelper.floor(axisalignedbb.b);
@@ -2002,6 +2019,9 @@ public class World implements IBlockAccess {
 
     public boolean hasCollision(Entity entity, AxisAlignedBB axisalignedbb) {
         this.K.clear();
+        if (this.isOutsideClassicWorldBoundary(axisalignedbb)) {
+            return true;
+        }
         int i = MathHelper.floor(axisalignedbb.a);
         int j = MathHelper.floor(axisalignedbb.d + 1.0D);
         int k = MathHelper.floor(axisalignedbb.b);
@@ -2058,6 +2078,11 @@ public class World implements IBlockAccess {
 
     public boolean hasNewCollision(Entity entity, AxisAlignedBB oldBox, AxisAlignedBB newBox) {
         this.K.clear();
+        if (this.hasClassicWorldBoundary()
+                && ClassicWorldBoundary.intersectsBoundary(newBox)
+                && !ClassicWorldBoundary.intersectsBoundary(oldBox)) {
+            return true;
+        }
         int i = MathHelper.floor(newBox.a);
         int j = MathHelper.floor(newBox.d + 1.0D);
         int k = MathHelper.floor(newBox.b);
@@ -3836,10 +3861,21 @@ public class World implements IBlockAccess {
     }
 
     public boolean a(int i, int j, int k, int l, boolean flag, int i1) {
+        return this.a(i, j, k, l, flag, i1, false);
+    }
+
+    public boolean a(int i, int j, int k, int l, boolean flag, int i1, boolean skipSidePlacementRule) {
+        return this.a(i, j, k, l, flag, i1, skipSidePlacementRule, -1);
+    }
+
+    public boolean a(int i, int j, int k, int l, boolean flag, int i1,
+                     boolean skipSidePlacementRule, int prospectiveMetadata) {
         int j1 = this.getTypeId(j, k, l);
         Block block = Block.byId[j1];
         Block block1 = Block.byId[i];
-        AxisAlignedBB axisalignedbb = block1.e(this, j, k, l);
+        AxisAlignedBB axisalignedbb = prospectiveMetadata >= 0 && block1 instanceof BlockTrapdoor
+                ? ((BlockTrapdoor) block1).getPlacementCollisionBoundingBox(this, j, k, l, prospectiveMetadata)
+                : block1.e(this, j, k, l);
 
         if (flag) {
             axisalignedbb = null;
@@ -3854,7 +3890,8 @@ public class World implements IBlockAccess {
                 block = null;
             }
 
-            defaultReturn = i > 0 && block == null && block1.canPlace(this, j, k, l, i1); // CraftBukkit
+            defaultReturn = i > 0 && block == null
+                    && (skipSidePlacementRule || block1.canPlace(this, j, k, l, i1)); // CraftBukkit
         }
 
         // CraftBukkit start

@@ -21,6 +21,9 @@ public final class SpawnerCreature {
     private static final int SKY_WORLD_NETHER_MONSTER_CAP_PER_PLAYER = 6;
     private static final int SKY_WORLD_CREATURE_CAP_BASE = 8;
     private static final int SKY_WORLD_CREATURE_CAP_PER_PLAYER = 2;
+    private static final int SQUID_MIN_SPAWN_Y = 50;
+    private static final int SQUID_MAX_SPAWN_Y = 63;
+    private static final int SQUID_MIN_WATER_DEPTH = 4;
     private static final int PLAYER_SPAWN_CHUNK_RADIUS = 8;
     private static final int PLAYER_SPAWN_CHUNK_DIAMETER = PLAYER_SPAWN_CHUNK_RADIUS * 2 + 1;
     private static final int PLAYER_SPAWN_CHUNK_COUNT = PLAYER_SPAWN_CHUNK_DIAMETER * PLAYER_SPAWN_CHUNK_DIAMETER;
@@ -91,8 +94,9 @@ public final class SpawnerCreature {
                 boolean usePerPlayerMobSpawns = usesPerPlayerMobSpawns(world);
                 int perPlayerCreatureCap = usePerPlayerMobSpawns ? getPerPlayerCreatureCapForWorld(world, enumcreaturetype, useSkyWorldMobCaps) : 0;
                 Map perPlayerCreatureCounts = usePerPlayerMobSpawns && perPlayerCreatureCap > 0 ? getPerPlayerCreatureCounts(world, enumcreaturetype) : null;
+                boolean useStrictCreatureCap = useSkyWorldMobCaps || enumcreaturetype == EnumCreatureType.WATER_CREATURE;
 
-                if ((!enumcreaturetype.d() || flag1) && (enumcreaturetype.d() || flag) && isCreatureUnderCap(creatureCount, creatureCap, useSkyWorldMobCaps)) {
+                if ((!enumcreaturetype.d() || flag1) && (enumcreaturetype.d() || flag) && isCreatureUnderCap(creatureCount, creatureCap, useStrictCreatureCap)) {
                     label113:
                     for (int chunkIndex = 0; chunkIndex < b.size(); ++chunkIndex) {
                         long chunkKey = b.keyAt(chunkIndex);
@@ -187,7 +191,7 @@ public final class SpawnerCreature {
                                                         if (usePerPlayerMobSpawns) {
                                                             incrementPerPlayerCreatureCount(perPlayerCreatureCounts, localSpawnPlayer);
                                                         }
-                                                        if (useSkyWorldMobCaps || usePerPlayerMobSpawns) {
+                                                        if (useStrictCreatureCap || usePerPlayerMobSpawns) {
                                                             ++creatureCount;
                                                             if (creatureCount >= creatureCap) {
                                                                 i += l2;
@@ -376,13 +380,39 @@ public final class SpawnerCreature {
         }
 
         if (enumcreaturetype.c() == Material.WATER) {
-            return material.isLiquid() && !world.isSolidBlockIfLoaded(i, j + 1, k);
+            return canSquidSpawnAtLocation(world, i, j, k);
         }
 
         return world.isSolidBlockIfLoaded(i, j - 1, k)
                 && !world.isSolidBlockIfLoaded(i, j, k)
                 && !material.isLiquid()
                 && !world.isSolidBlockIfLoaded(i, j + 1, k);
+    }
+
+    static boolean canSquidSpawnAtLocation(World world, int x, int y, int z) {
+        if (world == null || y < SQUID_MIN_SPAWN_Y || y > SQUID_MAX_SPAWN_Y) {
+            return false;
+        }
+        if (world.getMaterialIfLoaded(x, y - 1, z) != Material.WATER
+                || world.getMaterialIfLoaded(x, y, z) != Material.WATER
+                || world.getMaterialIfLoaded(x, y + 1, z) != Material.WATER) {
+            return false;
+        }
+
+        int waterDepth = 1;
+        for (int scanY = y - 1; scanY >= 0 && waterDepth < SQUID_MIN_WATER_DEPTH; --scanY) {
+            if (world.getMaterialIfLoaded(x, scanY, z) != Material.WATER) {
+                break;
+            }
+            ++waterDepth;
+        }
+        for (int scanY = y + 1; scanY < 128 && waterDepth < SQUID_MIN_WATER_DEPTH; ++scanY) {
+            if (world.getMaterialIfLoaded(x, scanY, z) != Material.WATER) {
+                break;
+            }
+            ++waterDepth;
+        }
+        return waterDepth >= SQUID_MIN_WATER_DEPTH;
     }
 
     private static void a(EntityLiving entityliving, World world, float f, float f1, float f2) {

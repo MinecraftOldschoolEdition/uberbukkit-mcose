@@ -65,6 +65,9 @@ public class BlockStateBridgeRedstoneModernFormatTest {
         assertState(Block.TRAP_DOOR.id, 6, Block.TRAP_DOOR.id,
                 "minecraft:oak_trapdoor", "facing", "west", "half", "bottom", "open", "true",
                 "powered", "false", "waterlogged", "false");
+        assertState(Block.TRAP_DOOR.id, 11, Block.TRAP_DOOR.id,
+                "minecraft:oak_trapdoor", "facing", "east", "half", "top", "open", "false",
+                "powered", "false", "waterlogged", "false");
         assertState(Block.FENCE_GATE.id, 7, Block.FENCE_GATE.id,
                 "minecraft:oak_fence_gate", "facing", "east", "open", "true", "powered", "false",
                 "in_wall", "false");
@@ -114,7 +117,7 @@ public class BlockStateBridgeRedstoneModernFormatTest {
     public void unrepresentableModernPropertiesRequestLosslessPalettePreservation() {
         assertTrue(BlockStateBridge.toLegacy(state("minecraft:repeater", "locked", "true")).fallbackUsed);
         assertTrue(BlockStateBridge.toLegacy(state("minecraft:piston_head", "short", "true")).fallbackUsed);
-        assertTrue(BlockStateBridge.toLegacy(state("minecraft:oak_trapdoor", "half", "top")).fallbackUsed);
+        assertFalse(BlockStateBridge.toLegacy(state("minecraft:oak_trapdoor", "half", "top")).fallbackUsed);
         assertTrue(BlockStateBridge.toLegacy(state("minecraft:oak_fence_gate", "in_wall", "true")).fallbackUsed);
         assertTrue(BlockStateBridge.toLegacy(state("minecraft:oak_door", "hinge", "right")).fallbackUsed);
     }
@@ -135,7 +138,10 @@ public class BlockStateBridgeRedstoneModernFormatTest {
         assertMetadataValues(Block.STONE_BUTTON.id, 1, 2, 3, 4, 9, 10, 11, 12);
         assertMetadataRange(Block.WOODEN_DOOR.id, 0, 15);
         assertMetadataRange(Block.IRON_DOOR_BLOCK.id, 0, 15);
-        assertMetadataRange(Block.TRAP_DOOR.id, 0, 7);
+        assertMetadataRange(Block.BED.id, 0, 15);
+        assertMetadataRange(Block.SIGN_POST.id, 0, 15);
+        assertMetadataValues(Block.WALL_SIGN.id, 2, 3, 4, 5);
+        assertMetadataRange(Block.TRAP_DOOR.id, 0, 15);
         assertMetadataRange(Block.FENCE_GATE.id, 0, 7);
         assertMetadataValues(Block.WALL_CLOCK.id, 2, 3, 4, 5);
     }

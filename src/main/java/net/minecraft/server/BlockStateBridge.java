@@ -197,7 +197,7 @@ public final class BlockStateBridge {
         if (isTrapdoorId(blockId)) {
             int rotation = safeMeta & 3;
             return key.withProperty(PROP_FACING, trapdoorFacingFromMeta(rotation))
-                    .withProperty(PROP_HALF, "bottom")
+                    .withProperty(PROP_HALF, (safeMeta & 8) != 0 ? "top" : "bottom")
                     .withProperty(PROP_OPEN, boolString((safeMeta & 4) != 0))
                     .withProperty(PROP_POWERED, "false")
                     .withProperty(PROP_WATERLOGGED, "false");
@@ -493,10 +493,11 @@ public final class BlockStateBridge {
         if (isLegacyId(bridged, getTrapdoorId()) || isPath(path, "oak_trapdoor", "trapdoor", "wooden_trapdoor", "iron_trapdoor")) {
             int fallback = trapdoorMetaFromFacing(props.get(PROP_FACING));
             int orientation = clamp(parseInt(props.get(PROP_ROTATION), fallback), 0, 3);
-            int baseMeta = orientation | (getBoolean(props, PROP_OPEN, false) ? 4 : 0);
+            int baseMeta = orientation
+                    | (getBoolean(props, PROP_OPEN, false) ? 4 : 0)
+                    | ("top".equalsIgnoreCase(props.get(PROP_HALF)) ? 8 : 0);
             int meta = resolveMeta(props, baseMeta);
-            boolean unsupported = "top".equalsIgnoreCase(props.get(PROP_HALF))
-                    || getBoolean(props, PROP_POWERED, false)
+            boolean unsupported = getBoolean(props, PROP_POWERED, false)
                     || getBoolean(props, PROP_WATERLOGGED, false);
             return new LegacyBlockData(getTrapdoorId(), meta, unsupported);
         }
@@ -956,7 +957,9 @@ public final class BlockStateBridge {
         if (legacyId == getTrapdoorId() || isPath(path, "oak_trapdoor", "trapdoor", "wooden_trapdoor", "iron_trapdoor")) {
             int fallback = trapdoorMetaFromFacing(props.get(PROP_FACING));
             int orientation = clamp(parseInt(props.get(PROP_ROTATION), fallback), 0, 3);
-            return orientation | (getBoolean(props, PROP_OPEN, false) ? 4 : 0);
+            return orientation
+                    | (getBoolean(props, PROP_OPEN, false) ? 4 : 0)
+                    | ("top".equalsIgnoreCase(props.get(PROP_HALF)) ? 8 : 0);
         }
 
         if (legacyId == getFenceGateId() || isPath(path, "oak_fence_gate", "fence_gate", "fencegate")) {

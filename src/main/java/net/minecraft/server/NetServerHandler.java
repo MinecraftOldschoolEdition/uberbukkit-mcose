@@ -212,6 +212,21 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             && (this.negotiatedModFeatures & ModProtocol.FEATURE_SPECTATOR_MODE) != 0;
     }
 
+    public boolean supportsBlockModelVisuals() {
+        return this.modProtocolNegotiated
+            && ModProtocol.hasRequiredBlockModelVisuals(this.negotiatedModFeatures);
+    }
+
+    public boolean supportsDropAllItems() {
+        return this.modProtocolNegotiated
+            && (this.negotiatedModFeatures & ModProtocol.FEATURE_DROP_ALL_ITEMS) != 0;
+    }
+
+    public boolean supportsModernTrapdoorPlacement() {
+        return this.modProtocolNegotiated
+            && (this.negotiatedModFeatures & ModProtocol.FEATURE_MODERN_TRAPDOOR_PLACEMENT) != 0;
+    }
+
     public void sendCloudTimeSync() {
         if (!this.supportsCloudTimeSync() || this.player == null || this.player.world == null) {
             return;
@@ -938,6 +953,10 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
                 d2Adjusted = this.player.locY + 0.2D;
             }
             this.player.setLocation(d1, d2Adjusted, d3, f2, f3);
+            if (worldserver.isOutsideClassicWorldBoundary(this.player.boundingBox)) {
+                this.a(this.x, this.y, this.z, f2, f3);
+                return;
+            }
             boolean shouldCheckMovementCollision = !this.player.isSleeping() && !isCreativeOrCanFly;
             boolean teleportBack = false;
             if (shouldCheckMovementCollision) {
@@ -1562,9 +1581,15 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     private static boolean isValidBlockDigShape(Packet14BlockDig packet) {
         return packet != null
                 && packet.e >= 0
-                && packet.e <= 5
+                && packet.e <= Packet14BlockDig.STATUS_DROP_ALL_ITEMS
                 && ((packet.e != 0 && packet.e != 1 && packet.e != 3 && packet.e != 5)
                 || (packet.face >= 0 && packet.face <= 5));
+    }
+
+    static boolean isValidDropAllItemsRequest(Packet14BlockDig packet, boolean negotiatedSupport) {
+        return packet != null
+                && packet.e == Packet14BlockDig.STATUS_DROP_ALL_ITEMS
+                && negotiatedSupport;
     }
 
     private static boolean isValidBlockPlaceShape(Packet15Place packet) {
@@ -1601,6 +1626,11 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             this.disconnect("Invalid block dig packet");
             return;
         }
+        if (packet14blockdig.e == Packet14BlockDig.STATUS_DROP_ALL_ITEMS
+                && !isValidDropAllItemsRequest(packet14blockdig, this.supportsDropAllItems())) {
+            this.disconnect("Invalid drop-all packet");
+            return;
+        }
 
         // poseidon
         PacketReceivedEvent event = new PacketReceivedEvent(server.getPlayer(player), packet14blockdig);
@@ -1608,6 +1638,11 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         if (event.isCancelled()) return;
         if (!isValidBlockDigShape(packet14blockdig)) {
             this.disconnect("Invalid block dig packet");
+            return;
+        }
+        if (packet14blockdig.e == Packet14BlockDig.STATUS_DROP_ALL_ITEMS
+                && !isValidDropAllItemsRequest(packet14blockdig, this.supportsDropAllItems())) {
+            this.disconnect("Invalid drop-all packet");
             return;
         }
 
@@ -1660,7 +1695,9 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             return;
         }
 
-        if (packet14blockdig.e == 4) {
+        if (packet14blockdig.e == Packet14BlockDig.STATUS_DROP_ALL_ITEMS) {
+            this.player.dropCurrentStack();
+        } else if (packet14blockdig.e == Packet14BlockDig.STATUS_DROP_ITEM) {
             // CraftBukkit start
             // If the ticks aren't the same then the count starts from 0 and we update the lastDropTick.
             if (this.lastDropTick != MinecraftServer.currentTick) {
@@ -1960,7 +1997,15 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             // CraftBukkit end
 
             if (j1 > 16 || flag) {
-                this.player.itemInWorldManager.interact(this.player, worldserver, itemstack, i, j, k, l);
+                this.player.itemInWorldManager.interact(
+                        this.player,
+                        worldserver,
+                        itemstack,
+                        i,
+                        j,
+                        k,
+                        l,
+                        this.supportsModernTrapdoorPlacement() ? packet15place.placementHitY : Double.NaN);
             }
 
             this.player.netServerHandler.sendPacket(new Packet53BlockChange(i, j, k, worldserver));
@@ -3171,6 +3216,11 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
                     return;
                 }
 
+                if (!ModProtocol.hasRequiredBlockModelVisuals(helloInfo.featureBits)) {
+                    this.disconnect("Protocol mismatch: native block-model visuals are required.");
+                    return;
+                }
+
                 int serverFeatures = ModProtocol.resolveServerSupportedFeatures();
                 this.negotiatedModFeatures = helloInfo.featureBits & serverFeatures;
                 int ackVersion = helloInfo.version == ModProtocol.PROTOCOL_VERSION_EXPERIMENTAL
@@ -3179,6 +3229,10 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
                 this.sendPacket(new Packet250CustomPayload(
                         ModProtocol.CHANNEL_HELLO_ACK,
                         ModProtocol.createHelloAckPayload(ackVersion, this.negotiatedModFeatures)));
+                if (this.player != null && this.player.getWorldServer() != null
+                        && this.player.getWorldServer().tracker != null) {
+                    this.player.getWorldServer().tracker.syncNativeBlockModelVisuals(this.player);
+                }
                 this.sendCloudTimeSync();
                 this.sendSkinPartSnapshotToClient();
                 if (this.player != null && this.player.isSpectator()) {
@@ -3293,17 +3347,30 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
 
         ModProtocol.SkinPartsInfo skinPartsInfo = ModProtocol.readSkinPartsPayload(packet == null ? null : packet.data);
         int modelPartMask = skinPartsInfo.modelPartMask & 0x7F;
-        if (!isSkinPartMaskChange(this.player.getSkinModelPartMask(), modelPartMask)
+		if (!isSkinCustomizationChange(
+				this.player.getSkinModelPartMask(),
+				this.player.isLeftHanded(),
+				modelPartMask,
+				skinPartsInfo.leftHanded)
                 || !this.skinPartUpdateLimiter.tryAcquire(System.currentTimeMillis())) {
             return;
         }
         this.player.setSkinModelPartMask(modelPartMask);
-        this.broadcastSkinPartMask(this.player.name, modelPartMask);
+		this.player.setLeftHanded(skinPartsInfo.leftHanded);
+		this.broadcastSkinCustomization(this.player.name, modelPartMask, skinPartsInfo.leftHanded);
     }
 
     static boolean isSkinPartMaskChange(int currentMask, int requestedMask) {
         return (currentMask & 0x7F) != (requestedMask & 0x7F);
     }
+
+	static boolean isSkinCustomizationChange(int currentMask,
+	                                         boolean currentLeftHanded,
+	                                         int requestedMask,
+	                                         boolean requestedLeftHanded) {
+		return isSkinPartMaskChange(currentMask, requestedMask)
+				|| currentLeftHanded != requestedLeftHanded;
+	}
 
     private void sendSkinPartSnapshotToClient() {
         if (!this.supportsSkinPartSync()) {
@@ -3321,11 +3388,14 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             }
             this.sendPacket(new Packet250CustomPayload(
                     ModProtocol.CHANNEL_SKIN_PARTS,
-                    ModProtocol.createSkinPartsPayload(onlinePlayer.name, onlinePlayer.getSkinModelPartMask())));
+					ModProtocol.createSkinPartsPayload(
+						onlinePlayer.name,
+						onlinePlayer.getSkinModelPartMask(),
+						onlinePlayer.isLeftHanded())));
         }
     }
 
-    private void broadcastSkinPartMask(String username, int modelPartMask) {
+	private void broadcastSkinCustomization(String username, int modelPartMask, boolean leftHanded) {
         if (this.minecraftServer == null || this.minecraftServer.serverConfigurationManager == null) {
             return;
         }
@@ -3338,7 +3408,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             }
             recipient.netServerHandler.sendPacket(new Packet250CustomPayload(
                     ModProtocol.CHANNEL_SKIN_PARTS,
-                    ModProtocol.createSkinPartsPayload(username, modelPartMask)));
+					ModProtocol.createSkinPartsPayload(username, modelPartMask, leftHanded)));
         }
     }
     

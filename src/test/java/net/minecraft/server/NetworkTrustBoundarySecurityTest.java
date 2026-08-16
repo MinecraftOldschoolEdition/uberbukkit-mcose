@@ -136,6 +136,18 @@ public class NetworkTrustBoundarySecurityTest {
     }
 
     @Test
+    public void dropAllDigActionRequiresNegotiatedSupport() {
+        Packet14BlockDig request = new Packet14BlockDig();
+        request.e = Packet14BlockDig.STATUS_DROP_ALL_ITEMS;
+
+        assertTrue(NetServerHandler.isValidDropAllItemsRequest(request, true));
+        assertFalse(NetServerHandler.isValidDropAllItemsRequest(request, false));
+
+        request.e = Packet14BlockDig.STATUS_DROP_ITEM;
+        assertFalse(NetServerHandler.isValidDropAllItemsRequest(request, true));
+    }
+
+    @Test
     public void hotbarIndexExcludesFirstMainInventorySlot() {
         assertTrue(NetServerHandler.isValidHotbarIndex(0));
         assertTrue(NetServerHandler.isValidHotbarIndex(8));
@@ -194,5 +206,7 @@ public class NetworkTrustBoundarySecurityTest {
         assertFalse(NetServerHandler.isSkinPartMaskChange(0x7F, 0xFF));
         assertFalse(NetServerHandler.isSkinPartMaskChange(0x01, 0x81));
         assertTrue(NetServerHandler.isSkinPartMaskChange(0x01, 0x02));
+		assertFalse(NetServerHandler.isSkinCustomizationChange(0x7F, false, 0xFF, false));
+		assertTrue(NetServerHandler.isSkinCustomizationChange(0x7F, false, 0xFF, true));
     }
 }

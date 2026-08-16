@@ -58,7 +58,7 @@ public class TrapDoor extends SimpleAttachableMaterialData {
     }
 
     public void setFacingDirection(BlockFace face) {
-        byte data = (byte) (getData() & 0x4);
+        byte data = (byte) (getData() & 0xC);
 
         switch (face) {
             case WEST:
@@ -73,6 +73,14 @@ public class TrapDoor extends SimpleAttachableMaterialData {
         }
 
         setData(data);
+    }
+
+    public boolean isInverted() {
+        return (getData() & 0x8) != 0;
+    }
+
+    public void setInverted(boolean inverted) {
+        setData((byte) (inverted ? getData() | 0x8 : getData() & ~0x8));
     }
 
     @Override

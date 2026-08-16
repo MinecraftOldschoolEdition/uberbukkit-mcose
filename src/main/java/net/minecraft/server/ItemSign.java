@@ -11,7 +11,7 @@ public class ItemSign extends Item {
 
     public ItemSign(int i) {
         super(i);
-        this.maxStackSize = 1;
+        this.maxStackSize = 16;
     }
 
     public boolean a(ItemStack itemstack, EntityHuman entityhuman, World world, int i, int j, int k, int l) {

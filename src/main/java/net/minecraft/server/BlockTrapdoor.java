@@ -30,6 +30,11 @@ public class BlockTrapdoor extends Block {
         return super.e(world, i, j, k);
     }
 
+    public AxisAlignedBB getPlacementCollisionBoundingBox(World world, int i, int j, int k, int metadata) {
+        this.c(metadata);
+        return super.e(world, i, j, k);
+    }
+
     public void a(IBlockAccess iblockaccess, int i, int j, int k) {
         this.c(iblockaccess.getData(i, j, k));
     }
@@ -37,7 +42,12 @@ public class BlockTrapdoor extends Block {
     public void c(int i) {
         float f = 0.1875F;
 
-        this.a(0.0F, 0.0F, 0.0F, 1.0F, f, 1.0F);
+        if ((i & 8) != 0) {
+            this.a(0.0F, 1.0F - f, 0.0F, 1.0F, 1.0F, 1.0F);
+        } else {
+            this.a(0.0F, 0.0F, 0.0F, 1.0F, f, 1.0F);
+        }
+
         if (d(i)) {
             if ((i & 3) == 0) {
                 this.a(0.0F, 0.0F, 1.0F - f, 1.0F, 1.0F, 1.0F);
@@ -85,31 +95,6 @@ public class BlockTrapdoor extends Block {
 
     public void doPhysics(World world, int i, int j, int k, int l) {
         if (!world.isStatic) {
-            int i1 = world.getData(i, j, k);
-            int j1 = i;
-            int k1 = k;
-
-            if ((i1 & 3) == 0) {
-                k1 = k + 1;
-            }
-
-            if ((i1 & 3) == 1) {
-                --k1;
-            }
-
-            if ((i1 & 3) == 2) {
-                j1 = i + 1;
-            }
-
-            if ((i1 & 3) == 3) {
-                --j1;
-            }
-
-            if (!world.e(j1, j, k1)) {
-                world.setTypeId(i, j, k, 0);
-                this.g(world, i, j, k, i1);
-            }
-
             // CraftBukkit start
             if (l > 0 && Block.byId[l] != null && Block.byId[l].isPowerSource()) {
                 org.bukkit.World bworld = world.getWorld();
@@ -135,22 +120,22 @@ public class BlockTrapdoor extends Block {
     }
 
     public void postPlace(World world, int i, int j, int k, int l) {
-        byte b0 = 0;
+        int b0 = world.getData(i, j, k) & 12;
 
         if (l == 2) {
-            b0 = 0;
+            b0 |= 0;
         }
 
         if (l == 3) {
-            b0 = 1;
+            b0 |= 1;
         }
 
         if (l == 4) {
-            b0 = 2;
+            b0 |= 2;
         }
 
         if (l == 5) {
-            b0 = 3;
+            b0 |= 3;
         }
 
         world.setData(i, j, k, b0);
@@ -181,6 +166,39 @@ public class BlockTrapdoor extends Block {
 
             return world.e(i, j, k);
         }
+    }
+
+    public static int getModernPlacementMetadata(int clickedFace, boolean replacingClickedBlock,
+                                                  double relativeHitY, float playerYaw, boolean powered) {
+        int metadata;
+        boolean horizontalFace = clickedFace >= 2 && clickedFace <= 5;
+        if (!replacingClickedBlock && horizontalFace) {
+            metadata = clickedFace - 2;
+            if (relativeHitY > 0.5D) {
+                metadata |= 8;
+            }
+        } else {
+            int playerDirection = MathHelper.floor((double) (playerYaw * 4.0F / 360.0F) + 0.5D) & 3;
+            switch (playerDirection) {
+                case 0:
+                    metadata = 0;
+                    break;
+                case 1:
+                    metadata = 3;
+                    break;
+                case 2:
+                    metadata = 1;
+                    break;
+                default:
+                    metadata = 2;
+            }
+
+            if (clickedFace != 1) {
+                metadata |= 8;
+            }
+        }
+
+        return powered ? metadata | 4 : metadata;
     }
 
     public static boolean d(int i) {

@@ -61,6 +61,7 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
     public ProcessPacket5 packet5;
     public boolean isInWorkbench = false; // uberbukkit pvn < 7
     private int skinModelPartMask = 0x7F;
+	private boolean leftHanded = false;
     private EntityLiving spectatorTarget;
 
     public EntityPlayer(MinecraftServer minecraftserver, World world, String s, ItemInWorldManager iteminworldmanager, int pvn) {
@@ -111,6 +112,14 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
     public void setSkinModelPartMask(int modelPartMask) {
         this.skinModelPartMask = modelPartMask & 0x7F;
     }
+
+	public boolean isLeftHanded() {
+		return this.leftHanded;
+	}
+
+	public void setLeftHanded(boolean leftHanded) {
+		this.leftHanded = leftHanded;
+	}
     
     /**
      * Get the Mojang UUID for this player.

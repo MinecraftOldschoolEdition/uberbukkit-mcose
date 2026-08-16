@@ -387,6 +387,11 @@ public class ItemInWorldManager {
     }
 
     public boolean interact(EntityHuman entityhuman, World world, ItemStack itemstack, int i, int j, int k, int l) {
+        return this.interact(entityhuman, world, itemstack, i, j, k, l, Double.NaN);
+    }
+
+    public boolean interact(EntityHuman entityhuman, World world, ItemStack itemstack, int i, int j, int k, int l,
+                            double placementHitY) {
         if (entityhuman instanceof EntityPlayer && !PlayerCapabilityRegistryApi.canAffectBlocks((EntityPlayer) entityhuman)) {
             return false;
         }
@@ -422,7 +427,7 @@ public class ItemInWorldManager {
             }
 
             if (itemstack != null && !result) {
-                result = itemstack.placeItem(entityhuman, world, i, j, k, l);
+                result = itemstack.placeItem(entityhuman, world, i, j, k, l, placementHitY);
             }
 
             // If we have 'true' and no explicit deny *or* an explicit allow -- run the item part of the hook

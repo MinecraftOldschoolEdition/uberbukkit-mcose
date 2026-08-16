@@ -338,7 +338,9 @@ public abstract class Entity implements SyncedDataHolder {
                 }
             }
 
-            this.fallDistance = 0.0F;
+            if (this.shouldResetFallDistanceInWater()) {
+                this.fallDistance = 0.0F;
+            }
             this.bA = true;
             this.fireTicks = 0;
         } else {
@@ -758,7 +760,69 @@ public abstract class Entity implements SyncedDataHolder {
         return true;
     }
 
+    /**
+     * The legacy safe-water boundary lies between two and three full source
+     * blocks. Shallower water preserves non-player fall distance; deep water
+     * clears it consistently.
+     */
+    protected boolean shouldResetFallDistanceInWater() {
+        return this.getWaterDepthForFallDamage() >= 2.5D;
+    }
+
+    protected boolean isInWaterForFallDamage() {
+        return this.bA || this.world != null && this.boundingBox != null
+                && this.world.a(this.boundingBox.shrink(0.001D, 0.001D, 0.001D), Material.WATER);
+    }
+
+    protected double getWaterDepthForFallDamage() {
+        if (this.world == null || this.boundingBox == null) {
+            return 0.0D;
+        }
+
+        int x = MathHelper.floor((this.boundingBox.a + this.boundingBox.d) / 2.0D);
+        int z = MathHelper.floor((this.boundingBox.c + this.boundingBox.f) / 2.0D);
+        int minY = Math.max(0, MathHelper.floor(this.boundingBox.b - 0.4D));
+        int maxY = Math.min(127, MathHelper.floor(this.boundingBox.e - 0.001D));
+        int waterY = -1;
+        for (int y = minY; y <= maxY; ++y) {
+            if (this.isWaterBlockForFallDamage(x, y, z)) {
+                waterY = y;
+                break;
+            }
+        }
+        if (waterY < 0) {
+            return 0.0D;
+        }
+
+        int topY = waterY;
+        while (topY < 127 && this.isWaterBlockForFallDamage(x, topY + 1, z)) {
+            ++topY;
+        }
+        int bottomY = waterY;
+        while (bottomY > 0 && this.isWaterBlockForFallDamage(x, bottomY - 1, z)) {
+            --bottomY;
+        }
+
+        return calculateWaterDepthForFallDamage(this.world.getData(x, topY, z), topY - bottomY + 1);
+    }
+
+    private boolean isWaterBlockForFallDamage(int x, int y, int z) {
+        int blockId = this.world.getTypeId(x, y, z);
+        return blockId > 0 && Block.byId[blockId] != null
+                && Block.byId[blockId].material == Material.WATER;
+    }
+
+    static double calculateWaterDepthForFallDamage(int topMetadata, int contiguousBlocks) {
+        return contiguousBlocks <= 0 ? 0.0D
+                : (double) contiguousBlocks - (double) BlockFluids.c(topMetadata);
+    }
+
     protected void a(double d0, boolean flag) {
+        if (this.isInWaterForFallDamage() && this.shouldResetFallDistanceInWater()) {
+            this.fallDistance = 0.0F;
+            return;
+        }
+
         if (flag) {
             if (this.fallDistance > 0.0F) {
                 this.a(this.fallDistance);

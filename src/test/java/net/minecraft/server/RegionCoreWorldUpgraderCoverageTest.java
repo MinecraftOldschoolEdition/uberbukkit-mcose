@@ -23,6 +23,11 @@ import static org.junit.Assert.assertTrue;
 
 public class RegionCoreWorldUpgraderCoverageTest {
     private static final Logger TEST_LOGGER = Logger.getLogger(RegionCoreWorldUpgraderCoverageTest.class.getName());
+    private static final IProgressUpdate NO_PROGRESS = new IProgressUpdate() {
+        public void a(String message) {}
+        public void b(String message) {}
+        public void a(int progress) {}
+    };
 
     @Rule
     public final TemporaryFolder temporaryFolder = new TemporaryFolder();
@@ -41,7 +46,9 @@ public class RegionCoreWorldUpgraderCoverageTest {
     @Test
     public void conversionKeepsEveryLegacyBlockIdAndMetadataInRegionChunks() throws Exception {
         File world = this.temporaryFolder.newFolder("block-coverage-world");
-        this.writeCompressed(new File(world, "level.dat"), this.levelRoot());
+        NBTTagCompound levelRoot = this.levelRoot();
+        levelRoot.k("Data").a("version", WorldSaveVersions.MCREGION_1);
+        this.writeCompressed(new File(world, "level.dat"), levelRoot);
 
         byte[] blocks = new byte[32768];
         byte[] metadata = new byte[16384];
@@ -60,6 +67,30 @@ public class RegionCoreWorldUpgraderCoverageTest {
         chunkLevel.a("zPos", 0);
         chunkLevel.a("Blocks", blocks);
         chunkLevel.a("Data", metadata);
+
+        NBTTagCompound painting = new NBTTagCompound();
+        painting.setString("id", "Painting");
+        painting.setString("Motive", "SkullAndRoses");
+        painting.a("TileX", 5);
+        painting.a("TileY", 70);
+        painting.a("TileZ", -3);
+        painting.a("Dir", (byte)2);
+        NBTTagList entities = new NBTTagList();
+        entities.a(painting);
+        chunkLevel.a("Entities", entities);
+
+        NBTTagCompound sign = new NBTTagCompound();
+        sign.setString("id", "Sign");
+        sign.a("x", 7);
+        sign.a("y", 65);
+        sign.a("z", 9);
+        sign.setString("Text1", "beta");
+        sign.setString("Text2", "block");
+        sign.setString("Text3", "model");
+        sign.setString("Text4", "sign");
+        NBTTagList tileEntities = new NBTTagList();
+        tileEntities.a(sign);
+        chunkLevel.a("TileEntities", tileEntities);
         chunkRoot.a("Level", chunkLevel);
 
         DataOutputStream output = RegionFileCache.d(world, 0, 0);
@@ -98,8 +129,147 @@ public class RegionCoreWorldUpgraderCoverageTest {
             assertEquals(Block.SNOW_BLOCK.id, decoded.blocks[snowBlockPosition] & 255);
             assertEquals(snowMetadata, getNibble(decoded.metadata, snowBlockPosition));
         }
+        assertBlockModelMetadataPreserved(decoded);
+
+        assertBlockModelVisualPayloadsPreserved(convertedLevel);
         assertEquals(WorldSaveVersions.currentWriteVersion(), this.readCompressed(
                 new File(world, "level.dat")).k("Data").e("version"));
+    }
+
+    @Test
+    public void alphaChunkConversionPreservesBlockModelStatesAndVisualPayloads() throws Exception {
+        File saves = this.temporaryFolder.newFolder("alpha-block-model-saves");
+        File world = new File(saves, "AlphaBlockModelWorld");
+        assertTrue(world.mkdirs());
+        NBTTagCompound levelRoot = this.levelRoot();
+        levelRoot.k("Data").a("version", WorldSaveVersions.LEGACY_PRE_MCREGION);
+        this.writeCompressed(new File(world, "level.dat"), levelRoot);
+
+        File legacyChunkDirectory = new File(new File(world, "0"), "0");
+        assertTrue(legacyChunkDirectory.mkdirs());
+        this.writeCompressed(new File(legacyChunkDirectory, "c.0.0.dat"), blockModelCoverageChunkRoot());
+
+        WorldLoaderServer converter = new WorldLoaderServer(saves);
+        assertTrue(converter.convert("AlphaBlockModelWorld", NO_PROGRESS));
+
+        DataInputStream input = RegionFileCache.c(world, 0, 0);
+        assertNotNull(input);
+        NBTTagCompound convertedRoot = CompressedStreamTools.a((DataInput)input);
+        input.close();
+        NBTTagCompound convertedLevel = convertedRoot.k("Level");
+        BlockStateCodec.DecodedState decoded = BlockStateCodec.readStateData(convertedLevel);
+        assertNotNull(decoded);
+        assertFalse(decoded.usedNearestFallback);
+        assertBlockModelMetadataPreserved(decoded);
+        assertBlockModelVisualPayloadsPreserved(convertedLevel);
+        assertEquals(WorldSaveVersions.currentWriteVersion(), this.readCompressed(
+                new File(world, "level.dat")).k("Data").e("version"));
+    }
+
+    private static void assertBlockModelVisualPayloadsPreserved(NBTTagCompound convertedLevel) {
+        NBTTagCompound convertedPainting = (NBTTagCompound)convertedLevel.l("Entities").a(0);
+        assertEquals("Painting", convertedPainting.getString("id"));
+        assertEquals("SkullAndRoses", convertedPainting.getString("Motive"));
+        assertEquals(5, convertedPainting.e("TileX"));
+        assertEquals(70, convertedPainting.e("TileY"));
+        assertEquals(-3, convertedPainting.e("TileZ"));
+        assertEquals(2, convertedPainting.c("Dir"));
+        NBTTagCompound convertedSign = (NBTTagCompound)convertedLevel.l("TileEntities").a(0);
+        assertEquals("Sign", convertedSign.getString("id"));
+        assertEquals("beta", convertedSign.getString("Text1"));
+        assertEquals("block", convertedSign.getString("Text2"));
+        assertEquals("model", convertedSign.getString("Text3"));
+        assertEquals("sign", convertedSign.getString("Text4"));
+    }
+
+    private static NBTTagCompound blockModelCoverageChunkRoot() {
+        byte[] blocks = new byte[32768];
+        byte[] metadata = new byte[16384];
+        populateMetadataCoverage(blocks, metadata, Block.SIGN_POST.id, range(0, 15));
+        populateMetadataCoverage(blocks, metadata, Block.WALL_SIGN.id, new int[]{2, 3, 4, 5});
+        populateMetadataCoverage(blocks, metadata, Block.WOODEN_DOOR.id, range(0, 15));
+        populateMetadataCoverage(blocks, metadata, Block.IRON_DOOR_BLOCK.id, range(0, 15));
+        populateMetadataCoverage(blocks, metadata, Block.BED.id, range(0, 15));
+        int[] pistonMetadata = new int[]{0, 1, 2, 3, 4, 5, 8, 9, 10, 11, 12, 13};
+        populateMetadataCoverage(blocks, metadata, Block.PISTON.id, pistonMetadata);
+        populateMetadataCoverage(blocks, metadata, Block.PISTON_STICKY.id, pistonMetadata);
+        populateMetadataCoverage(blocks, metadata, Block.PISTON_EXTENSION.id, pistonMetadata);
+        populateMetadataCoverage(blocks, metadata, Block.PISTON_MOVING.id, pistonMetadata);
+
+        NBTTagCompound chunkLevel = new NBTTagCompound();
+        chunkLevel.a("xPos", 0);
+        chunkLevel.a("zPos", 0);
+        chunkLevel.a("Blocks", blocks);
+        chunkLevel.a("Data", metadata);
+
+        NBTTagCompound painting = new NBTTagCompound();
+        painting.setString("id", "Painting");
+        painting.setString("Motive", "SkullAndRoses");
+        painting.a("TileX", 5);
+        painting.a("TileY", 70);
+        painting.a("TileZ", -3);
+        painting.a("Dir", (byte)2);
+        NBTTagList entities = new NBTTagList();
+        entities.a(painting);
+        chunkLevel.a("Entities", entities);
+
+        NBTTagCompound sign = new NBTTagCompound();
+        sign.setString("id", "Sign");
+        sign.a("x", 7);
+        sign.a("y", 65);
+        sign.a("z", 9);
+        sign.setString("Text1", "beta");
+        sign.setString("Text2", "block");
+        sign.setString("Text3", "model");
+        sign.setString("Text4", "sign");
+        NBTTagList tileEntities = new NBTTagList();
+        tileEntities.a(sign);
+        chunkLevel.a("TileEntities", tileEntities);
+
+        NBTTagCompound chunkRoot = new NBTTagCompound();
+        chunkRoot.a("Level", chunkLevel);
+        return chunkRoot;
+    }
+
+    private static void populateMetadataCoverage(byte[] blocks, byte[] metadata, int blockId,
+                                                 int[] metadataValues) {
+        for (int blockMetadata : metadataValues) {
+            int position = blockId * 16 + blockMetadata;
+            blocks[position] = (byte)blockId;
+            setNibble(metadata, position, blockMetadata);
+        }
+    }
+
+    private static void assertBlockModelMetadataPreserved(BlockStateCodec.DecodedState decoded) {
+        assertMetadataPreserved(decoded, Block.SIGN_POST.id, range(0, 15));
+        assertMetadataPreserved(decoded, Block.WALL_SIGN.id, new int[]{2, 3, 4, 5});
+        assertMetadataPreserved(decoded, Block.WOODEN_DOOR.id, range(0, 15));
+        assertMetadataPreserved(decoded, Block.IRON_DOOR_BLOCK.id, range(0, 15));
+        assertMetadataPreserved(decoded, Block.BED.id, range(0, 15));
+        int[] pistonMetadata = new int[]{0, 1, 2, 3, 4, 5, 8, 9, 10, 11, 12, 13};
+        assertMetadataPreserved(decoded, Block.PISTON.id, pistonMetadata);
+        assertMetadataPreserved(decoded, Block.PISTON_STICKY.id, pistonMetadata);
+        assertMetadataPreserved(decoded, Block.PISTON_EXTENSION.id, pistonMetadata);
+        assertMetadataPreserved(decoded, Block.PISTON_MOVING.id, pistonMetadata);
+    }
+
+    private static void assertMetadataPreserved(BlockStateCodec.DecodedState decoded, int blockId,
+                                                int[] metadataValues) {
+        for (int metadata : metadataValues) {
+            int position = blockId * 16 + metadata;
+            assertEquals("converted block id " + blockId + ":" + metadata,
+                    blockId, decoded.blocks[position] & 255);
+            assertEquals("converted block metadata " + blockId + ":" + metadata,
+                    metadata, getNibble(decoded.metadata, position));
+        }
+    }
+
+    private static int[] range(int first, int last) {
+        int[] values = new int[last - first + 1];
+        for (int index = 0; index < values.length; ++index) {
+            values[index] = first + index;
+        }
+        return values;
     }
 
     @Test

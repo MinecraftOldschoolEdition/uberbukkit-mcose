@@ -10,12 +10,17 @@ import java.util.zip.GZIPOutputStream;
 
 public class Packet15Place extends Packet {
 
+    public static final String PLACEMENT_CONTEXT_TAG = "__MCOSEPlacementContext";
+    private static final String HIT_Y_TAG = "hitY";
+    private static final String CREATED_ROOT_TAG = "createdRoot";
+
     public int a;
     public int b;
     public int c;
     public int face;
     public ItemStack itemstack;
     public int data;
+    public double placementHitY = Double.NaN;
 
     public Packet15Place() {
     }
@@ -59,12 +64,32 @@ public class Packet15Place extends Packet {
                 // Read NBT data if present (MCOSE protocol extension, pvn >= 14)
                 if (this.pvn >= 14) {
                     this.itemstack.tag = PacketLimits.readCompressedNBT(datainputstream, PacketLimits.MAX_ITEM_NBT_BYTES, "item NBT");
+                    this.extractPlacementContext();
                 }
             } else if (short1 == -1) {
                 this.itemstack = null;
             } else {
                 throw new IOException("Invalid item id " + short1 + " in block place packet");
             }
+        }
+    }
+
+    private void extractPlacementContext() {
+        if (this.itemstack == null || this.itemstack.tag == null
+                || !this.itemstack.tag.hasKey(PLACEMENT_CONTEXT_TAG)) {
+            return;
+        }
+
+        NBTTagCompound root = this.itemstack.tag;
+        NBTTagCompound context = root.k(PLACEMENT_CONTEXT_TAG);
+        double hitY = context.h(HIT_Y_TAG);
+        boolean createdRoot = context.c(CREATED_ROOT_TAG) != 0;
+        root.remove(PLACEMENT_CONTEXT_TAG);
+        if (createdRoot && root.getKeys().isEmpty()) {
+            this.itemstack.tag = null;
+        }
+        if (!Double.isNaN(hitY) && !Double.isInfinite(hitY)) {
+            this.placementHitY = hitY;
         }
     }
 

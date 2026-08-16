@@ -6,6 +6,9 @@ import java.io.IOException;
 
 public class Packet14BlockDig extends Packet {
 
+    public static final int STATUS_DROP_ITEM = 4;
+    public static final int STATUS_DROP_ALL_ITEMS = 6;
+
     public int a;
     public int b;
     public int c;

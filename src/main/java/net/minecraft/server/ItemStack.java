@@ -84,7 +84,15 @@ public final class ItemStack {
     }
 
     public boolean placeItem(EntityHuman entityhuman, World world, int i, int j, int k, int l) {
-        boolean flag = this.getItem().a(this, entityhuman, world, i, j, k, l);
+        return this.placeItem(entityhuman, world, i, j, k, l, Double.NaN);
+    }
+
+    public boolean placeItem(EntityHuman entityhuman, World world, int i, int j, int k, int l,
+                             double placementHitY) {
+        Item item = this.getItem();
+        boolean flag = item instanceof ItemBlock
+                ? ((ItemBlock) item).placeItemWithHit(this, entityhuman, world, i, j, k, l, placementHitY)
+                : item.a(this, entityhuman, world, i, j, k, l);
 
         if (flag) {
             entityhuman.a(StatisticList.E[this.id], 1);

@@ -21,14 +21,26 @@ public class ItemBlock extends Item {
     }
 
     public boolean a(ItemStack itemstack, EntityHuman entityhuman, World world, int i, int j, int k, int l) {
-        return placeBlock(this.id, this, itemstack, entityhuman, world, i, j, k, l);
+        return placeBlock(this.id, this, itemstack, entityhuman, world, i, j, k, l, Double.NaN);
+    }
+
+    boolean placeItemWithHit(ItemStack itemstack, EntityHuman entityhuman, World world,
+                             int i, int j, int k, int l, double placementHitY) {
+        return placeBlock(this.id, this, itemstack, entityhuman, world, i, j, k, l, placementHitY);
     }
 
     static boolean placeBlock(int placedBlockId, Item placedItem, ItemStack itemstack, EntityHuman entityhuman,
             World world, int i, int j, int k, int l) {
-        int clickedX = i, clickedY = j, clickedZ = k; // CraftBukkit
+        return placeBlock(placedBlockId, placedItem, itemstack, entityhuman, world, i, j, k, l, Double.NaN);
+    }
 
-        if (world.getTypeId(i, j, k) == Block.SNOW.id) {
+    static boolean placeBlock(int placedBlockId, Item placedItem, ItemStack itemstack, EntityHuman entityhuman,
+            World world, int i, int j, int k, int l, double placementHitY) {
+        int clickedX = i, clickedY = j, clickedZ = k; // CraftBukkit
+        int clickedFace = l;
+        boolean replacingClickedBlock = world.getTypeId(i, j, k) == Block.SNOW.id;
+
+        if (replacingClickedBlock) {
             l = 0;
         } else {
             if (l == 0) {
@@ -56,11 +68,25 @@ public class ItemBlock extends Item {
             }
         }
 
+        boolean modernTrapdoorPlacement = placedBlockId == Block.TRAP_DOOR.id
+                && !Double.isNaN(placementHitY) && !Double.isInfinite(placementHitY);
+        int placedMetadata = placedItem.filterData(itemstack.getData());
+        if (modernTrapdoorPlacement) {
+            placedMetadata = BlockTrapdoor.getModernPlacementMetadata(
+                    clickedFace,
+                    replacingClickedBlock,
+                    placementHitY - (double) j,
+                    entityhuman == null ? 180.0F : entityhuman.yaw,
+                    world.isBlockIndirectlyPowered(i, j, k));
+        }
+
         if (itemstack.count == 0) {
             return false;
         } else if (!UberbukkitConfig.getInstance().getBoolean("mechanics.allow_blocks_at_y_127", false) && j == 127 && Block.byId[placedBlockId].material.isBuildable()) {
             return false;
-        } else if (world.a(placedBlockId, i, j, k, false, l)) {
+        } else if (world.a(
+                placedBlockId, i, j, k, false, l, modernTrapdoorPlacement,
+                modernTrapdoorPlacement ? placedMetadata : -1)) {
             Block block = Block.byId[placedBlockId];
 
             // CraftBukkit start - This executes the placement of the block
@@ -89,7 +115,7 @@ public class ItemBlock extends Item {
              * Whenever the call to 'world.setTypeIdAndData' changes we need to figure out again what to
              * replace this with.
              */
-            if (world.setRawTypeIdAndData(i, j, k, placedBlockId, placedItem.filterData(itemstack.getData()))) { // <-- world.setTypeIdAndData does this to place the block
+            if (world.setRawTypeIdAndData(i, j, k, placedBlockId, placedMetadata)) { // <-- world.setTypeIdAndData does this to place the block
                 BlockPlaceEvent event = CraftEventFactory.callBlockPlaceEvent(world, entityhuman, eventUseBlockBelow ? blockStateBelow : replacedBlockState, clickedX, clickedY, clickedZ, block);
 
                 if (event.isCancelled() || !event.canBuild()) {

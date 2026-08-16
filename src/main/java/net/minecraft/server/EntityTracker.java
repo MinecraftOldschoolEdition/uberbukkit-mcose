@@ -601,6 +601,18 @@ public class EntityTracker {
         }
     }
 
+    /** Upgrades paintings tracked before the mod handshake to native model spawns. */
+    public synchronized void syncNativeBlockModelVisuals(EntityPlayer player) {
+        if (player == null || player.netServerHandler == null
+                || !player.netServerHandler.supportsBlockModelVisuals()) {
+            return;
+        }
+        Iterator iterator = this.a.iterator();
+        while (iterator.hasNext()) {
+            ((EntityTrackerEntry) iterator.next()).syncNativeBlockModelVisual(player);
+        }
+    }
+
     // CraftBukkit - synchronized
     public synchronized void untrackPlayer(EntityPlayer entityplayer) {
         Iterator iterator = this.a.iterator();

@@ -85,9 +85,13 @@ public class WorldLoaderServer extends WorldLoader {
                 throw new RuntimeException("Failed to load world metadata after legacy chunk conversion for '" + s + "'");
             }
 
-            worlddata.a(WorldSaveVersions.MCREGION_1);
-            IDataManager idatamanager = this.a(s, false);
-            idatamanager.a(worlddata);
+            /*
+             * Do not save the intermediate WorldData through ServerNBTManager:
+             * that writer stamps the current RegionCore version immediately.
+             * RegionCoreWorldUpgrader must still see this world as legacy so it
+             * rewrites the newly copied McRegion chunks before atomically
+             * committing the final save version below.
+             */
         }
 
         try {

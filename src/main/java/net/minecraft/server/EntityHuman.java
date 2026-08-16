@@ -203,6 +203,10 @@ public abstract class EntityHuman extends EntityLiving {
                 && this.world.a(this.boundingBox.shrink(0.001D, 0.001D, 0.001D), Material.WATER);
     }
 
+    protected boolean shouldResetFallDistanceInWater() {
+        return true;
+    }
+
     protected void y() {
         this.activeContainer = this.defaultContainer;
     }
@@ -350,6 +354,13 @@ public abstract class EntityHuman extends EntityLiving {
 
     public void F() {
         this.a(this.inventory.splitStack(this.inventory.itemInHandIndex, 1), false);
+    }
+
+    public void dropCurrentStack() {
+        ItemStack selected = this.inventory.getItemInHand();
+        if (selected != null) {
+            this.a(this.inventory.splitStack(this.inventory.itemInHandIndex, selected.count), false);
+        }
     }
 
     public void b(ItemStack itemstack) {

@@ -29,6 +29,11 @@ public final class ModProtocol {
     public static final int FEATURE_CLOUD_TIME_SYNC = 1 << 8;
     public static final int FEATURE_CONTAINER_INPUTS = 1 << 9;
     public static final int FEATURE_SPECTATOR_MODE = 1 << 10;
+    public static final int FEATURE_BLOCK_MODEL_VISUALS = 1 << 11;
+    public static final int FEATURE_DROP_ALL_ITEMS = 1 << 12;
+    public static final int FEATURE_MODERN_TRAPDOOR_PLACEMENT = 1 << 13;
+    /** Native block-state visuals use the client model system; ordinary entity/block packets remain the state transport. */
+    public static final int FEATURE_BLOCK_MODEL_STATES = 1 << 14;
 
     public static final String CHANNEL_HELLO = "MCOSE|MOD_HELLO";
     public static final String CHANNEL_HELLO_ACK = "MCOSE|MOD_HELLO_ACK";
@@ -37,6 +42,7 @@ public final class ModProtocol {
     public static final String CHANNEL_SKIN_PARTS = "MCOSE|SKINPARTS";
     public static final String CHANNEL_CLOUD_TIME = "MCOSE|CLOUD_TIME";
     public static final String CHANNEL_SPECTATOR = "MCOSE|SPECTATE";
+    public static final String CHANNEL_BLOCK_MODEL_VISUAL = "MCOSE|BLOCK_MODEL";
 
     private ModProtocol() {}
 
@@ -104,7 +110,11 @@ public final class ModProtocol {
                 | FEATURE_SKIN_PARTS_SYNC
                 | FEATURE_CLOUD_TIME_SYNC
                 | FEATURE_CONTAINER_INPUTS
-                | FEATURE_SPECTATOR_MODE;
+                | FEATURE_SPECTATOR_MODE
+                | FEATURE_BLOCK_MODEL_VISUALS
+                | FEATURE_DROP_ALL_ITEMS
+                | FEATURE_MODERN_TRAPDOOR_PLACEMENT
+                | FEATURE_BLOCK_MODEL_STATES;
         if (net.minecraft.server.ZstdRuntime.isAvailable()) {
             features |= FEATURE_CHUNK_ZSTD;
         }
@@ -114,6 +124,35 @@ public final class ModProtocol {
     public static boolean hasRequiredEntityFeatures(int featureBits) {
         int required = FEATURE_ENTITY_WIRE_V2 | FEATURE_ENTITY_DATA_V2;
         return (featureBits & required) == required;
+    }
+
+    public static boolean hasRequiredBlockModelVisuals(int featureBits) {
+        int required = FEATURE_BLOCK_MODEL_VISUALS | FEATURE_BLOCK_MODEL_STATES;
+        return (featureBits & required) == required;
+    }
+
+    public static byte[] createPaintingVisualPayload(int entityId,
+                                                      int x,
+                                                      int y,
+                                                      int z,
+                                                      int direction,
+                                                      String motive) {
+        try {
+            ByteArrayOutputStream baos = new ByteArrayOutputStream(32);
+            DataOutputStream out = new DataOutputStream(baos);
+            out.writeByte(1);
+            out.writeByte(1);
+            out.writeInt(entityId);
+            PacketLimits.writeUtf(out, motive, net.minecraft.server.EnumArt.z, "painting motive");
+            out.writeInt(x);
+            out.writeInt(y);
+            out.writeInt(z);
+            out.writeByte(direction);
+            out.flush();
+            return baos.toByteArray();
+        } catch (Throwable t) {
+            return new byte[0];
+        }
     }
 
     public static byte[] createCloudTimePayload(long gameTime) {
@@ -178,11 +217,22 @@ public final class ModProtocol {
     }
 
     public static byte[] createSkinPartsPayload(String username, int modelPartMask) {
+		return createSkinPartsPayload(username, modelPartMask, false, false);
+	}
+
+	public static byte[] createSkinPartsPayload(String username, int modelPartMask, boolean leftHanded) {
+		return createSkinPartsPayload(username, modelPartMask, leftHanded, true);
+	}
+
+	private static byte[] createSkinPartsPayload(String username, int modelPartMask, boolean leftHanded, boolean includeMainHand) {
         try {
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             DataOutputStream out = new DataOutputStream(baos);
             PacketLimits.writeUtf(out, username, PacketLimits.MAX_USERNAME_CHARS, "skin-parts username");
             out.writeByte(modelPartMask & 0x7F);
+			if(includeMainHand) {
+				out.writeBoolean(leftHanded);
+			}
             out.flush();
             return baos.toByteArray();
         } catch (Throwable t) {
@@ -192,17 +242,22 @@ public final class ModProtocol {
 
     public static SkinPartsInfo readSkinPartsPayload(byte[] payload) {
         if (payload == null || payload.length == 0) {
-            return new SkinPartsInfo("", 0x7F);
+			return new SkinPartsInfo("", 0x7F, false);
         }
 
         try {
             DataInputStream in = new DataInputStream(new ByteArrayInputStream(payload));
             String username = PacketLimits.readUtf(in, PacketLimits.MAX_USERNAME_CHARS, "skin-parts username");
             int modelPartMask = in.readByte() & 0x7F;
+			boolean leftHanded = in.available() > 0 && in.readBoolean();
+			if(in.available() != 0) {
+				in.close();
+				return new SkinPartsInfo("", 0x7F, false);
+			}
             in.close();
-            return new SkinPartsInfo(username, modelPartMask);
+			return new SkinPartsInfo(username, modelPartMask, leftHanded);
         } catch (Throwable ignored) {
-            return new SkinPartsInfo("", 0x7F);
+			return new SkinPartsInfo("", 0x7F, false);
         }
     }
 
@@ -219,10 +274,16 @@ public final class ModProtocol {
     public static final class SkinPartsInfo {
         public final String username;
         public final int modelPartMask;
+		public final boolean leftHanded;
 
         public SkinPartsInfo(String username, int modelPartMask) {
+			this(username, modelPartMask, false);
+		}
+
+		public SkinPartsInfo(String username, int modelPartMask, boolean leftHanded) {
             this.username = username == null ? "" : username;
             this.modelPartMask = modelPartMask & 0x7F;
+			this.leftHanded = leftHanded;
         }
     }
 }
