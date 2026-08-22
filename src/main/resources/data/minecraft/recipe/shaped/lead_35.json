@@ -1,0 +1,23 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "AA ",
+    "AB ",
+    "  A"
+  ],
+  "key": {
+    "A": {
+      "id": "minecraft:string",
+      "legacy_metadata": 0
+    },
+    "B": {
+      "id": "minecraft:slime_ball",
+      "legacy_metadata": 0
+    }
+  },
+  "result": {
+    "id": "minecraft:lead",
+    "count": 2,
+    "legacy_metadata": 0
+  }
+}

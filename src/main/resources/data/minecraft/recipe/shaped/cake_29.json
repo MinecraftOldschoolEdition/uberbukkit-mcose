@@ -1,0 +1,31 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "AAA",
+    "BCB",
+    "DDD"
+  ],
+  "key": {
+    "A": {
+      "id": "minecraft:milk_bucket",
+      "legacy_metadata": 0
+    },
+    "B": {
+      "id": "minecraft:sugar",
+      "legacy_metadata": 0
+    },
+    "C": {
+      "id": "minecraft:egg",
+      "legacy_metadata": 0
+    },
+    "D": {
+      "id": "minecraft:wheat",
+      "legacy_metadata": 0
+    }
+  },
+  "result": {
+    "id": "minecraft:cake",
+    "count": 1,
+    "legacy_metadata": 0
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "A",
+    "B"
+  ],
+  "key": {
+    "A": {
+      "id": "minecraft:furnace",
+      "legacy_metadata": -1
+    },
+    "B": {
+      "id": "minecraft:minecart",
+      "legacy_metadata": 0
+    }
+  },
+  "result": {
+    "id": "minecraft:furnace_minecart",
+    "count": 1,
+    "legacy_metadata": 0
+  }
+}

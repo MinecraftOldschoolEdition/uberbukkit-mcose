@@ -3,10 +3,15 @@ package net.minecraft.server.registry;
 import net.minecraft.server.util.ResourceLocation;
 
 import java.util.Collection;
+import java.util.Map;
 import java.util.Set;
 
 public final class LootTableRegistryApi {
     private LootTableRegistryApi() {}
+
+    public static boolean publishAtomic(Map<ResourceLocation, LootTable> staged) {
+        return Registries.LOOT_TABLE.registerAllAtomic(staged);
+    }
 
     public static boolean register(ResourceLocation key, LootTable value) {
         return RegistryApiSupport.register(Registries.LOOT_TABLE, key, value);
@@ -44,4 +49,3 @@ public final class LootTableRegistryApi {
         return RegistryApiSupport.canonicalizeIdentifier(Registries.LOOT_TABLE, any);
     }
 }
-

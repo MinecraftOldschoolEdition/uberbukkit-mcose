@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "AA",
+    "AA"
+  ],
+  "key": {
+    "A": {
+      "id": "minecraft:clay_ball",
+      "legacy_metadata": 0
+    }
+  },
+  "result": {
+    "id": "minecraft:clay",
+    "count": 1,
+    "legacy_metadata": 0
+  }
+}

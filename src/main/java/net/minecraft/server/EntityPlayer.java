@@ -63,6 +63,7 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
     private int skinModelPartMask = 0x7F;
 	private boolean leftHanded = false;
     private EntityLiving spectatorTarget;
+    private boolean serverRulesAccepted;
 
     public EntityPlayer(MinecraftServer minecraftserver, World world, String s, ItemInWorldManager iteminworldmanager, int pvn) {
         super(world);
@@ -120,6 +121,14 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
 	public void setLeftHanded(boolean leftHanded) {
 		this.leftHanded = leftHanded;
 	}
+
+    public boolean hasAcceptedServerRules() {
+        return this.serverRulesAccepted;
+    }
+
+    public void setServerRulesAccepted(boolean accepted) {
+        this.serverRulesAccepted = accepted;
+    }
     
     /**
      * Get the Mojang UUID for this player.
@@ -1072,6 +1081,7 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
     @Override
     public void a(NBTTagCompound nbttagcompound) {
         super.a(nbttagcompound);
+        this.serverRulesAccepted = nbttagcompound.m("MCOSEServerRulesAccepted");
         
         // Load player statistics (legacy - keeps stats other than achievements)
         if (this.playerStatistics != null && nbttagcompound.hasKey("PlayerStats")) {
@@ -1094,6 +1104,7 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
     @Override
     public void b(NBTTagCompound nbttagcompound) {
         super.b(nbttagcompound);
+        nbttagcompound.a("MCOSEServerRulesAccepted", this.serverRulesAccepted);
         
         // Save player statistics (legacy - keeps stats other than achievements)
         if (this.playerStatistics != null) {

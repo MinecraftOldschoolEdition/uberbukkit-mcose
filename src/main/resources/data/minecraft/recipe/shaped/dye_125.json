@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "A"
+  ],
+  "key": {
+    "A": {
+      "id": "minecraft:lapis_block",
+      "legacy_metadata": -1
+    }
+  },
+  "result": {
+    "id": "minecraft:dye",
+    "count": 9,
+    "legacy_metadata": 4
+  }
+}

@@ -49,6 +49,16 @@ public class Slot {
         return this.inventory.getMaxStackSize();
     }
 
+    /**
+     * Gets the effective limit for a stack in this slot. Normal slots respect
+     * the stack's world-aware item limit; specialized slots may define a
+     * container-specific policy.
+     */
+    public int getItemStackLimit(ItemStack itemstack, World world) {
+        return itemstack == null ? this.d()
+                : Math.min(this.d(), itemstack.getMaxStackSize(world));
+    }
+
     public ItemStack a(int i) {
         return this.inventory.splitStack(this.index, i);
     }

@@ -2,12 +2,12 @@ package net.minecraft.server;
 
 // CraftBukkit start
 
+import java.util.Random;
+
 import org.bukkit.craftbukkit.block.CraftBlockState;
 import org.bukkit.craftbukkit.event.CraftEventFactory;
 import org.bukkit.event.block.BlockPlaceEvent;
 // CraftBukkit end
-
-import uk.betacraft.uberbukkit.UberbukkitConfig;
 
 public class ItemHoe extends Item {
 
@@ -46,24 +46,23 @@ public class ItemHoe extends Item {
                 itemstack.damage(1, entityhuman);
 
                 // uberbukkit
-                if (UberbukkitConfig.getInstance().getBoolean("mechanics.tile_grass_drop_seeds", false)) {
-                    if (world.random.nextInt(8) == 0 && i1 == Block.GRASS.id) {
-                        byte b0 = 1;
+                WorldData worldData = world.worldData;
+                if (shouldDropGrassSeeds(i1, worldData != null && worldData.getHoeGrassForSeeds(), world.random)) {
+                    float f = 0.7F;
+                    float f1 = world.random.nextFloat() * f + (1.0F - f) * 0.5F;
+                    float f2 = 1.2F;
+                    float f3 = world.random.nextFloat() * f + (1.0F - f) * 0.5F;
+                    EntityItem entityitem = new EntityItem(world, (double) ((float) i + f1), (double) ((float) j + f2), (double) ((float) k + f3), new ItemStack(Item.SEEDS));
 
-                        for (j1 = 0; j1 < b0; ++j1) {
-                            float f = 0.7F;
-                            float f1 = world.random.nextFloat() * f + (1.0F - f) * 0.5F;
-                            float f2 = 1.2F;
-                            float f3 = world.random.nextFloat() * f + (1.0F - f) * 0.5F;
-                            EntityItem entityitem = new EntityItem(world, (double) ((float) i + f1), (double) ((float) j + f2), (double) ((float) k + f3), new ItemStack(Item.SEEDS));
-
-                            entityitem.pickupDelay = 10;
-                            world.addEntity(entityitem);
-                        }
-                    }
+                    entityitem.pickupDelay = 10;
+                    world.addEntity(entityitem);
                 }
                 return true;
             }
         }
+    }
+
+    static boolean shouldDropGrassSeeds(int originalBlockId, boolean enabled, Random random) {
+        return enabled && originalBlockId == Block.GRASS.id && random != null && random.nextInt(8) == 0;
     }
 }

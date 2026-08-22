@@ -1,0 +1,9 @@
+{
+  "type": "mcose:recycling",
+  "method": "smelt",
+  "result": {
+    "id": "minecraft:iron_ingot",
+    "count": 2,
+    "legacy_metadata": 0
+  }
+}

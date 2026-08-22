@@ -3,7 +3,9 @@ package net.minecraft.server;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Set;
 
 import uk.betacraft.uberbukkit.Uberbukkit;
 import uk.betacraft.uberbukkit.UberbukkitConfig;
@@ -11,7 +13,8 @@ import uk.betacraft.uberbukkit.UberbukkitConfig;
 public class CraftingManager {
 
     private static final CraftingManager a = new CraftingManager();
-    private List b = new ArrayList();
+    private volatile List b = Collections.emptyList();
+    private List builtInRecipes = Collections.emptyList();
 
     public static final CraftingManager getInstance() {
         return a;
@@ -151,11 +154,14 @@ public class CraftingManager {
         this.registerShapedRecipe(new ItemStack(Item.COMPASS, 1), new Object[] { " # ", "#X#", " # ", Character.valueOf('#'), Item.IRON_INGOT, Character.valueOf('X'), Item.REDSTONE });
         this.registerShapedRecipe(new ItemStack(Block.STONE_BUTTON, 1), new Object[] { "#", "#", Character.valueOf('#'), Block.STONE });
 
-        Collections.sort(this.b, new RecipeSorter(this));
+        ArrayList sorted = new ArrayList(this.b);
+        Collections.sort(sorted, new RecipeSorter(this));
+        this.b = Collections.unmodifiableList(sorted);
+        this.builtInRecipes = this.b;
         System.out.println(this.b.size() + " recipes");
     }
 
-    public void registerShapedRecipe(ItemStack itemstack, Object... aobject) { // CraftBukkit - default -> public
+    public synchronized void registerShapedRecipe(ItemStack itemstack, Object... aobject) { // CraftBukkit - default -> public
         String s = "";
         int i = 0;
         int j = 0;
@@ -210,10 +216,10 @@ public class CraftingManager {
             }
         }
 
-        this.b.add(new ShapedRecipes(j, k, aitemstack, itemstack));
+        this.appendRecipe(new ShapedRecipes(j, k, aitemstack, itemstack));
     }
 
-    public void registerShapelessRecipe(ItemStack itemstack, Object... aobject) { // CraftBukkit - default -> public
+    public synchronized void registerShapelessRecipe(ItemStack itemstack, Object... aobject) { // CraftBukkit - default -> public
         ArrayList arraylist = new ArrayList();
         Object[] aobject1 = aobject;
         int i = aobject.length;
@@ -234,7 +240,13 @@ public class CraftingManager {
             }
         }
 
-        this.b.add(new ShapelessRecipes(itemstack, arraylist));
+        this.appendRecipe(new ShapelessRecipes(itemstack, arraylist));
+    }
+
+    private void appendRecipe(CraftingRecipe recipe) {
+        ArrayList next = new ArrayList(this.b);
+        next.add(recipe);
+        this.b = Collections.unmodifiableList(next);
     }
 
     public ItemStack craft(InventoryCrafting inventorycrafting) {
@@ -245,8 +257,9 @@ public class CraftingManager {
         }
         
         // Then check normal recipes
-        for (int i = 0; i < this.b.size(); ++i) {
-            CraftingRecipe craftingrecipe = (CraftingRecipe) this.b.get(i);
+        List recipes = this.b;
+        for (int i = 0; i < recipes.size(); ++i) {
+            CraftingRecipe craftingrecipe = (CraftingRecipe) recipes.get(i);
 
             if (craftingrecipe.a(inventorycrafting)) {
                 return craftingrecipe.b(inventorycrafting);
@@ -258,5 +271,103 @@ public class CraftingManager {
 
     public List b() {
         return this.b;
+    }
+
+    /**
+     * Captures the sorted Java bootstrap table before STARTUP plugins can append
+     * recipes. The identities are used only to preserve the legacy profile and
+     * plugin boundary while data supplies the authoritative recipe values.
+     */
+    public synchronized List getBuiltInRecipeSnapshot() {
+        return new ArrayList(this.builtInRecipes);
+    }
+
+    /** Builds the complete future list without changing the live pointer. */
+    public synchronized RecipePublication prepareDataRecipePublication(
+            List<? extends CraftingRecipe> replacements,
+            List<? extends CraftingRecipe> additions) {
+        if (replacements == null
+                || replacements.size() != this.builtInRecipes.size()) {
+            throw new IllegalArgumentException(
+                    "Built-in recipe replacement count must remain unchanged");
+        }
+        if (this.b.size() < this.builtInRecipes.size()) {
+            throw new IllegalStateException("Crafting recipe table lost built-in entries");
+        }
+        Set<CraftingRecipe> unique = Collections.newSetFromMap(
+                new IdentityHashMap<CraftingRecipe, Boolean>());
+        ArrayList future = new ArrayList(
+                replacements.size()
+                        + (this.b.size() - this.builtInRecipes.size())
+                        + (additions == null ? 0 : additions.size()));
+        for (int i = 0; i < replacements.size(); i++) {
+            if (this.b.get(i) != this.builtInRecipes.get(i)) {
+                throw new IllegalStateException(
+                        "STARTUP recipe changed the sorted built-in prefix at index " + i);
+            }
+            CraftingRecipe replacement = replacements.get(i);
+            if (replacement == null || !unique.add(replacement)) {
+                throw new IllegalArgumentException(
+                        "Built-in recipe replacements must be unique and non-null");
+            }
+            future.add(replacement);
+        }
+        for (int i = this.builtInRecipes.size(); i < this.b.size(); i++) {
+            CraftingRecipe extension = (CraftingRecipe)this.b.get(i);
+            if (extension == null || !unique.add(extension)) {
+                throw new IllegalStateException(
+                        "STARTUP recipes must be unique and non-null");
+            }
+            future.add(extension);
+        }
+        if (additions == null || additions.isEmpty()) {
+            throw new IllegalArgumentException("Recipe additions cannot be empty");
+        }
+        for (CraftingRecipe addition : additions) {
+            if (addition == null || !unique.add(addition)) {
+                throw new IllegalArgumentException(
+                        "Recipe additions must be unique and non-null");
+            }
+            future.add(addition);
+        }
+        return new RecipePublication(
+                Collections.unmodifiableList(future),
+                Collections.unmodifiableList(
+                        new ArrayList<CraftingRecipe>(replacements)));
+    }
+
+    /** Nonthrowing startup commit after every candidate view has preflighted. */
+    public synchronized void publishPreparedDataRecipes(RecipePublication publication) {
+        this.b = publication.recipes;
+        this.builtInRecipes = publication.builtIns;
+    }
+
+    /** Publishes an already validated startup batch without re-sorting it. */
+    public synchronized void appendDataRecipes(
+            List<? extends CraftingRecipe> additions) {
+        if (additions == null || additions.isEmpty()) {
+            throw new IllegalArgumentException("Recipe additions cannot be empty");
+        }
+        Set<CraftingRecipe> unique = Collections.newSetFromMap(
+                new IdentityHashMap<CraftingRecipe, Boolean>());
+        for (CraftingRecipe recipe : additions) {
+            if (recipe == null || !unique.add(recipe) || this.b.contains(recipe)) {
+                throw new IllegalArgumentException(
+                        "Recipe additions must be unique and non-null");
+            }
+        }
+        ArrayList next = new ArrayList(this.b);
+        next.addAll(additions);
+        this.b = Collections.unmodifiableList(next);
+    }
+
+    public static final class RecipePublication {
+        private final List recipes;
+        private final List builtIns;
+
+        private RecipePublication(List recipes, List builtIns) {
+            this.recipes = recipes;
+            this.builtIns = builtIns;
+        }
     }
 }

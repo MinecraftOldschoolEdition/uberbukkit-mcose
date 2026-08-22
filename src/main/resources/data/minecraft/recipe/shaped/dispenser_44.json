@@ -1,0 +1,27 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "AAA",
+    "ABA",
+    "ACA"
+  ],
+  "key": {
+    "A": {
+      "id": "minecraft:cobblestone",
+      "legacy_metadata": -1
+    },
+    "B": {
+      "id": "minecraft:bow",
+      "legacy_metadata": 0
+    },
+    "C": {
+      "id": "minecraft:redstone",
+      "legacy_metadata": 0
+    }
+  },
+  "result": {
+    "id": "minecraft:dispenser",
+    "count": 1,
+    "legacy_metadata": 0
+  }
+}

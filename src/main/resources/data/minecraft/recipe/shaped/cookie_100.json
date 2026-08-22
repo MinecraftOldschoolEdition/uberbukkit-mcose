@@ -1,0 +1,21 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "ABA"
+  ],
+  "key": {
+    "A": {
+      "id": "minecraft:wheat",
+      "legacy_metadata": 0
+    },
+    "B": {
+      "id": "minecraft:dye",
+      "legacy_metadata": 3
+    }
+  },
+  "result": {
+    "id": "minecraft:cookie",
+    "count": 8,
+    "legacy_metadata": 0
+  }
+}

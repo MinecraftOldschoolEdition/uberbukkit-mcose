@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "AA",
+    "AA"
+  ],
+  "key": {
+    "A": {
+      "id": "minecraft:oak_planks",
+      "legacy_metadata": -1
+    }
+  },
+  "result": {
+    "id": "minecraft:crafting_table",
+    "count": 1,
+    "legacy_metadata": 0
+  }
+}

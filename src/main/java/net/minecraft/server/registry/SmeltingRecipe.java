@@ -9,15 +9,25 @@ import net.minecraft.server.ItemStack;
  */
 public final class SmeltingRecipe implements CraftingRecipe {
     private final int inputItemId;
+    private final int inputMetadata;
     private final ItemStack output;
 
     public SmeltingRecipe(int inputItemId, ItemStack output) {
+        this(inputItemId, -1, output);
+    }
+
+    public SmeltingRecipe(int inputItemId, int inputMetadata, ItemStack output) {
         this.inputItemId = inputItemId;
+        this.inputMetadata = inputMetadata;
         this.output = output;
     }
 
     public int getInputItemId() {
         return this.inputItemId;
+    }
+
+    public int getInputMetadata() {
+        return this.inputMetadata;
     }
 
     public ItemStack getSmeltingResult() {
@@ -40,4 +50,3 @@ public final class SmeltingRecipe implements CraftingRecipe {
         return this.output;
     }
 }
-

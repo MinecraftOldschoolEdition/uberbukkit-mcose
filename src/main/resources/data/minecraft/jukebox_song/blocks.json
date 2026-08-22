@@ -1,0 +1,10 @@
+{
+  "sound_event": "minecraft:music_disc.blocks",
+  "description": {
+    "translate": "jukebox_song.minecraft.blocks"
+  },
+  "length_in_seconds": 345.0,
+  "comparator_output": 3,
+  "legacy_record_name": "blocks",
+  "legacy_sound_path": "streaming/blocks"
+}

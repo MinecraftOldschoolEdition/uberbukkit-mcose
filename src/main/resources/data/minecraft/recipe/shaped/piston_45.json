@@ -1,0 +1,31 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "AAA",
+    "BCB",
+    "BDB"
+  ],
+  "key": {
+    "A": {
+      "id": "minecraft:oak_planks",
+      "legacy_metadata": -1
+    },
+    "B": {
+      "id": "minecraft:cobblestone",
+      "legacy_metadata": -1
+    },
+    "C": {
+      "id": "minecraft:iron_ingot",
+      "legacy_metadata": 0
+    },
+    "D": {
+      "id": "minecraft:redstone",
+      "legacy_metadata": 0
+    }
+  },
+  "result": {
+    "id": "minecraft:piston",
+    "count": 1,
+    "legacy_metadata": 0
+  }
+}

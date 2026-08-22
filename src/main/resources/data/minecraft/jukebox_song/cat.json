@@ -1,0 +1,10 @@
+{
+  "sound_event": "minecraft:music_disc.cat",
+  "description": {
+    "translate": "jukebox_song.minecraft.cat"
+  },
+  "length_in_seconds": 185.0,
+  "comparator_output": 2,
+  "legacy_record_name": "cat",
+  "legacy_sound_path": "streaming/cat"
+}

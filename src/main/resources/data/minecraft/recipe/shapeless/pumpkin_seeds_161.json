@@ -1,0 +1,14 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "ingredients": [
+    {
+      "id": "minecraft:pumpkin_state",
+      "legacy_metadata": 0
+    }
+  ],
+  "result": {
+    "id": "minecraft:pumpkin_seeds",
+    "count": 4,
+    "legacy_metadata": 0
+  }
+}

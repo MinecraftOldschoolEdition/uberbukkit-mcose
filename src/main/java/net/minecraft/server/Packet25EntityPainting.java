@@ -22,7 +22,7 @@ public class Packet25EntityPainting extends Packet {
         this.c = entitypainting.c;
         this.d = entitypainting.d;
         this.e = entitypainting.a;
-        this.f = entitypainting.e.A;
+        this.f = entitypainting.getPaintingVariant().getLegacyTitle();
     }
 
     public void a(DataInputStream datainputstream) throws IOException {

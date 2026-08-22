@@ -328,6 +328,10 @@ public class NetLoginHandler extends NetHandler {
             
             // MCOSE: Signal modded server - enables modern fence collision and other compatibility flags
             netserverhandler.sendPacket(new Packet70Bed(19));
+            // Send the exact terrain type before any chunks. Packet1Login must
+            // retain its vanilla wire shape, so the client receives this as a
+            // separate one-byte MCOSE state signal.
+            netserverhandler.sendPacket(new Packet70Bed(Packet70Bed.terrainTypeStateReason(this.getClientTerrainType(worldserver))));
             GameRuleSync.send(entityplayer);
 
             // Poseidon parity: signal client to enable special visuals on overworld attach.
@@ -380,13 +384,15 @@ public class NetLoginHandler extends NetHandler {
                     WorldServer ws = this.server.getWorldServer(0);
                     if (ws != null && ws.worldData != null) {
                         int terrainType = ws.worldData.getTerrainType();
-                        if (isAlphaVisualTerrain(terrainType) || isInfdevVisualTerrain(terrainType)) {
+                        if (worldserver.worldProvider instanceof WorldProviderHell) {
+                            netserverhandler.sendPacket(new Packet70Bed(9)); // Nether always uses its own terrain atlas
+                        } else if (isAlphaVisualTerrain(terrainType) || isInfdevVisualTerrain(terrainType)) {
                             netserverhandler.sendPacket(new Packet70Bed(8)); // Terrain override on
                             if (terrainType == 5) {
                                 // Signal ALPHA_SNOW variant explicitly
                                 netserverhandler.sendPacket(new Packet70Bed(10));
                             }
-                        } else {
+                        } else if (!hasSkyTerrainType(worldserver)) {
                             netserverhandler.sendPacket(new Packet70Bed(9)); // Terrain override off
                         }
                     }
@@ -605,5 +611,24 @@ public class NetLoginHandler extends NetHandler {
         } catch (Throwable ignore) {}
 
         return (byte) worldserver.worldProvider.dimension;
+    }
+
+    private int getClientTerrainType(WorldServer worldserver) {
+        if (worldserver == null) {
+            return 0;
+        }
+
+        try {
+            if (worldserver.worldProvider instanceof WorldProviderHell) {
+                WorldServer overworld = this.server.getWorldServer(0);
+                if (overworld != null && overworld.worldData != null) {
+                    return overworld.worldData.getTerrainType();
+                }
+            }
+            if (worldserver.worldData != null) {
+                return worldserver.worldData.getTerrainType();
+            }
+        } catch (Throwable ignore) {}
+        return 0;
     }
 }

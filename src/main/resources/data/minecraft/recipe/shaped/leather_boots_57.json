@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "A A",
+    "A A"
+  ],
+  "key": {
+    "A": {
+      "id": "minecraft:leather",
+      "legacy_metadata": 0
+    }
+  },
+  "result": {
+    "id": "minecraft:leather_boots",
+    "count": 1,
+    "legacy_metadata": 0
+  }
+}

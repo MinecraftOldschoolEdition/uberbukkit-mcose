@@ -1,0 +1,12 @@
+{
+  "type": "minecraft:smelting",
+  "ingredient": {
+    "id": "minecraft:diamond_ore",
+    "legacy_metadata": -1
+  },
+  "result": {
+    "id": "minecraft:diamond",
+    "count": 1,
+    "legacy_metadata": 0
+  }
+}

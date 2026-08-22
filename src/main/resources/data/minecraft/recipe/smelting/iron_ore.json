@@ -1,0 +1,12 @@
+{
+  "type": "minecraft:smelting",
+  "ingredient": {
+    "id": "minecraft:iron_ore",
+    "legacy_metadata": -1
+  },
+  "result": {
+    "id": "minecraft:iron_ingot",
+    "count": 1,
+    "legacy_metadata": 0
+  }
+}

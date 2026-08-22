@@ -783,6 +783,11 @@ public class ServerConfigurationManager {
         entityplayer1.spawnIn(worldserver);
         entityplayer1.dead = false;
         GameRuleSync.send(entityplayer1);
+        // Keep the selected terrain renderer authoritative across every
+        // dimension transition, including returning from the Nether.
+        entityplayer1.netServerHandler.sendPacket(new Packet70Bed(
+            Packet70Bed.terrainTypeStateReason(this.getClientTerrainTypeForWorld(worldserver))
+        ));
         entityplayer1.netServerHandler.teleport(new Location(worldserver.getWorld(), entityplayer1.locX, entityplayer1.locY, entityplayer1.locZ, entityplayer1.yaw, entityplayer1.pitch));
         // CraftBukkit end
         this.a(entityplayer1, worldserver);
@@ -816,6 +821,10 @@ public class ServerConfigurationManager {
                 }
             } else if (skyTerrainType) {
                 entityplayer1.netServerHandler.sendPacket(new Packet70Bed(6));
+            } else {
+                // Legacy clients also need to leave the overworld terrain atlas
+                // behind when entering the Nether.
+                entityplayer1.netServerHandler.sendPacket(new Packet70Bed(9));
             }
         } catch (Throwable ignore) {}
         this.getPlayerManager(entityplayer1.dimension).addPlayer(entityplayer1);
@@ -1387,6 +1396,25 @@ public class ServerConfigurationManager {
         } catch (Throwable ignore) {}
 
         return (byte) worldserver.worldProvider.dimension;
+    }
+
+    private int getClientTerrainTypeForWorld(WorldServer worldserver) {
+        if (worldserver == null) {
+            return 0;
+        }
+
+        try {
+            if (worldserver.worldProvider instanceof WorldProviderHell) {
+                WorldServer overworld = this.server.getWorldServer(0);
+                if (overworld != null && overworld.worldData != null) {
+                    return overworld.worldData.getTerrainType();
+                }
+            }
+            if (worldserver.worldData != null) {
+                return worldserver.worldData.getTerrainType();
+            }
+        } catch (Throwable ignore) {}
+        return 0;
     }
 
     private boolean isSkyTerrainWorld(WorldServer worldserver) {

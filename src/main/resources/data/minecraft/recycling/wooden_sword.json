@@ -1,0 +1,9 @@
+{
+  "type": "mcose:recycling",
+  "method": "craft",
+  "result": {
+    "id": "minecraft:oak_planks",
+    "count": 2,
+    "legacy_metadata": 0
+  }
+}

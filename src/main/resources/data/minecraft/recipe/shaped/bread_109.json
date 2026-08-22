@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "AAA"
+  ],
+  "key": {
+    "A": {
+      "id": "minecraft:wheat",
+      "legacy_metadata": 0
+    }
+  },
+  "result": {
+    "id": "minecraft:bread",
+    "count": 1,
+    "legacy_metadata": 0
+  }
+}

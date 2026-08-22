@@ -83,6 +83,42 @@ public class ContainerInputBehaviorTest {
     }
 
     @Test
+    public void furnaceInputStacksFoodTo64RegardlessOfTheWorldRule() throws Exception {
+        for (boolean foodStacking : new boolean[] {false, true}) {
+            TestHuman player = playerWithFoodStacking(foodStacking);
+            TestContainer container = new TestContainer();
+            TestInventory furnace = new TestInventory(1);
+            container.add(new SlotFurnaceInput(furnace, 0, 0, 0));
+            player.inventory.b(new ItemStack(Item.PORK, 64));
+
+            container.a(0, 0, false, player);
+
+            assertEquals(64, furnace.getItem(0).count);
+            assertNull(player.inventory.j());
+        }
+    }
+
+    @Test
+    public void furnaceQuickMoveCombinesFoodStacksFromThePlayerInventory() throws Exception {
+        for (boolean foodStacking : new boolean[] {false, true}) {
+            TestHuman player = playerWithFoodStacking(foodStacking);
+            TileEntityFurnace furnace = new TileEntityFurnace();
+            ContainerFurnace container = new ContainerFurnace(player.inventory, furnace);
+            int sourceCount = foodStacking ? 4 : 1;
+            for (int slot = 9; slot < 25; ++slot) {
+                player.inventory.setItem(slot, new ItemStack(Item.PORK, sourceCount));
+            }
+
+            container.a(3);
+
+            assertEquals(16 * sourceCount, furnace.getItem(0).count);
+            for (int slot = 9; slot < 25; ++slot) {
+                assertNull(player.inventory.getItem(slot));
+            }
+        }
+    }
+
+    @Test
     public void quickCraftEvenlyDistributesAndKeepsRemainder() throws Exception {
         TestHuman player = player();
         TestContainer container = new TestContainer();

@@ -56,15 +56,15 @@ public class BlockRedstoneWire extends Block {
         int l1 = 0;
 
         this.a = false;
-        int directPower = world.getMaxIndirectPowerAt(i, j, k);
+        boolean flag = world.isBlockIndirectlyPowered(i, j, k);
 
         this.a = true;
         int i2;
         int j2;
         int k2;
 
-        if (directPower > 0) {
-            l1 = directPower > 15 ? 15 : directPower;
+        if (flag) {
+            l1 = 15;
         } else {
             for (i2 = 0; i2 < 4; ++i2) {
                 j2 = i;

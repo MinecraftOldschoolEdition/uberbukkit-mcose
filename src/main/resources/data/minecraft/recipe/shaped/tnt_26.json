@@ -1,0 +1,23 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "ABA",
+    "BAB",
+    "ABA"
+  ],
+  "key": {
+    "A": {
+      "id": "minecraft:gunpowder",
+      "legacy_metadata": 0
+    },
+    "B": {
+      "id": "minecraft:sand",
+      "legacy_metadata": -1
+    }
+  },
+  "result": {
+    "id": "minecraft:tnt",
+    "count": 1,
+    "legacy_metadata": 0
+  }
+}

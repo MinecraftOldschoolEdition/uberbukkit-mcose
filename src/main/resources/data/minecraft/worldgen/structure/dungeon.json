@@ -1,0 +1,22 @@
+{
+  "display_name": "Dungeon",
+  "loot_table": "minecraft:chests/dungeon",
+  "spawner_mobs": [
+    {
+      "legacy_entity_id": "Skeleton",
+      "weight": 1
+    },
+    {
+      "legacy_entity_id": "Zombie",
+      "weight": 2
+    },
+    {
+      "legacy_entity_id": "Zombie",
+      "weight": 0
+    },
+    {
+      "legacy_entity_id": "Spider",
+      "weight": 1
+    }
+  ]
+}

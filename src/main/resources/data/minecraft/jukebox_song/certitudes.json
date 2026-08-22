@@ -1,0 +1,10 @@
+{
+  "sound_event": "minecraft:music_disc.certitudes",
+  "description": {
+    "translate": "jukebox_song.minecraft.certitudes"
+  },
+  "length_in_seconds": 0.0,
+  "comparator_output": 0,
+  "legacy_record_name": "certitudes",
+  "legacy_sound_path": "streaming/certitudes"
+}

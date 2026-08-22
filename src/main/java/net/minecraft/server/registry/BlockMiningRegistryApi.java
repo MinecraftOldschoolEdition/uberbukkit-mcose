@@ -18,6 +18,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -25,13 +26,11 @@ import java.util.Set;
  * API-facing registry for block mining behavior.
  */
 public final class BlockMiningRegistryApi {
-    private static final Map<ResourceLocation, BlockMiningRule> byKey = new LinkedHashMap<ResourceLocation, BlockMiningRule>();
-    private static final Map<Block, BlockMiningRule> byBlock = new IdentityHashMap<Block, BlockMiningRule>();
-    private static final Map<Block, Map<Integer, BlockMiningRule>> byBlockMetadata = new IdentityHashMap<Block, Map<Integer, BlockMiningRule>>();
+    private static volatile State state = State.empty();
 
     private BlockMiningRegistryApi() {}
 
-    public static synchronized boolean register(ResourceLocation key, BlockMiningRule rule) {
+    public static boolean register(ResourceLocation key, BlockMiningRule rule) {
         if (key == null || rule == null) {
             return false;
         }
@@ -46,8 +45,16 @@ public final class BlockMiningRegistryApi {
             canonical = key;
         }
 
-        byKey.put(canonical, rule);
-        byBlock.put(block, rule);
+        synchronized (BlockMiningRegistryApi.class) {
+            State current = state;
+            LinkedHashMap<ResourceLocation, BlockMiningRule> byKey =
+                    new LinkedHashMap<ResourceLocation, BlockMiningRule>(current.byKey);
+            IdentityHashMap<Block, BlockMiningRule> byBlock =
+                    new IdentityHashMap<Block, BlockMiningRule>(current.byBlock);
+            byKey.put(canonical, rule);
+            byBlock.put(block, rule);
+            state = current.withRules(byKey, byBlock, current.byBlockMetadata);
+        }
         return true;
     }
 
@@ -62,7 +69,7 @@ public final class BlockMiningRegistryApi {
         return register(new ResourceLocation(normalized), rule);
     }
 
-    public static synchronized boolean register(Block block, BlockMiningRule rule) {
+    public static boolean register(Block block, BlockMiningRule rule) {
         if (block == null || rule == null) {
             return false;
         }
@@ -70,12 +77,20 @@ public final class BlockMiningRegistryApi {
         if (key == null) {
             return false;
         }
-        byKey.put(key, rule);
-        byBlock.put(block, rule);
+        synchronized (BlockMiningRegistryApi.class) {
+            State current = state;
+            LinkedHashMap<ResourceLocation, BlockMiningRule> byKey =
+                    new LinkedHashMap<ResourceLocation, BlockMiningRule>(current.byKey);
+            IdentityHashMap<Block, BlockMiningRule> byBlock =
+                    new IdentityHashMap<Block, BlockMiningRule>(current.byBlock);
+            byKey.put(key, rule);
+            byBlock.put(block, rule);
+            state = current.withRules(byKey, byBlock, current.byBlockMetadata);
+        }
         return true;
     }
 
-    public static synchronized boolean registerMetadataRule(ResourceLocation key, int metadata, BlockMiningRule rule) {
+    public static boolean registerMetadataRule(ResourceLocation key, int metadata, BlockMiningRule rule) {
         if (key == null || rule == null) {
             return false;
         }
@@ -97,38 +112,50 @@ public final class BlockMiningRegistryApi {
         return registerMetadataRule(new ResourceLocation(normalized), metadata, rule);
     }
 
-    public static synchronized boolean registerMetadataRule(Block block, int metadata, BlockMiningRule rule) {
+    public static boolean registerMetadataRule(Block block, int metadata, BlockMiningRule rule) {
         if (block == null || rule == null) {
             return false;
         }
 
-        if (!byBlock.containsKey(block)) {
-            register(block, BlockMiningRule.VANILLA);
+        ResourceLocation key = BlockRegistry.getKey(block);
+        if (key == null) return false;
+        synchronized (BlockMiningRegistryApi.class) {
+            State current = state;
+            LinkedHashMap<ResourceLocation, BlockMiningRule> byKey =
+                    new LinkedHashMap<ResourceLocation, BlockMiningRule>(current.byKey);
+            IdentityHashMap<Block, BlockMiningRule> byBlock =
+                    new IdentityHashMap<Block, BlockMiningRule>(current.byBlock);
+            if (!byBlock.containsKey(block)) {
+                byKey.put(key, BlockMiningRule.VANILLA);
+                byBlock.put(block, BlockMiningRule.VANILLA);
+            }
+            IdentityHashMap<Block, Map<Integer, BlockMiningRule>> byMetadata =
+                    copyMetadata(current.byBlockMetadata);
+            Map<Integer, BlockMiningRule> existing = byMetadata.get(block);
+            Map<Integer, BlockMiningRule> metadataRules = existing == null
+                    ? new HashMap<Integer, BlockMiningRule>()
+                    : new HashMap<Integer, BlockMiningRule>(existing);
+            metadataRules.put(Integer.valueOf(metadata & 15), rule);
+            byMetadata.put(block, Collections.unmodifiableMap(metadataRules));
+            state = current.withRules(byKey, byBlock, byMetadata);
         }
-
-        Map<Integer, BlockMiningRule> metadataRules = byBlockMetadata.get(block);
-        if (metadataRules == null) {
-            metadataRules = new HashMap<Integer, BlockMiningRule>();
-            byBlockMetadata.put(block, metadataRules);
-        }
-        metadataRules.put(Integer.valueOf(metadata & 15), rule);
         return true;
     }
 
-    public static synchronized BlockMiningRule get(ResourceLocation key) {
+    public static BlockMiningRule get(ResourceLocation key) {
         if (key == null) {
             return BlockMiningRule.VANILLA;
         }
 
         Block block = BlockRegistry.get(key);
         if (block != null) {
-            BlockMiningRule rule = byBlock.get(block);
+            BlockMiningRule rule = state.byBlock.get(block);
             if (rule != null) {
                 return rule;
             }
         }
 
-        BlockMiningRule direct = byKey.get(key);
+        BlockMiningRule direct = state.byKey.get(key);
         return direct != null ? direct : BlockMiningRule.VANILLA;
     }
 
@@ -143,11 +170,11 @@ public final class BlockMiningRegistryApi {
         return get(new ResourceLocation(normalized));
     }
 
-    public static synchronized BlockMiningRule get(Block block) {
+    public static BlockMiningRule get(Block block) {
         if (block == null) {
             return BlockMiningRule.VANILLA;
         }
-        BlockMiningRule rule = byBlock.get(block);
+        BlockMiningRule rule = state.byBlock.get(block);
         return rule != null ? rule : BlockMiningRule.VANILLA;
     }
 
@@ -209,15 +236,15 @@ public final class BlockMiningRegistryApi {
         return hasPreferredTool(player, rule.getPreferredTool());
     }
 
-    public static synchronized Set<ResourceLocation> keys() {
-        return Collections.unmodifiableSet(byKey.keySet());
+    public static Set<ResourceLocation> keys() {
+        return state.byKey.keySet();
     }
 
-    public static synchronized int size() {
-        return byKey.size();
+    public static int size() {
+        return state.byKey.size();
     }
 
-    static synchronized int bootstrapDefaults() {
+    static int bootstrapDefaults() {
         int registered = 0;
         for (int i = 0; i < Block.byId.length; i++) {
             Block block = Block.byId[i];
@@ -231,8 +258,121 @@ public final class BlockMiningRegistryApi {
         return registered;
     }
 
-    static synchronized boolean hasExplicitRule(Block block) {
-        return block != null && byBlock.containsKey(block);
+    static boolean hasExplicitRule(Block block) {
+        return block != null && state.byBlock.containsKey(block);
+    }
+
+    /** Atomically publishes the complete built-in mining and block-tag generation. */
+    static void publishBootstrap(
+            Map<Block, BlockMiningRule> rules,
+            Map<Block, Map<Integer, BlockMiningRule>> metadataRules,
+            RegistryTagBindings<Block> tagBindings,
+            long expectedBlockRegistryRevision) {
+        if (rules == null || metadataRules == null || tagBindings == null) {
+            throw new IllegalArgumentException("Mining bootstrap candidate cannot be null");
+        }
+        if (!BlockTags.REGISTRY.equals(tagBindings.registryKey())
+                || tagBindings.registryRevision() != expectedBlockRegistryRevision) {
+            throw new IllegalStateException(
+                    "Block registry changed while mining tags were being prepared");
+        }
+
+        LinkedHashMap<ResourceLocation, BlockMiningRule> byKey =
+                new LinkedHashMap<ResourceLocation, BlockMiningRule>();
+        IdentityHashMap<Block, BlockMiningRule> byBlock =
+                new IdentityHashMap<Block, BlockMiningRule>();
+        for (int i = 0; i < Block.byId.length; i++) {
+            Block block = Block.byId[i];
+            if (block == null) continue;
+            ResourceLocation key = BlockRegistry.getKey(block);
+            BlockMiningRule rule = rules.get(block);
+            if (key == null || rule == null) {
+                throw new IllegalStateException(
+                        "Incomplete mining bootstrap candidate for legacy block " + i);
+            }
+            byKey.put(key, rule);
+            byBlock.put(block, rule);
+        }
+
+        IdentityHashMap<Block, Map<Integer, BlockMiningRule>> immutableMetadata =
+                new IdentityHashMap<Block, Map<Integer, BlockMiningRule>>();
+        for (Map.Entry<Block, Map<Integer, BlockMiningRule>> entry
+                : metadataRules.entrySet()) {
+            if (entry.getKey() == null || entry.getValue() == null
+                    || !byBlock.containsKey(entry.getKey())) {
+                throw new IllegalStateException(
+                        "Invalid metadata mining bootstrap entry");
+            }
+            HashMap<Integer, BlockMiningRule> perMetadata =
+                    new HashMap<Integer, BlockMiningRule>();
+            for (Map.Entry<Integer, BlockMiningRule> metadata
+                    : entry.getValue().entrySet()) {
+                if (metadata.getKey() == null || metadata.getValue() == null) {
+                    throw new IllegalStateException(
+                            "Invalid metadata mining bootstrap rule");
+                }
+                perMetadata.put(Integer.valueOf(metadata.getKey().intValue() & 15),
+                        metadata.getValue());
+            }
+            immutableMetadata.put(entry.getKey(),
+                    Collections.unmodifiableMap(perMetadata));
+        }
+
+        final State candidate = new State(
+                byKey, byBlock, immutableMetadata, tagBindings);
+        boolean published = BlockRegistry.publishIfRevision(
+                expectedBlockRegistryRevision,
+                new Runnable() {
+                    public void run() {
+                        synchronized (BlockMiningRegistryApi.class) {
+                            state = candidate;
+                        }
+                    }
+                });
+        if (!published) {
+            throw new IllegalStateException(
+                    "Block registry changed before mining tag publication");
+        }
+    }
+
+    public static RegistryTagBindings<Block> tagBindings() {
+        return state.tagBindings;
+    }
+
+    public static boolean areTagBindingsCurrent() {
+        return state.tagBindings.isForRevision(
+                BlockRegistry.registrationRevision());
+    }
+
+    public static boolean isInTag(TagKey<Block> tag, Block block) {
+        synchronized (BlockRegistry.class) {
+            State current = currentTagState();
+            return current.tagBindings.contains(tag, block);
+        }
+    }
+
+    public static List<ResourceLocation> tagMemberKeys(TagKey<Block> tag) {
+        synchronized (BlockRegistry.class) {
+            State current = currentTagState();
+            return current.tagBindings.valueKeys(tag);
+        }
+    }
+
+    /** Deterministic common tag order consumed by synchronized fingerprinting. */
+    public static List<TagKey<Block>> synchronizedTagKeys() {
+        return BlockTags.synchronizedMiningTags();
+    }
+
+    private static State currentTagState() {
+        State current = state;
+        long registryRevision = BlockRegistry.registrationRevision();
+        if (!current.tagBindings.isForRevision(registryRevision)) {
+            throw new IllegalStateException(
+                    "Block tag bindings are stale for registry revision "
+                            + registryRevision + " (bound "
+                            + current.tagBindings.registryRevision() + ")");
+        }
+        return current;
     }
 
     private static Block blockFromWorld(World world, int x, int y, int z) {
@@ -246,12 +386,58 @@ public final class BlockMiningRegistryApi {
         return Block.byId[blockId];
     }
 
-    private static synchronized BlockMiningRule getMetadataRule(Block block, int metadata) {
-        Map<Integer, BlockMiningRule> metadataRules = byBlockMetadata.get(block);
+    private static BlockMiningRule getMetadataRule(Block block, int metadata) {
+        Map<Integer, BlockMiningRule> metadataRules =
+                state.byBlockMetadata.get(block);
         if (metadataRules == null) {
             return null;
         }
         return metadataRules.get(Integer.valueOf(metadata & 15));
+    }
+
+    private static IdentityHashMap<Block, Map<Integer, BlockMiningRule>> copyMetadata(
+            Map<Block, Map<Integer, BlockMiningRule>> source) {
+        IdentityHashMap<Block, Map<Integer, BlockMiningRule>> copy =
+                new IdentityHashMap<Block, Map<Integer, BlockMiningRule>>();
+        copy.putAll(source);
+        return copy;
+    }
+
+    private static final class State {
+        final Map<ResourceLocation, BlockMiningRule> byKey;
+        final Map<Block, BlockMiningRule> byBlock;
+        final Map<Block, Map<Integer, BlockMiningRule>> byBlockMetadata;
+        final RegistryTagBindings<Block> tagBindings;
+
+        State(
+                Map<ResourceLocation, BlockMiningRule> byKey,
+                Map<Block, BlockMiningRule> byBlock,
+                Map<Block, Map<Integer, BlockMiningRule>> byBlockMetadata,
+                RegistryTagBindings<Block> tagBindings) {
+            this.byKey = Collections.unmodifiableMap(
+                    new LinkedHashMap<ResourceLocation, BlockMiningRule>(byKey));
+            this.byBlock = Collections.unmodifiableMap(
+                    new IdentityHashMap<Block, BlockMiningRule>(byBlock));
+            this.byBlockMetadata = Collections.unmodifiableMap(
+                    copyMetadata(byBlockMetadata));
+            this.tagBindings = tagBindings;
+        }
+
+        State withRules(
+                Map<ResourceLocation, BlockMiningRule> newByKey,
+                Map<Block, BlockMiningRule> newByBlock,
+                Map<Block, Map<Integer, BlockMiningRule>> newMetadata) {
+            return new State(newByKey, newByBlock, newMetadata,
+                    this.tagBindings);
+        }
+
+        static State empty() {
+            return new State(
+                    new LinkedHashMap<ResourceLocation, BlockMiningRule>(),
+                    new IdentityHashMap<Block, BlockMiningRule>(),
+                    new IdentityHashMap<Block, Map<Integer, BlockMiningRule>>(),
+                    RegistryTagBindings.<Block>empty(BlockTags.REGISTRY, -1L));
+        }
     }
 
     private static float computeBreakProgressPerTick(EntityHuman player, Block block, BlockMiningRule rule) {

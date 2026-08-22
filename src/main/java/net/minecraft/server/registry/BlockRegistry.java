@@ -27,6 +27,7 @@ public final class BlockRegistry {
     private static final MappedRegistry<Block> runtimeRegistry = new MappedRegistry<Block>();
     private static final List<Listener> listeners = new ArrayList<Listener>();
     private static boolean scanned = false;
+    private static long registrationRevision = 0L;
 
     public interface Listener {
         void onRegistered(ResourceLocation key, Block block);
@@ -40,12 +41,14 @@ public final class BlockRegistry {
         if (existing != null && existing != block) {
             return;
         }
+        boolean changed = existing == null || !keyOf.containsKey(block);
         byKey.put(key, block);
         if (!keyOf.containsKey(block)) {
             keyOf.put(block, key);
         }
         runtimeRegistry.registerIfAbsent(key, block, legacyId);
         try { Registries.BLOCK.registerIfAbsent(key, block); } catch (Throwable ignored) {}
+        if (changed) registrationRevision++;
         for (int i = 0; i < listeners.size(); i++) {
             try { listeners.get(i).onRegistered(key, block); } catch (Throwable ignored) {}
         }
@@ -57,6 +60,7 @@ public final class BlockRegistry {
         if (existing == null) {
             byKey.put(alias, block);
             try { Registries.BLOCK.registerIfAbsent(alias, block); } catch (Throwable ignored) {}
+            registrationRevision++;
         }
     }
 
@@ -133,6 +137,26 @@ public final class BlockRegistry {
     public static Collection<ResourceLocation> primaryKeys() {
         ensureScanned();
         return Collections.unmodifiableCollection(keyOf.values());
+    }
+
+    /** Monotonic identity generation captured by immutable tag bindings. */
+    public static synchronized long registrationRevision() {
+        ensureScanned();
+        return registrationRevision;
+    }
+
+    public static long getRegistrationRevision() {
+        return registrationRevision();
+    }
+
+    /** Runs one publication while the canonical block identity is unchanged. */
+    static synchronized boolean publishIfRevision(
+            long expectedRevision,
+            Runnable publication) {
+        ensureScanned();
+        if (registrationRevision != expectedRevision) return false;
+        publication.run();
+        return true;
     }
 
     public static Collection<ResourceLocation> displayKeys() {
@@ -293,6 +317,7 @@ public final class BlockRegistry {
             if (!byKey.containsKey(alias)) {
                 byKey.put(alias, block);
                 try { Registries.BLOCK.registerIfAbsent(alias, block); } catch (Throwable ignored) {}
+                registrationRevision++;
             }
         } catch (Throwable ignored) {}
     }

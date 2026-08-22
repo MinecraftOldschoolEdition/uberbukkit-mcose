@@ -1,0 +1,21 @@
+{
+  "values": [
+    "minecraft:oak_planks",
+    "minecraft:oak_log",
+    "minecraft:bookshelf",
+    "minecraft:chest",
+    "minecraft:oak_fence",
+    "minecraft:oak_fence_gate",
+    "minecraft:jukebox",
+    "minecraft:note_block",
+    "minecraft:oak_trapdoor",
+    "minecraft:ladder",
+    "minecraft:pumpkin_state",
+    "minecraft:melon",
+    "minecraft:jack_o_lantern",
+    "minecraft:brown_mushroom_block",
+    "minecraft:red_mushroom_block",
+    "minecraft:crafting_table",
+    "minecraft:oak_stairs"
+  ]
+}

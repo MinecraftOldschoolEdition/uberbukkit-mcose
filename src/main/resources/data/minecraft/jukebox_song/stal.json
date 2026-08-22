@@ -1,0 +1,10 @@
+{
+  "sound_event": "minecraft:music_disc.stal",
+  "description": {
+    "translate": "jukebox_song.minecraft.stal"
+  },
+  "length_in_seconds": 150.0,
+  "comparator_output": 8,
+  "legacy_record_name": "stal",
+  "legacy_sound_path": "streaming/stal"
+}

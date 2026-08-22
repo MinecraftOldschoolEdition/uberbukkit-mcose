@@ -1,0 +1,23 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "AAA",
+    "ABA",
+    "AAA"
+  ],
+  "key": {
+    "A": {
+      "id": "minecraft:gold_block",
+      "legacy_metadata": -1
+    },
+    "B": {
+      "id": "minecraft:apple",
+      "legacy_metadata": 0
+    }
+  },
+  "result": {
+    "id": "minecraft:golden_apple",
+    "count": 1,
+    "legacy_metadata": 0
+  }
+}

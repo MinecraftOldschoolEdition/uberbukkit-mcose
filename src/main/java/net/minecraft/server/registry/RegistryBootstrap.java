@@ -12,7 +12,6 @@ public final class RegistryBootstrap {
         if (initialized) {
             return;
         }
-        initialized = true;
 
         long start = System.currentTimeMillis();
 
@@ -22,8 +21,12 @@ public final class RegistryBootstrap {
         ItemCapabilityRegistryBootstrap.initialize();
         BlockCapabilityRegistryBootstrap.initialize();
         BlockMiningRegistryBootstrap.initialize();
-        BlockRegistry.runSanityChecks();
-        ItemRegistry.runSanityChecks();
+        if (!BlockRegistry.runSanityChecks()) {
+            throw new IllegalStateException("Block registry sanity checks failed");
+        }
+        if (!ItemRegistry.runSanityChecks()) {
+            throw new IllegalStateException("Item registry sanity checks failed");
+        }
         LegacyIdBridge.refresh();
         System.out.println("[RegistryBootstrap] Block key hash: " + BlockRegistry.keysetFingerprint());
         System.out.println("[RegistryBootstrap] Item key hash: " + ItemRegistry.keysetFingerprint());
@@ -63,9 +66,15 @@ public final class RegistryBootstrap {
         AchievementRegistryBootstrap.initialize();
 
         RegistryDebugAsserts.runCoreIntegrityChecks();
+        RegistryRuntime.captureAndPublish();
+        String synchronizedDataFingerprint =
+                RegistryDataFingerprint.captureSynchronizedData();
 
         long elapsed = System.currentTimeMillis() - start;
+        initialized = true;
         System.out.println("[RegistryBootstrap] All server registries initialized in " + elapsed + "ms");
+        System.out.println("[RegistryBootstrap] Synchronized data hash: "
+                + synchronizedDataFingerprint);
     }
 
     public static synchronized boolean isInitialized() {

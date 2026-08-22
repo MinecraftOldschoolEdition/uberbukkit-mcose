@@ -1,0 +1,19 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "A  ",
+    "AA ",
+    "AAA"
+  ],
+  "key": {
+    "A": {
+      "id": "minecraft:stone_bricks",
+      "legacy_metadata": -1
+    }
+  },
+  "result": {
+    "id": "minecraft:stone_brick_stairs",
+    "count": 4,
+    "legacy_metadata": 0
+  }
+}

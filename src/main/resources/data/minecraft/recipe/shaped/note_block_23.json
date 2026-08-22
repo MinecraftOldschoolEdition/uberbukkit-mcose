@@ -1,0 +1,23 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "AAA",
+    "ABA",
+    "AAA"
+  ],
+  "key": {
+    "A": {
+      "id": "minecraft:oak_planks",
+      "legacy_metadata": -1
+    },
+    "B": {
+      "id": "minecraft:redstone",
+      "legacy_metadata": 0
+    }
+  },
+  "result": {
+    "id": "minecraft:note_block",
+    "count": 1,
+    "legacy_metadata": 0
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "A",
+    "B",
+    "C"
+  ],
+  "key": {
+    "A": {
+      "id": "minecraft:flint",
+      "legacy_metadata": 0
+    },
+    "B": {
+      "id": "minecraft:stick",
+      "legacy_metadata": 0
+    },
+    "C": {
+      "id": "minecraft:feather",
+      "legacy_metadata": 0
+    }
+  },
+  "result": {
+    "id": "minecraft:arrow",
+    "count": 4,
+    "legacy_metadata": 0
+  }
+}

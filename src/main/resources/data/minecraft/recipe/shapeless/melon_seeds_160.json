@@ -1,0 +1,14 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "ingredients": [
+    {
+      "id": "minecraft:melon_slice",
+      "legacy_metadata": 0
+    }
+  ],
+  "result": {
+    "id": "minecraft:melon_seeds",
+    "count": 1,
+    "legacy_metadata": 0
+  }
+}

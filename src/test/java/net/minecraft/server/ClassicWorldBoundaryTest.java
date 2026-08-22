@@ -29,6 +29,24 @@ public class ClassicWorldBoundaryTest {
         this.assertZWall(255.4D, 256.1D, 255.1D, 255.7D, 1.0D, 0.3D, 256.0D);
     }
 
+    @Test
+    public void virtualBedrockExistsBelowTheLevelRatherThanInsideItsEdgeColumns() {
+        List collisions = new ArrayList();
+        ClassicWorldBoundary.addCollisionBoxes(
+                true,
+                AxisAlignedBB.a(10.0D, -0.2D, 10.0D, 10.6D, 0.6D, 10.6D),
+                collisions
+        );
+
+        assertEquals(1, collisions.size());
+        AxisAlignedBB floor = (AxisAlignedBB) collisions.get(0);
+        AxisAlignedBB entity = AxisAlignedBB.a(10.0D, 0.3D, 10.0D, 10.6D, 2.1D, 10.6D);
+        assertEquals(-0.3D, floor.b(entity, -1.0D), 0.0000001D);
+        assertTrue(ClassicWorldBoundary.intersectsBoundary(
+                AxisAlignedBB.a(10.0D, -0.1D, 10.0D, 10.6D, 0.5D, 10.6D)
+        ));
+    }
+
     private void assertXWall(double queryMinX,
                              double queryMaxX,
                              double entityMinX,

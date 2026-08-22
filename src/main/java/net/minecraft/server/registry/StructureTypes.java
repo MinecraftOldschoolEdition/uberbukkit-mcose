@@ -1,85 +1,83 @@
 package net.minecraft.server.registry;
 
+import com.google.gson.JsonObject;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import net.minecraft.server.resource.RegistryDataLoader;
 import net.minecraft.server.util.ResourceLocation;
 
-import java.util.Collection;
-import java.util.Set;
-
-/**
- * Bootstrap class that registers all vanilla structure types.
- * Structure types are registered to Registries.STRUCTURE_TYPE.
- */
+/** Loads legacy structure configuration while generators remain Java-backed. */
 public final class StructureTypes {
-    // Dungeon structure type (includes both cobblestone and stone brick variants)
-    public static final ResourceLocation DUNGEON = new ResourceLocation("minecraft", "dungeon");
-    
-    // Special structures
-    public static final ResourceLocation HEROBRINE_SHRINE = new ResourceLocation("minecraft", "herobrine_shrine");
-    
-    private static boolean initialized = false;
-    
+    public static final ResourceLocation DUNGEON =
+            new ResourceLocation("minecraft", "dungeon");
+    public static final ResourceLocation HEROBRINE_SHRINE =
+            new ResourceLocation("minecraft", "herobrine_shrine");
+
+    private static final ResourceLocation LEGACY_ORDER =
+            new ResourceLocation("minecraft", "legacy_order");
+    private static boolean initialized;
+
     private StructureTypes() {}
-    
+
     public static synchronized void initialize() {
         if (initialized) return;
-        initialized = true;
-        
-        // Make sure loot tables are registered first
+
+        // The descriptor reference remains metadata only, but preserve the
+        // original bootstrap dependency and registry API visibility.
         LootTables.initialize();
-        
-        registerDungeon();
-        registerHerobrineShrine();
-        
-        System.out.println("[StructureTypes] Registered " + Registries.STRUCTURE_TYPE.keys().size() + " structure types");
+        List<ResourceLocation> keys = RegistryDataLoader.loadRequiredTag(
+                "worldgen/structure", LEGACY_ORDER);
+        List<ResourceLocation> expected = Arrays.asList(DUNGEON, HEROBRINE_SHRINE);
+        if (!expected.equals(keys)) {
+            throw new IllegalStateException("Legacy structure order must remain " + expected
+                    + " (was " + keys + ")");
+        }
+
+        Map<ResourceLocation, StructureType> decoded = RegistryDataLoader.loadRequired(
+                "worldgen/structure",
+                keys,
+                new RegistryDataLoader.Decoder<StructureType>() {
+                    public StructureType decode(ResourceLocation key, JsonObject json) {
+                        return StructureTypeCodec.decode(key, json);
+                    }
+                });
+        if (!StructureTypeRegistryApi.publishAtomic(decoded)) {
+            throw new IllegalStateException(
+                    "Built-in structure descriptors could not be published atomically");
+        }
+        initialized = true;
     }
-    
-    private static void registerDungeon() {
-        // Dungeon structure (cobblestone or stone brick variant, 25% monster dungeon chance)
-        StructureType type = StructureType.builder(DUNGEON)
-            .displayName("Dungeon")
-            .lootTable(LootTables.DUNGEON)
-            .spawnerMobs(
-                new String[] { "Skeleton", "Zombie", "Zombie", "Spider" },
-                new int[] { 1, 2, 0, 1 } // Skeleton: 25%, Zombie: 50%, Spider: 25%
-            )
-            .build();
-        
-        StructureTypeRegistryApi.register(DUNGEON, type);
-    }
-    
-    private static void registerHerobrineShrine() {
-        // Rare desert structure that triggers the Herobrine event when lit
-        StructureType type = StructureType.builder(HEROBRINE_SHRINE)
-            .displayName("Herobrine Shrine")
-            .build();
-        
-        StructureTypeRegistryApi.register(HEROBRINE_SHRINE, type);
-    }
-    
-    /**
-     * Gets a structure type by its resource location.
-     */
+
     public static StructureType get(ResourceLocation id) {
+        initialize();
         return StructureTypeRegistryApi.get(id);
     }
 
     public static StructureType getByIdentifier(String any) {
+        initialize();
         return StructureTypeRegistryApi.getByIdentifier(any);
     }
 
     public static ResourceLocation getKey(StructureType value) {
+        initialize();
         return StructureTypeRegistryApi.getKey(value);
     }
 
     public static Set<ResourceLocation> keys() {
+        initialize();
         return StructureTypeRegistryApi.keys();
     }
 
     public static Collection<StructureType> values() {
+        initialize();
         return StructureTypeRegistryApi.values();
     }
 
     public static int size() {
+        initialize();
         return StructureTypeRegistryApi.size();
     }
 

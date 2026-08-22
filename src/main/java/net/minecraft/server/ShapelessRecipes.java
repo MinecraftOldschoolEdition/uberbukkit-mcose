@@ -56,4 +56,14 @@ public class ShapelessRecipes implements CraftingRecipe {
     public int a() {
         return this.b.size();
     }
+
+    /** Returns defensive copies so publication and fingerprinting cannot mutate this recipe. */
+    public List<ItemStack> getRecipeIngredients() {
+        ArrayList<ItemStack> copy = new ArrayList<ItemStack>(this.b.size());
+        for (Object raw : this.b) {
+            ItemStack ingredient = (ItemStack)raw;
+            copy.add(ingredient == null ? null : ingredient.cloneItemStack());
+        }
+        return copy;
+    }
 }

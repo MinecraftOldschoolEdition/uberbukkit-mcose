@@ -1,0 +1,10 @@
+{
+  "sound_event": "minecraft:music_disc.tsuki_no_koibumi",
+  "description": {
+    "translate": "jukebox_song.minecraft.tsuki_no_koibumi"
+  },
+  "length_in_seconds": 0.0,
+  "comparator_output": 0,
+  "legacy_record_name": "tsuki no koibumi",
+  "legacy_sound_path": "streaming/tsuki no koibumi"
+}

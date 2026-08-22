@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "A"
+  ],
+  "key": {
+    "A": {
+      "id": "minecraft:diamond_block",
+      "legacy_metadata": -1
+    }
+  },
+  "result": {
+    "id": "minecraft:diamond",
+    "count": 9,
+    "legacy_metadata": 0
+  }
+}

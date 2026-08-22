@@ -79,4 +79,21 @@ public class ShapedRecipes implements CraftingRecipe {
     public int a() {
         return this.b * this.c;
     }
+
+    public int getRecipeWidth() {
+        return this.b;
+    }
+
+    public int getRecipeHeight() {
+        return this.c;
+    }
+
+    /** Returns defensive copies so fingerprinting cannot mutate the recipe. */
+    public ItemStack[] getRecipeIngredients() {
+        ItemStack[] copy = new ItemStack[this.d.length];
+        for (int i = 0; i < this.d.length; i++) {
+            copy[i] = this.d[i] == null ? null : this.d[i].cloneItemStack();
+        }
+        return copy;
+    }
 }

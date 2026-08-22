@@ -1,0 +1,23 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "A",
+    "A",
+    "B"
+  ],
+  "key": {
+    "A": {
+      "id": "minecraft:cobblestone",
+      "legacy_metadata": -1
+    },
+    "B": {
+      "id": "minecraft:stick",
+      "legacy_metadata": 0
+    }
+  },
+  "result": {
+    "id": "minecraft:stone_sword",
+    "count": 1,
+    "legacy_metadata": 0
+  }
+}

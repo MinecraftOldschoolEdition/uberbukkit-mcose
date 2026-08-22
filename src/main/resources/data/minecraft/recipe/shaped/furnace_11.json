@@ -1,0 +1,19 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "AAA",
+    "A A",
+    "AAA"
+  ],
+  "key": {
+    "A": {
+      "id": "minecraft:cobblestone",
+      "legacy_metadata": -1
+    }
+  },
+  "result": {
+    "id": "minecraft:furnace",
+    "count": 1,
+    "legacy_metadata": 0
+  }
+}

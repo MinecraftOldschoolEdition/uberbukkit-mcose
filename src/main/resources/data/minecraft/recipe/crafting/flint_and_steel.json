@@ -1,0 +1,22 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "A ",
+    " B"
+  ],
+  "key": {
+    "A": {
+      "id": "minecraft:iron_ingot",
+      "legacy_metadata": 0
+    },
+    "B": {
+      "id": "minecraft:flint",
+      "legacy_metadata": 0
+    }
+  },
+  "result": {
+    "id": "minecraft:flint_and_steel",
+    "count": 1,
+    "legacy_metadata": 0
+  }
+}

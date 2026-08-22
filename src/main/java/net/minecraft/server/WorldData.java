@@ -48,6 +48,7 @@ public class WorldData {
         if (gameRules.hasKey("punchToPrimeTNT")) this.punchToPrimeTNT = gameRules.m("punchToPrimeTNT");
         if (gameRules.hasKey("punchSheepForWool")) this.punchSheepForWool = gameRules.m("punchSheepForWool");
         if (gameRules.hasKey("toggleFoodStacking")) this.toggleFoodStacking = gameRules.m("toggleFoodStacking");
+        if (gameRules.hasKey("hoeGrassForSeeds")) this.hoeGrassForSeeds = gameRules.m("hoeGrassForSeeds");
         if (gameRules.hasKey("spawnRadius")) this.spawnRadius = Math.max(0, gameRules.e("spawnRadius"));
     }
 
@@ -98,10 +99,12 @@ public class WorldData {
         // Modern/client-compatible gamerule layout.
         boolean hasPunchToPrimeTNT = false;
         boolean hasPunchSheepForWool = false;
+        boolean hasHoeGrassForSeeds = false;
         if (nbttagcompound.hasKey("GameRules")) {
             NBTTagCompound gameRules = nbttagcompound.k("GameRules");
             hasPunchToPrimeTNT = gameRules.hasKey("punchToPrimeTNT");
             hasPunchSheepForWool = gameRules.hasKey("punchSheepForWool");
+            hasHoeGrassForSeeds = gameRules.hasKey("hoeGrassForSeeds");
             this.loadGameRulesFromCompound(gameRules);
         }
         // Load gamerules, defaulting to true if not present
@@ -123,12 +126,19 @@ public class WorldData {
             hasPunchSheepForWool = true;
         }
         if (nbttagcompound.hasKey("ToggleFoodStacking")) this.toggleFoodStacking = nbttagcompound.m("ToggleFoodStacking");
+        if (nbttagcompound.hasKey("HoeGrassForSeeds")) {
+            this.hoeGrassForSeeds = nbttagcompound.m("HoeGrassForSeeds");
+            hasHoeGrassForSeeds = true;
+        }
         // Migrate the old server-wide compatibility settings into worlds that predate these rules.
         if (!hasPunchToPrimeTNT) {
             this.punchToPrimeTNT = !UberbukkitConfig.getInstance().getBoolean("mechanics.tnt_require_lighter", true);
         }
         if (!hasPunchSheepForWool) {
             this.punchSheepForWool = UberbukkitConfig.getInstance().getBoolean("mechanics.sheep_drop_wool_on_punch", false);
+        }
+        if (!hasHoeGrassForSeeds) {
+            this.hoeGrassForSeeds = UberbukkitConfig.getInstance().getBoolean("mechanics.tile_grass_drop_seeds", false);
         }
         // Integer gamerules
         if (nbttagcompound.hasKey("SpawnRadius")) this.spawnRadius = nbttagcompound.e("SpawnRadius");
@@ -174,6 +184,7 @@ public class WorldData {
         this.punchToPrimeTNT = worlddata.punchToPrimeTNT;
         this.punchSheepForWool = worlddata.punchSheepForWool;
         this.toggleFoodStacking = worlddata.toggleFoodStacking;
+        this.hoeGrassForSeeds = worlddata.hoeGrassForSeeds;
         this.spawnRadius = worlddata.spawnRadius;
     }
 
@@ -240,6 +251,7 @@ public class WorldData {
         nbttagcompound.a("PunchToPrimeTNT", this.punchToPrimeTNT);
         nbttagcompound.a("PunchSheepForWool", this.punchSheepForWool);
         nbttagcompound.a("ToggleFoodStacking", this.toggleFoodStacking);
+        nbttagcompound.a("HoeGrassForSeeds", this.hoeGrassForSeeds);
         // Integer gamerules
         nbttagcompound.a("SpawnRadius", this.spawnRadius);
 
@@ -257,6 +269,7 @@ public class WorldData {
         gameRules.a("punchToPrimeTNT", this.punchToPrimeTNT);
         gameRules.a("punchSheepForWool", this.punchSheepForWool);
         gameRules.a("toggleFoodStacking", this.toggleFoodStacking);
+        gameRules.a("hoeGrassForSeeds", this.hoeGrassForSeeds);
         gameRules.a("spawnRadius", this.spawnRadius);
         nbttagcompound.a("GameRules", gameRules);
     }
@@ -393,6 +406,7 @@ public class WorldData {
     private boolean punchToPrimeTNT = false;
     private boolean punchSheepForWool = false;
     private boolean toggleFoodStacking = false;
+    private boolean hoeGrassForSeeds = false;
     
     // Gamerules (integer)
     private int spawnRadius = 10; // Vanilla default spawn randomization radius
@@ -422,6 +436,8 @@ public class WorldData {
     public void setPunchSheepForWool(boolean v) { this.punchSheepForWool = v; }
     public boolean getToggleFoodStacking() { return this.toggleFoodStacking; }
     public void setToggleFoodStacking(boolean v) { this.toggleFoodStacking = v; }
+    public boolean getHoeGrassForSeeds() { return this.hoeGrassForSeeds; }
+    public void setHoeGrassForSeeds(boolean v) { this.hoeGrassForSeeds = v; }
     
     // Integer gamerules
     public int getSpawnRadius() { return this.spawnRadius; }

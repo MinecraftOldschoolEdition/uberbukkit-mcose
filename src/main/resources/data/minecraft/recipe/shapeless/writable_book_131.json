@@ -1,0 +1,22 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "ingredients": [
+    {
+      "id": "minecraft:book",
+      "legacy_metadata": 0
+    },
+    {
+      "id": "minecraft:dye",
+      "legacy_metadata": 0
+    },
+    {
+      "id": "minecraft:feather",
+      "legacy_metadata": 0
+    }
+  ],
+  "result": {
+    "id": "minecraft:writable_book",
+    "count": 1,
+    "legacy_metadata": 0
+  }
+}

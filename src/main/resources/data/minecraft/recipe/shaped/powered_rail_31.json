@@ -1,0 +1,27 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "A A",
+    "ABA",
+    "ACA"
+  ],
+  "key": {
+    "A": {
+      "id": "minecraft:gold_ingot",
+      "legacy_metadata": 0
+    },
+    "B": {
+      "id": "minecraft:stick",
+      "legacy_metadata": 0
+    },
+    "C": {
+      "id": "minecraft:redstone",
+      "legacy_metadata": 0
+    }
+  },
+  "result": {
+    "id": "minecraft:powered_rail",
+    "count": 6,
+    "legacy_metadata": 0
+  }
+}

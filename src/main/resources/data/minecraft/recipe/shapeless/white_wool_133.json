@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "ingredients": [
+    {
+      "id": "minecraft:dye",
+      "legacy_metadata": 1
+    },
+    {
+      "id": "minecraft:white_wool",
+      "legacy_metadata": 0
+    }
+  ],
+  "result": {
+    "id": "minecraft:white_wool",
+    "count": 1,
+    "legacy_metadata": 14
+  }
+}

@@ -213,23 +213,29 @@ public class TileEntityFurnace extends TileEntity implements IInventory {
         // Check for smelt-recyclable items first (ore-based tools/armor)
         ItemStack recycleResult = RecyclingManager.getInstance().getSmeltRecycleResult(this.items[0]);
         if (recycleResult != null) {
-            // Can only recycle one item at a time (items with durability don't stack anyway)
-            if (this.items[2] == null) {
-                return true;
-            }
-            // Check if output slot can accept the recycled materials
-            if (!this.items[2].doMaterialsMatch(recycleResult)) {
-                return false;
-            }
-            int totalCount = this.items[2].count + recycleResult.count;
-            return totalCount <= this.getMaxStackSize() && totalCount <= recycleResult.getMaxStackSize();
+            return this.canStoreSmeltingResult(recycleResult);
         }
         
         // Fall back to normal furnace recipes
         ItemStack itemstack = FurnaceRecipes.getInstance().a(this.items[0]);
 
-        // CraftBukkit - consider resultant count instead of current count
-        return itemstack == null ? false : (this.items[2] == null ? true : (!this.items[2].doMaterialsMatch(itemstack) ? false : (this.items[2].count + itemstack.count <= this.getMaxStackSize() && this.items[2].count < this.items[2].getMaxStackSize() ? true : this.items[2].count + itemstack.count <= itemstack.getMaxStackSize())));
+        return itemstack != null && this.canStoreSmeltingResult(itemstack);
+    }
+
+    private boolean canStoreSmeltingResult(ItemStack result) {
+        if (this.items[2] == null) {
+            return true;
+        }
+        if (!this.items[2].doMaterialsMatch(result)) {
+            return false;
+        }
+        return this.items[2].count + result.count <= this.getFurnaceStackLimit(result);
+    }
+
+    private int getFurnaceStackLimit(ItemStack itemstack) {
+        return itemstack != null && itemstack.getItem() instanceof ItemFood
+                ? this.getMaxStackSize()
+                : Math.min(this.getMaxStackSize(), itemstack.getMaxStackSize());
     }
 
     public void burn() {

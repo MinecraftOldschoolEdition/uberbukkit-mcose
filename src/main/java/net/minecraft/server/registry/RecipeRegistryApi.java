@@ -11,7 +11,9 @@ import net.minecraft.server.util.ResourceLocation;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -22,11 +24,29 @@ import java.util.Set;
 public final class RecipeRegistryApi {
     private static int recipeCounter = 0;
     private static boolean bootstrapped = false;
-    private static final Map<Integer, SmeltingRecipe> smeltingRecipesByInput = new HashMap<Integer, SmeltingRecipe>();
+    private static volatile Map<Integer, SmeltingRecipe> smeltingRecipesByInput =
+            Collections.<Integer, SmeltingRecipe>emptyMap();
 
     private RecipeRegistryApi() {}
 
-    public static boolean register(ResourceLocation key, CraftingRecipe value) {
+    public static synchronized boolean publishAtomic(
+            Map<ResourceLocation, ? extends CraftingRecipe> staged) {
+        return Registries.RECIPE.registerAllAtomic(staged);
+    }
+
+    public static synchronized boolean replaceAllAtomic(
+            Map<ResourceLocation, ? extends CraftingRecipe> staged) {
+        return Registries.RECIPE.replaceAllAtomic(staged);
+    }
+
+    public static synchronized boolean canReplaceAllAtomic(
+            Map<ResourceLocation, ? extends CraftingRecipe> staged) {
+        return Registries.RECIPE.canReplaceAllAtomic(staged);
+    }
+
+    public static synchronized boolean register(
+            ResourceLocation key,
+            CraftingRecipe value) {
         return RegistryApiSupport.register(Registries.RECIPE, key, value);
     }
 
@@ -74,21 +94,107 @@ public final class RecipeRegistryApi {
         ensureSynchronized();
     }
 
-    public static ResourceLocation registerShaped(ResourceLocation key, ItemStack output, Object... recipeShapeAndMappings) {
+    static synchronized SmeltingRecipe smeltingRecipeForCurrentOutput(
+            int inputId,
+            ItemStack output) {
+        SmeltingRecipe recipe = smeltingRecipesByInput.get(Integer.valueOf(inputId));
+        if (recipe == null) {
+            for (CraftingRecipe candidate : Registries.RECIPE.values()) {
+                if (candidate instanceof SmeltingRecipe) {
+                    SmeltingRecipe smelting = (SmeltingRecipe)candidate;
+                    if (smelting.getInputItemId() == inputId
+                            && sameOutput(smelting.b(), output)) {
+                        recipe = smelting;
+                        break;
+                    }
+                }
+            }
+        }
+        if (recipe == null || !sameOutput(recipe.b(), output)) {
+            recipe = new SmeltingRecipe(inputId, output.cloneItemStack());
+        }
+        return recipe;
+    }
+
+    static synchronized Map<Integer, SmeltingRecipe> prepareAuthoritativeSmeltingRecipes(
+            Map<Integer, SmeltingRecipe> recipes) {
+        if (recipes == null) {
+            throw new IllegalArgumentException("Smelting recipe cache cannot be null");
+        }
+        return Collections.unmodifiableMap(
+                new LinkedHashMap<Integer, SmeltingRecipe>(recipes));
+    }
+
+    static synchronized void commitAuthoritativeSmeltingRecipes(
+            Map<Integer, SmeltingRecipe> preparedRecipes) {
+        smeltingRecipesByInput = preparedRecipes;
+    }
+
+    public static synchronized ResourceLocation registerShaped(
+            ResourceLocation key,
+            ItemStack output,
+            Object... recipeShapeAndMappings) {
         return RecipeManager.registerShaped(key, output, recipeShapeAndMappings);
     }
 
-    public static ResourceLocation registerShapeless(ResourceLocation key, ItemStack output, Object... inputs) {
+    public static synchronized ResourceLocation registerShapeless(
+            ResourceLocation key,
+            ItemStack output,
+            Object... inputs) {
         return RecipeManager.registerShapeless(key, output, inputs);
     }
 
-    public static ResourceLocation registerSmelting(ResourceLocation key, int inputItemId, ItemStack output) {
+    public static synchronized ResourceLocation registerSmelting(
+            ResourceLocation key,
+            int inputItemId,
+            ItemStack output) {
         return RecipeManager.registerSmelting(key, inputItemId, output);
     }
 
     public static synchronized ResourceLocation generateRecipeId(CraftingRecipe recipe) {
+        return generatedRecipeId(recipe, recipeCounter++);
+    }
+
+    /**
+     * Captures a private allocation cursor for startup staging. Previewing IDs
+     * advances only this candidate; the live counter is assigned after every
+     * owner and registry preflight has succeeded.
+     */
+    static synchronized PreparedRecipeIdAllocation prepareGeneratedRecipeIds(
+            int generatedIdFloor) {
+        if (generatedIdFloor < 0) {
+            throw new IllegalArgumentException("Generated recipe ID floor cannot be negative");
+        }
+        return new PreparedRecipeIdAllocation(
+                recipeCounter,
+                Math.max(recipeCounter, generatedIdFloor));
+    }
+
+    static ResourceLocation previewGeneratedRecipeId(
+            PreparedRecipeIdAllocation allocation,
+            CraftingRecipe recipe) {
+        if (allocation == null) {
+            throw new IllegalArgumentException("Recipe ID allocation is required");
+        }
+        return generatedRecipeId(recipe, allocation.nextCounter++);
+    }
+
+    static synchronized boolean canCommitGeneratedRecipeIds(
+            PreparedRecipeIdAllocation allocation) {
+        return allocation != null && recipeCounter == allocation.startCounter;
+    }
+
+    /** Nonthrowing assignment-only commit after startup publication preflight. */
+    static synchronized void commitGeneratedRecipeIds(
+            PreparedRecipeIdAllocation allocation) {
+        recipeCounter = allocation.nextCounter;
+    }
+
+    private static ResourceLocation generatedRecipeId(
+            CraftingRecipe recipe,
+            int counter) {
         if (recipe == null) {
-            return new ResourceLocation("minecraft", "recipe/unknown_" + (recipeCounter++));
+            return new ResourceLocation("minecraft", "recipe/unknown_" + counter);
         }
 
         ItemStack output = null;
@@ -98,7 +204,17 @@ public final class RecipeRegistryApi {
 
         String type = (recipe instanceof ShapedRecipes) ? "shaped" : "shapeless";
         String outputName = output == null ? "unknown" : getItemName(output.id);
-        return new ResourceLocation("minecraft", type + "/" + outputName + "_" + (recipeCounter++));
+        return new ResourceLocation("minecraft", type + "/" + outputName + "_" + counter);
+    }
+
+    static final class PreparedRecipeIdAllocation {
+        private final int startCounter;
+        private int nextCounter;
+
+        private PreparedRecipeIdAllocation(int startCounter, int nextCounter) {
+            this.startCounter = startCounter;
+            this.nextCounter = nextCounter;
+        }
     }
 
     public static List<CraftingRecipe> getByOutputItemKey(String itemKey) {
@@ -147,7 +263,10 @@ public final class RecipeRegistryApi {
             SmeltingRecipe recipe = smeltingRecipesByInput.get(Integer.valueOf(inputId));
             if (recipe == null || !sameOutput(recipe.b(), output)) {
                 recipe = new SmeltingRecipe(inputId, output.cloneItemStack());
-                smeltingRecipesByInput.put(Integer.valueOf(inputId), recipe);
+                Map<Integer, SmeltingRecipe> replacement =
+                        new HashMap<Integer, SmeltingRecipe>(smeltingRecipesByInput);
+                replacement.put(Integer.valueOf(inputId), recipe);
+                smeltingRecipesByInput = Collections.unmodifiableMap(replacement);
             }
             if (RegistryApiSupport.getKey(Registries.RECIPE, recipe) != null) {
                 continue;
@@ -157,7 +276,7 @@ public final class RecipeRegistryApi {
         }
     }
 
-    private static void ensureSynchronized() {
+    private static synchronized void ensureSynchronized() {
         RecipeTypeRegistryBootstrap.initialize();
         registerCraftingRecipes();
         registerSmeltingRecipes();

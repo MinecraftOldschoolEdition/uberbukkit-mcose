@@ -3,6 +3,7 @@ package net.minecraft.server;
 import java.util.ArrayList;
 import java.util.List;
 
+import net.minecraft.server.registry.PaintingVariantRegistryApi;
 import org.bukkit.event.painting.PaintingBreakByEntityEvent;
 import org.bukkit.event.painting.PaintingBreakByWorldEvent;
 
@@ -31,12 +32,14 @@ public class EntityPainting extends Entity {
         this.b = i;
         this.c = j;
         this.d = k;
-        ArrayList arraylist = new ArrayList();
-        EnumArt[] aenumart = EnumArt.values();
-        int i1 = aenumart.length;
+        ArrayList<PaintingVariant> arraylist = new ArrayList<PaintingVariant>();
+        PaintingVariant[] variants = PaintingVariantRegistryApi.values().toArray(
+                new PaintingVariant[PaintingVariantRegistryApi.size()]);
+        int i1 = variants.length;
 
         for (int j1 = 0; j1 < i1; ++j1) {
-            EnumArt enumart = aenumart[j1];
+            PaintingVariant variant = variants[j1];
+            EnumArt enumart = variant.getLegacyArt();
 
             // uberbukkit - make paintings show just the motives that exist in the target version
             if (enumart == EnumArt.BURNINGSKULL && Uberbukkit.getTargetPVN() < 8) continue;
@@ -44,12 +47,12 @@ public class EntityPainting extends Entity {
             this.e = enumart;
             this.b(l);
             if (this.h()) {
-                arraylist.add(enumart);
+                arraylist.add(variant);
             }
         }
 
         if (arraylist.size() > 0) {
-            this.e = (EnumArt) arraylist.get(this.random.nextInt(arraylist.size()));
+            this.e = arraylist.get(this.random.nextInt(arraylist.size())).getLegacyArt();
         }
 
         this.b(l);
@@ -59,11 +62,12 @@ public class EntityPainting extends Entity {
     }
 
     public void b(int i) {
+        PaintingVariant variant = this.getPaintingVariant();
         this.a = i;
         this.lastYaw = this.yaw = (float) (i * 90);
-        float f = (float) this.e.B;
-        float f1 = (float) this.e.C;
-        float f2 = (float) this.e.B;
+        float f = (float) variant.getPixelWidth();
+        float f1 = (float) variant.getPixelHeight();
+        float f2 = (float) variant.getPixelWidth();
 
         if (i != 0 && i != 2) {
             f = 0.5F;
@@ -96,22 +100,22 @@ public class EntityPainting extends Entity {
         }
 
         if (i == 0) {
-            f3 -= this.c(this.e.B);
+            f3 -= this.c(variant.getPixelWidth());
         }
 
         if (i == 1) {
-            f5 += this.c(this.e.B);
+            f5 += this.c(variant.getPixelWidth());
         }
 
         if (i == 2) {
-            f3 += this.c(this.e.B);
+            f3 += this.c(variant.getPixelWidth());
         }
 
         if (i == 3) {
-            f5 -= this.c(this.e.B);
+            f5 -= this.c(variant.getPixelWidth());
         }
 
-        f4 += this.c(this.e.C);
+        f4 += this.c(variant.getPixelHeight());
         this.setPosition((double) f3, (double) f4, (double) f5);
         float f7 = -0.00625F;
 
@@ -145,29 +149,30 @@ public class EntityPainting extends Entity {
         if (this.world.getEntities(this, this.boundingBox).size() > 0) {
             return false;
         } else {
-            int i = this.e.B / 16;
-            int j = this.e.C / 16;
+            PaintingVariant variant = this.getPaintingVariant();
+            int i = variant.getWidth();
+            int j = variant.getHeight();
             int k = this.b;
             int l = this.c;
             int i1 = this.d;
 
             if (this.a == 0) {
-                k = MathHelper.floor(this.locX - (double) ((float) this.e.B / 32.0F));
+                k = MathHelper.floor(this.locX - (double) ((float) variant.getPixelWidth() / 32.0F));
             }
 
             if (this.a == 1) {
-                i1 = MathHelper.floor(this.locZ - (double) ((float) this.e.B / 32.0F));
+                i1 = MathHelper.floor(this.locZ - (double) ((float) variant.getPixelWidth() / 32.0F));
             }
 
             if (this.a == 2) {
-                k = MathHelper.floor(this.locX - (double) ((float) this.e.B / 32.0F));
+                k = MathHelper.floor(this.locX - (double) ((float) variant.getPixelWidth() / 32.0F));
             }
 
             if (this.a == 3) {
-                i1 = MathHelper.floor(this.locZ - (double) ((float) this.e.B / 32.0F));
+                i1 = MathHelper.floor(this.locZ - (double) ((float) variant.getPixelWidth() / 32.0F));
             }
 
-            l = MathHelper.floor(this.locY - (double) ((float) this.e.C / 32.0F));
+            l = MathHelper.floor(this.locY - (double) ((float) variant.getPixelHeight() / 32.0F));
 
             int j1;
 
@@ -224,7 +229,7 @@ public class EntityPainting extends Entity {
 
     public void b(NBTTagCompound nbttagcompound) {
         nbttagcompound.a("Dir", (byte) this.a);
-        nbttagcompound.setString("Motive", this.e.A);
+        nbttagcompound.setString("Motive", this.getPaintingVariant().getLegacyTitle());
         nbttagcompound.a("TileX", this.b);
         nbttagcompound.a("TileY", this.c);
         nbttagcompound.a("TileZ", this.d);
@@ -236,19 +241,12 @@ public class EntityPainting extends Entity {
         this.c = nbttagcompound.e("TileY");
         this.d = nbttagcompound.e("TileZ");
         String s = nbttagcompound.getString("Motive");
-        EnumArt[] aenumart = EnumArt.values();
-        int i = aenumart.length;
+        PaintingVariant variant = PaintingVariantRegistryApi.getByLegacyTitle(s);
+        this.e = variant == null ? null : variant.getLegacyArt();
 
-        for (int j = 0; j < i; ++j) {
-            EnumArt enumart = aenumart[j];
-
-            if (enumart.A.equals(s)) {
-
-                // uberbukkit - make paintings show just the motives that exist in the target version
-                if (enumart == EnumArt.BURNINGSKULL && Uberbukkit.getTargetPVN() < 8) break;
-
-                this.e = enumart;
-            }
+        // uberbukkit - make paintings show just the motives that exist in the target version
+        if (this.e == EnumArt.BURNINGSKULL && Uberbukkit.getTargetPVN() < 8) {
+            this.e = null;
         }
 
         if (this.e == null) {
@@ -256,6 +254,14 @@ public class EntityPainting extends Entity {
         }
 
         this.b(this.a);
+    }
+
+    public PaintingVariant getPaintingVariant() {
+        PaintingVariant variant = PaintingVariantRegistryApi.getByLegacyArt(this.e);
+        if (variant == null) {
+            throw new IllegalStateException("Painting has no registered variant for " + this.e);
+        }
+        return variant;
     }
 
     public void a(double d0, double d1, double d2) {

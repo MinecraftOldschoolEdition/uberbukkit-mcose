@@ -27,7 +27,7 @@ public class ContainerFurnace extends Container {
     public ContainerFurnace(InventoryPlayer inventoryplayer, TileEntityFurnace tileentityfurnace) {
         this.entityHuman = inventoryplayer.d; // Uberbukkit
         this.a = tileentityfurnace;
-        this.a(new Slot(tileentityfurnace, 0, 56, 17));
+        this.a(new SlotFurnaceInput(tileentityfurnace, 0, 56, 17));
         this.a(new Slot(tileentityfurnace, 1, 56, 53));
         this.a(new SlotResult2(inventoryplayer.d, tileentityfurnace, 2, 116, 35));
 
@@ -106,12 +106,16 @@ public class ContainerFurnace extends Container {
             } else if (i >= 3 && i < 39) {
                 // Shift-clicking from player inventory - try to place in furnace slots
                 int beforeCount = itemstack1.count;
-                boolean isSmeltable = FurnaceRecipes.getInstance().a(itemstack1.getItem().id) != null ||
+                boolean isFood = itemstack1.getItem() instanceof ItemFood;
+                boolean isSmeltable = FurnaceRecipes.getInstance().a(itemstack1) != null ||
                                       RecyclingManager.getInstance().getSmeltRecycleResult(itemstack1) != null;
                 
                 if (isSmeltable) {
                     // Match the client: smeltable items prefer the input slot even if they can also burn.
                     this.a(itemstack1, 0, 1, false);
+                    if (itemstack1.count < beforeCount && isFood) {
+                        this.collectMatchingFoodIntoInput();
+                    }
                 } else if (TileEntityFurnace.isFuel(itemstack1)) {
                     this.a(itemstack1, 1, 2, false);
                 } else if (i >= 3 && i < 30) {
@@ -143,5 +147,32 @@ public class ContainerFurnace extends Container {
         }
 
         return itemstack;
+    }
+
+    private void collectMatchingFoodIntoInput() {
+        ItemStack input = this.a.getItem(0);
+        if (input == null || !(input.getItem() instanceof ItemFood)) {
+            return;
+        }
+
+        for (int slotIndex = 3; slotIndex < 39 && input.count < this.a.getMaxStackSize(); ++slotIndex) {
+            Slot playerSlot = (Slot)this.e.get(slotIndex);
+            ItemStack candidate = playerSlot.getItem();
+            if (candidate == null || !this.canStack(candidate, input)) {
+                continue;
+            }
+
+            this.a(candidate, 0, 1, false);
+            if (candidate.count == 0) {
+                playerSlot.c((ItemStack)null);
+            } else {
+                playerSlot.c();
+            }
+        }
+    }
+
+    private boolean canStack(ItemStack first, ItemStack second) {
+        return first.id == second.id
+                && (!first.usesData() || first.getData() == second.getData());
     }
 }

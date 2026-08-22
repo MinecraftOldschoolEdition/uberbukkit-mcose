@@ -1,0 +1,26 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "ABA",
+    "CCC"
+  ],
+  "key": {
+    "A": {
+      "id": "minecraft:redstone_torch",
+      "legacy_metadata": -1
+    },
+    "B": {
+      "id": "minecraft:redstone",
+      "legacy_metadata": 0
+    },
+    "C": {
+      "id": "minecraft:stone",
+      "legacy_metadata": -1
+    }
+  },
+  "result": {
+    "id": "minecraft:repeater",
+    "count": 1,
+    "legacy_metadata": 0
+  }
+}

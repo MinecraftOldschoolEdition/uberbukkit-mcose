@@ -1,0 +1,14 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "ingredients": [
+    {
+      "id": "minecraft:poppy",
+      "legacy_metadata": 0
+    }
+  ],
+  "result": {
+    "id": "minecraft:dye",
+    "count": 2,
+    "legacy_metadata": 1
+  }
+}

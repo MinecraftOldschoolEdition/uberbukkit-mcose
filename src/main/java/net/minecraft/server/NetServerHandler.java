@@ -45,9 +45,13 @@ import uk.betacraft.uberbukkit.packet.Packet62Sound;
 import uk.betacraft.uberbukkit.packet.Packet63Digging;
 import uk.betacraft.uberbukkit.protocol.Protocol;
 import net.minecraft.server.network.ModProtocol;
+import net.minecraft.server.network.ServerRulesProtocol;
 import net.minecraft.server.registry.BlockMiningRegistryApi;
+import net.minecraft.server.registry.RegistryDataFingerprint;
 import net.minecraft.server.registry.RegistrySyncSnapshot;
 import net.minecraft.server.registry.PlayerCapabilityRegistryApi;
+import net.minecraft.server.serverdirectory.ServerDirectoryManager;
+import net.minecraft.server.serverdirectory.ServerDirectoryProtocol;
 
 import net.minecraft.server.event.EventBus;
 import net.minecraft.server.event.events.AttackEntityEvent;
@@ -125,6 +129,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     private boolean modProtocolNegotiated = false;
     private int remoteModProtocolVersion = 0;
     private int negotiatedModFeatures = 0;
+    private boolean registryFingerprintVerified = false;
     private RegistrySyncSnapshot syncedRegistrySnapshot = null;
     private final OneShotGate modHelloGate = new OneShotGate();
     private final OneShotGate registrySyncRequestGate = new OneShotGate();
@@ -140,6 +145,10 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     private static final int FRIEND_REQUESTS_PER_WINDOW = 8;
     private final FixedWindowRateLimiter friendRequestLimiter =
             new FixedWindowRateLimiter(FRIEND_REQUEST_WINDOW_MS, FRIEND_REQUESTS_PER_WINDOW);
+    private static final long SERVER_DIRECTORY_REQUEST_WINDOW_MS = 2000L;
+    private static final int SERVER_DIRECTORY_REQUESTS_PER_WINDOW = 3;
+    private final FixedWindowRateLimiter serverDirectoryRequestLimiter =
+            new FixedWindowRateLimiter(SERVER_DIRECTORY_REQUEST_WINDOW_MS, SERVER_DIRECTORY_REQUESTS_PER_WINDOW);
     private static final long CHAT_ROOM_ACTION_WINDOW_MS = 2000L;
     private static final int CHAT_ROOM_ACTIONS_PER_WINDOW = 4;
     private final FixedWindowRateLimiter chatRoomActionLimiter =
@@ -225,6 +234,35 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     public boolean supportsModernTrapdoorPlacement() {
         return this.modProtocolNegotiated
             && (this.negotiatedModFeatures & ModProtocol.FEATURE_MODERN_TRAPDOOR_PLACEMENT) != 0;
+    }
+
+    public boolean supportsServerDirectory() {
+        return this.modProtocolNegotiated
+            && (this.negotiatedModFeatures & ModProtocol.FEATURE_SERVER_DIRECTORY) != 0;
+    }
+
+    public boolean supportsRegistryDataFingerprint() {
+        return this.modProtocolNegotiated
+            && (this.negotiatedModFeatures & ModProtocol.FEATURE_REGISTRY_DATA_FINGERPRINT) != 0;
+    }
+
+    public boolean supportsServerRules() {
+        return this.modProtocolNegotiated
+            && (this.negotiatedModFeatures & ModProtocol.FEATURE_SERVER_RULES) != 0;
+    }
+
+    public boolean isServerRulesConsentPending() {
+        return this.player != null && !this.player.hasAcceptedServerRules();
+    }
+
+    public void sendServerRulesScreen(int screen, java.util.List<String> rules) {
+        if (!this.supportsServerRules()) {
+            return;
+        }
+        byte[] payload = ServerRulesProtocol.createShowPayload(screen, rules);
+        if (payload.length > 0 && payload.length <= PacketLimits.MAX_CUSTOM_PAYLOAD_BYTES) {
+            this.sendPacket(new Packet250CustomPayload(ServerRulesProtocol.CHANNEL_SHOW, payload));
+        }
     }
 
     public void sendCloudTimeSync() {
@@ -668,6 +706,9 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     public void a(Packet10Flying packet10flying) {
         if (!isValidMovementPacket(packet10flying)) {
             disconnectInvalidMovementPacket();
+            return;
+        }
+        if (this.isServerRulesConsentPending()) {
             return;
         }
 
@@ -1631,6 +1672,9 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             this.disconnect("Invalid drop-all packet");
             return;
         }
+        if (this.isServerRulesConsentPending()) {
+            return;
+        }
 
         // poseidon
         PacketReceivedEvent event = new PacketReceivedEvent(server.getPlayer(player), packet14blockdig);
@@ -1883,6 +1927,9 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             return;
         }
         if (!this.checkInteractionLimit(packet15place.timestamp)) return;
+        if (this.isServerRulesConsentPending()) {
+            return;
+        }
 //        System.out.println("Packet15 received");
 //        System.out.println("a: " + packet15place.a);
 //        System.out.println("b: " + packet15place.b);
@@ -2242,6 +2289,9 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             this.disconnect("Invalid hotbar selection (Hacking?)");
             return;
         }
+        if (this.isServerRulesConsentPending()) {
+            return;
+        }
 
         // poseidon
         PacketReceivedEvent pevent = new PacketReceivedEvent(server.getPlayer(player), packet16blockitemswitch);
@@ -2307,6 +2357,9 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     }
 
     public void a(Packet3Chat packet3chat) {
+        if (this.isServerRulesConsentPending()) {
+            return;
+        }
         // poseidon
         PacketReceivedEvent event = new PacketReceivedEvent(server.getPlayer(player), packet3chat);
         server.getPluginManager().callEvent(event);
@@ -2652,6 +2705,9 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     }
 
     public void a(Packet7UseEntity packet7useentity) {
+        if (this.isServerRulesConsentPending()) {
+            return;
+        }
         // poseidon
         PacketReceivedEvent pevent = new PacketReceivedEvent(server.getPlayer(player), packet7useentity);
         server.getPluginManager().callEvent(pevent);
@@ -2776,6 +2832,9 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     }
 
     public void a(Packet101CloseWindow packet101closewindow) {
+        if (this.isServerRulesConsentPending()) {
+            return;
+        }
         PacketReceivedEvent event = new PacketReceivedEvent(server.getPlayer(player), packet101closewindow);
         server.getPluginManager().callEvent(event);
         if (event.isCancelled()) return;
@@ -2787,6 +2846,9 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     }
 
     public void a(Packet102WindowClick packet102windowclick) {
+        if (this.isServerRulesConsentPending()) {
+            return;
+        }
         if (this.player.dead) return; // CraftBukkit
         if (this.player.isSpectator()) {
             this.player.activeContainer.a();
@@ -3037,6 +3099,9 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     }
 
     public void a(Packet130UpdateSign packet130updatesign) {
+        if (this.isServerRulesConsentPending()) {
+            return;
+        }
         if (packet130updatesign == null || this.player == null || this.player.dead
                 || packet130updatesign.y < 0 || packet130updatesign.y >= 128) {
             return;
@@ -3203,6 +3268,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             this.remoteModProtocolVersion = helloInfo.version;
             this.negotiatedModFeatures = 0;
             this.modProtocolNegotiated = false;
+            this.registryFingerprintVerified = false;
 
             if (ModProtocol.isSupportedVersion(helloInfo.version)) {
                 this.modProtocolNegotiated = true;
@@ -3223,21 +3289,18 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
 
                 int serverFeatures = ModProtocol.resolveServerSupportedFeatures();
                 this.negotiatedModFeatures = helloInfo.featureBits & serverFeatures;
+                if (!this.supportsRegistryDataFingerprint()
+                        && !RegistryDataFingerprint.isBuiltInSynchronizedData(
+                                RegistryDataFingerprint.captureSynchronizedData())) {
+                    this.disconnectForRegistryDataMismatch();
+                    return;
+                }
                 int ackVersion = helloInfo.version == ModProtocol.PROTOCOL_VERSION_EXPERIMENTAL
                         ? ModProtocol.PROTOCOL_VERSION_EXPERIMENTAL
                         : ModProtocol.PROTOCOL_VERSION;
                 this.sendPacket(new Packet250CustomPayload(
                         ModProtocol.CHANNEL_HELLO_ACK,
                         ModProtocol.createHelloAckPayload(ackVersion, this.negotiatedModFeatures)));
-                if (this.player != null && this.player.getWorldServer() != null
-                        && this.player.getWorldServer().tracker != null) {
-                    this.player.getWorldServer().tracker.syncNativeBlockModelVisuals(this.player);
-                }
-                this.sendCloudTimeSync();
-                this.sendSkinPartSnapshotToClient();
-                if (this.player != null && this.player.isSpectator()) {
-                    this.player.setSpectatorTarget(this.player.getSpectatorTarget());
-                }
             }
             return;
         }
@@ -3249,27 +3312,42 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             if (!this.modProtocolNegotiated) {
                 return;
             }
-            int requestVersion = ModProtocol.readRegistryRequestVersion(packet250custompayload.data);
-            if (requestVersion != this.remoteModProtocolVersion) {
+            ModProtocol.RegistryRequestInfo request =
+                    ModProtocol.readRegistryRequestInfo(packet250custompayload.data);
+            String localFingerprint = RegistryDataFingerprint.captureSynchronizedData();
+            if (!ModProtocol.registryRequestMatches(
+                    request,
+                    this.remoteModProtocolVersion,
+                    this.supportsRegistryDataFingerprint(),
+                    localFingerprint)) {
+                this.disconnectForRegistryDataMismatch();
                 return;
             }
             this.syncedRegistrySnapshot = RegistrySyncSnapshot.captureLocal();
-            byte[] registryPayload = ModProtocol.createRegistrySyncPayload(this.syncedRegistrySnapshot);
+            byte[] registryPayload = ModProtocol.createRegistrySyncPayload(
+                    this.syncedRegistrySnapshot,
+                    this.supportsRegistryDataFingerprint());
             if (registryPayload.length > PacketLimits.MAX_CUSTOM_PAYLOAD_BYTES) {
                 a.warning("[MCOSE] Registry sync payload too large for Packet250: " + registryPayload.length + " bytes");
                 return;
             }
             this.sendPacket(new Packet250CustomPayload(ModProtocol.CHANNEL_REGISTRY_SYNC, registryPayload));
+            this.registryFingerprintVerified = true;
+            this.completeModProtocolExtensionBootstrap();
             return;
         }
 
         if (ModProtocol.CHANNEL_SKIN_PARTS.equals(packet250custompayload.channel)) {
+            if (!this.registryFingerprintVerified) {
+                return;
+            }
             this.handleSkinPartsPacket(packet250custompayload);
             return;
         }
 
         if (ModProtocol.CHANNEL_SPECTATOR.equals(packet250custompayload.channel)) {
-            if (!this.supportsSpectatorMode() || this.player == null || !this.player.isSpectator()
+            if (!this.registryFingerprintVerified || !this.supportsSpectatorMode()
+                    || this.player == null || !this.player.isSpectator()
                     || !this.spectatorActionLimiter.tryAcquire(System.currentTimeMillis())) {
                 return;
             }
@@ -3293,6 +3371,35 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
                 return;
             }
             this.player.setSpectatorTarget((EntityLiving) target);
+            return;
+        }
+
+        if (ServerRulesProtocol.CHANNEL_ACTION.equals(packet250custompayload.channel)) {
+            if (this.registryFingerprintVerified) {
+                this.handleServerRulesAction(packet250custompayload);
+            }
+            return;
+        }
+
+        if (ServerDirectoryProtocol.CHANNEL_REQUEST.equals(packet250custompayload.channel)) {
+            if (this.registryFingerprintVerified && this.supportsServerDirectory()) {
+                if (this.serverDirectoryRequestLimiter.tryAcquire(System.currentTimeMillis())) {
+                    ServerDirectoryManager.getInstance().handleCapabilityRequest(this, packet250custompayload.data);
+                } else {
+                    ServerDirectoryManager.getInstance().handleRateLimited(this);
+                }
+            }
+            return;
+        }
+
+        if (ServerDirectoryProtocol.CHANNEL_MUTATION.equals(packet250custompayload.channel)) {
+            if (this.registryFingerprintVerified && this.supportsServerDirectory()) {
+                if (this.serverDirectoryRequestLimiter.tryAcquire(System.currentTimeMillis())) {
+                    ServerDirectoryManager.getInstance().handleMutation(this, packet250custompayload.data);
+                } else {
+                    ServerDirectoryManager.getInstance().handleRateLimited(this);
+                }
+            }
             return;
         }
 
@@ -3335,6 +3442,68 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         
         // Handle other custom channels here if needed
         // (Voice chat, Herobrine events, etc. are handled by their own systems)
+    }
+
+    private void disconnectForRegistryDataMismatch() {
+        if (!this.disconnected) {
+            this.disconnect("Registry data mismatch: client and server data packs differ");
+        }
+    }
+
+    /** Publishes gameplay extension state only after registry compatibility is proven. */
+    private void completeModProtocolExtensionBootstrap() {
+        if (!this.registryFingerprintVerified) {
+            return;
+        }
+        if (this.player != null && this.player.getWorldServer() != null
+                && this.player.getWorldServer().tracker != null) {
+            this.player.getWorldServer().tracker.syncNativeBlockModelVisuals(this.player);
+        }
+        this.sendCloudTimeSync();
+        this.sendSkinPartSnapshotToClient();
+        if (this.isServerRulesConsentPending()) {
+            if (!this.supportsServerRules()) {
+                this.disconnect("This server requires a client that supports the Server Rules screen.");
+                return;
+            }
+            this.sendServerRulesScreen(
+                    ServerRulesProtocol.SCREEN_CONSENT,
+                    ServerRules.getRules(this.minecraftServer));
+        }
+        if (this.player != null && this.player.isSpectator()) {
+            this.player.setSpectatorTarget(this.player.getSpectatorTarget());
+        }
+    }
+
+    private void handleServerRulesAction(Packet250CustomPayload packet) {
+        if (!this.supportsServerRules() || this.player == null) {
+            return;
+        }
+        ServerRulesProtocol.ActionData action = ServerRulesProtocol.readActionPayload(packet == null ? null : packet.data);
+        if (action == null) {
+            return;
+        }
+        if (action.action == ServerRulesProtocol.ACTION_AGREE) {
+            if (!this.isServerRulesConsentPending()) {
+                return;
+            }
+            this.player.setServerRulesAccepted(true);
+            this.minecraftServer.serverConfigurationManager.savePlayerData(this.player);
+            return;
+        }
+        if (action.action == ServerRulesProtocol.ACTION_DISCONNECT) {
+            if (this.isServerRulesConsentPending()) {
+                this.disconnect("You chose to disconnect instead of agreeing to the server rules.");
+            }
+            return;
+        }
+        if (action.action == ServerRulesProtocol.ACTION_SAVE && ServerRules.canEdit(this.player)) {
+            if (ServerRules.saveRules(this.minecraftServer, action.rules)) {
+                this.sendMessage("Server rules saved.");
+            } else {
+                this.sendMessage("Could not save the server rules.");
+            }
+        }
     }
 
     private void handleSkinPartsPacket(Packet250CustomPayload packet) {

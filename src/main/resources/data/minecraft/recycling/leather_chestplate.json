@@ -1,0 +1,9 @@
+{
+  "type": "mcose:recycling",
+  "method": "craft",
+  "result": {
+    "id": "minecraft:leather",
+    "count": 8,
+    "legacy_metadata": 0
+  }
+}

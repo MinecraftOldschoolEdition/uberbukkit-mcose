@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "AAA",
+    "A A"
+  ],
+  "key": {
+    "A": {
+      "id": "minecraft:fire",
+      "legacy_metadata": -1
+    }
+  },
+  "result": {
+    "id": "minecraft:chainmail_helmet",
+    "count": 1,
+    "legacy_metadata": 0
+  }
+}

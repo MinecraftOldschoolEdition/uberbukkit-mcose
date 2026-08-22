@@ -14,7 +14,7 @@ import java.util.Locale;
 public class GameruleCommand extends VanillaCommand {
     
     // Boolean gamerules
-    private static final String[] BOOLEAN_RULES = {"doDayNightCycle", "tntexplodes", "mobGriefing", "doWeatherCycle", "doFireTick", "showDeathMessages", "sleepEnabled", "advertiseAchievements", "keepInventory", "punchToPrimeTNT", "punchSheepForWool", "toggleFoodStacking"};
+    private static final String[] BOOLEAN_RULES = {"doDayNightCycle", "tntexplodes", "mobGriefing", "doWeatherCycle", "doFireTick", "showDeathMessages", "sleepEnabled", "advertiseAchievements", "keepInventory", "punchToPrimeTNT", "punchSheepForWool", "toggleFoodStacking", "hoeGrassForSeeds"};
     // Integer gamerules
     private static final String[] INTEGER_RULES = {"spawnRadius", "spawnProtectionRadius"};
     
@@ -87,6 +87,9 @@ public class GameruleCommand extends VanillaCommand {
         if (ruleName.equalsIgnoreCase("toggleFoodStacking")) {
             return Boolean.valueOf(worldData.getToggleFoodStacking());
         }
+        if (ruleName.equalsIgnoreCase("hoeGrassForSeeds")) {
+            return Boolean.valueOf(worldData.getHoeGrassForSeeds());
+        }
         return null;
     }
 
@@ -118,6 +121,8 @@ public class GameruleCommand extends VanillaCommand {
             worldData.setPunchSheepForWool(value);
         } else if (ruleName.equalsIgnoreCase("toggleFoodStacking")) {
             worldData.setToggleFoodStacking(value);
+        } else if (ruleName.equalsIgnoreCase("hoeGrassForSeeds")) {
+            worldData.setHoeGrassForSeeds(value);
         } else {
             return false;
         }

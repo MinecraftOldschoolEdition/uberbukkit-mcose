@@ -1,0 +1,10 @@
+{
+  "type": "mcose:recycling",
+  "method": "craft",
+  "legacy_inert": true,
+  "result": {
+    "id": "minecraft:string",
+    "count": 3,
+    "legacy_metadata": 0
+  }
+}

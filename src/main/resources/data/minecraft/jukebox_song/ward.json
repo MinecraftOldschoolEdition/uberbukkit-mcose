@@ -1,0 +1,10 @@
+{
+  "sound_event": "minecraft:music_disc.ward",
+  "description": {
+    "translate": "jukebox_song.minecraft.ward"
+  },
+  "length_in_seconds": 251.0,
+  "comparator_output": 10,
+  "legacy_record_name": "ward",
+  "legacy_sound_path": "streaming/ward"
+}

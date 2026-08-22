@@ -1,0 +1,23 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "AAA",
+    "ABA",
+    "AAA"
+  ],
+  "key": {
+    "A": {
+      "id": "minecraft:paper",
+      "legacy_metadata": 0
+    },
+    "B": {
+      "id": "minecraft:compass",
+      "legacy_metadata": 0
+    }
+  },
+  "result": {
+    "id": "minecraft:map",
+    "count": 1,
+    "legacy_metadata": 0
+  }
+}

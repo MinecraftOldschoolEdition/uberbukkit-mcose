@@ -1,0 +1,23 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "AAA",
+    " B ",
+    " B "
+  ],
+  "key": {
+    "A": {
+      "id": "minecraft:diamond",
+      "legacy_metadata": 0
+    },
+    "B": {
+      "id": "minecraft:stick",
+      "legacy_metadata": 0
+    }
+  },
+  "result": {
+    "id": "minecraft:diamond_pickaxe",
+    "count": 1,
+    "legacy_metadata": 0
+  }
+}

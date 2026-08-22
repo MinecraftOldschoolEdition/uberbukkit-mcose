@@ -1,0 +1,12 @@
+{
+  "type": "minecraft:smelting",
+  "ingredient": {
+    "id": "minecraft:wet_sponge",
+    "legacy_metadata": -1
+  },
+  "result": {
+    "id": "minecraft:sponge",
+    "count": 1,
+    "legacy_metadata": 0
+  }
+}

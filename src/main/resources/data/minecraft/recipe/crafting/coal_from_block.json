@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "#"
+  ],
+  "key": {
+    "#": {
+      "id": "minecraft:coal_block",
+      "legacy_metadata": -1
+    }
+  },
+  "result": {
+    "id": "minecraft:coal",
+    "count": 9,
+    "legacy_metadata": 0
+  }
+}

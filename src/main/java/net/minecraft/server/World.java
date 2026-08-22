@@ -23,6 +23,8 @@ import java.util.*;
 import net.minecraft.server.event.EventBus;
 import net.minecraft.server.event.events.EntitySpawnEvent;
 import net.minecraft.server.registry.BlockCapabilityRegistryApi;
+import net.minecraft.server.registry.RegistryAccess;
+import net.minecraft.server.registry.RegistryRuntime;
 import net.minecraft.server.util.ResourceLocation;
 import uk.betacraft.uberbukkit.packet.Packet62Sound;
 
@@ -65,6 +67,7 @@ public class World implements IBlockAccess {
     public Random random = new Random();
     public boolean s = false;
     public WorldProvider worldProvider; // CraftBukkit - remove final
+    private final RegistryAccess registryAccess = RegistryRuntime.current().worldAccess();
     protected List u = new ArrayList();
     public IChunkProvider chunkProvider; // CraftBukkit - protected -> public
     protected final IDataManager w;
@@ -98,6 +101,11 @@ public class World implements IBlockAccess {
 
     public WorldChunkManager getWorldChunkManager() {
         return this.worldProvider.b;
+    }
+
+    /** Frozen STATIC + WORLD + DIMENSIONS registry view owned by this world. */
+    public RegistryAccess getRegistryAccess() {
+        return this.registryAccess;
     }
 
     // CraftBukkit start
@@ -2329,10 +2337,10 @@ public class World implements IBlockAccess {
 
     private void indexScheduledTick(NextTickListEntry nextticklistentry) {
         Long key = Long.valueOf(chunkKeyFromBlockCoords(nextticklistentry.a, nextticklistentry.c));
-        Set chunkTicks = (Set) this.scheduledTickChunkIndex.get(key);
+        TreeSet chunkTicks = (TreeSet) this.scheduledTickChunkIndex.get(key);
 
         if (chunkTicks == null) {
-            chunkTicks = new HashSet();
+            chunkTicks = new TreeSet();
             this.scheduledTickChunkIndex.put(key, chunkTicks);
         }
 
@@ -2370,6 +2378,21 @@ public class World implements IBlockAccess {
 
     private void markScheduledTickDirty(Long key) {
         this.scheduledTickDirtyChunks.add(key);
+    }
+
+    private boolean isScheduledTickOwnerReady(long key) {
+        int chunkX = (int) key;
+        int chunkZ = (int) (key >> 32);
+        int minX = (chunkX << 4) - 8;
+        int minZ = (chunkZ << 4) - 8;
+
+        // Every update in this owner chunk can safely use the legacy eight-block
+        // callback radius once the owner's full horizontal halo is loaded.
+        return this.a(minX, 0, minZ, minX + 31, 127, minZ + 31);
+    }
+
+    private boolean isScheduledTickDue(NextTickListEntry nextticklistentry, boolean force) {
+        return force || nextticklistentry.e <= this.blockTickTime;
     }
 
     public boolean shouldSavePendingBlockTicksForChunk(int chunkX, int chunkZ) {
@@ -2413,7 +2436,10 @@ public class World implements IBlockAccess {
                 }
             }
         } else {
-            if (this.a(i - b0, j - b0, k - b0, i + b0, j + b0, k + b0)) {
+            // Scheduled ticks belong to their containing chunk. A temporarily
+            // unavailable neighbor may delay execution, but must not erase the
+            // owner's sand, fluid, redstone, or plant update.
+            if (this.isLoaded(i, j, k)) {
                 if (l > 0) {
                     nextticklistentry.a((long) i1 + this.blockTickTime);
                 }
@@ -3713,33 +3739,75 @@ public class World implements IBlockAccess {
     }
 
     public boolean a(boolean flag) {
-        int i = this.E.size();
+        int initialSize = this.E.size();
 
-        if (i != this.F.size()) {
+        if (initialSize != this.F.size()) {
             throw new IllegalStateException("TickNextTick list out of synch");
         } else {
-            if (i > 1000) {
-                i = 1000;
+            PriorityQueue readyOwnerHeads = new PriorityQueue();
+            Map readyOwnerIterators = new HashMap();
+            Iterator ownerIterator = this.scheduledTickChunkIndex.entrySet().iterator();
+
+            while (ownerIterator.hasNext()) {
+                Map.Entry owner = (Map.Entry) ownerIterator.next();
+                TreeSet ownerTicks = (TreeSet) owner.getValue();
+
+                if (!ownerTicks.isEmpty()) {
+                    Iterator ownerTicksIterator = ownerTicks.iterator();
+                    NextTickListEntry head = (NextTickListEntry) ownerTicksIterator.next();
+
+                    // Like modern per-chunk tick containers, inactive owners retain
+                    // their ordered queue and contribute no per-entry scan cost.
+                    if (this.isScheduledTickDue(head, flag) && this.isScheduledTickOwnerReady(((Long) owner.getKey()).longValue())) {
+                        readyOwnerHeads.add(head);
+                        readyOwnerIterators.put(head, ownerTicksIterator);
+                    }
+                }
             }
 
-            for (int j = 0; j < i; ++j) {
-                NextTickListEntry nextticklistentry = (NextTickListEntry) this.E.first();
+            ArrayList ticksToRun = new ArrayList(Math.min(1000, initialSize));
+            int collected = 0;
 
-                if (!flag && nextticklistentry.e > this.blockTickTime) {
-                    break;
+            // K-way merge the ordered owner heads. Only ready work counts toward
+            // the legacy 1000-update cap; blocked owners never hide a later owner.
+            while (collected < 1000 && !readyOwnerHeads.isEmpty()) {
+                NextTickListEntry nextticklistentry = (NextTickListEntry) readyOwnerHeads.remove();
+                Iterator ownerTicks = (Iterator) readyOwnerIterators.remove(nextticklistentry);
+                ticksToRun.add(nextticklistentry);
+                ++collected;
+
+                if (ownerTicks.hasNext()) {
+                    NextTickListEntry nextHead = (NextTickListEntry) ownerTicks.next();
+
+                    if (this.isScheduledTickDue(nextHead, flag)) {
+                        readyOwnerHeads.add(nextHead);
+                        readyOwnerIterators.put(nextHead, ownerTicks);
+                    }
+                }
+            }
+
+            // Collect before invoking callbacks so updates scheduled by a callback
+            // enter the next server tick, matching container-based collectors. Keep
+            // each entry indexed until its callback-time readiness check succeeds;
+            // this preserves its exact time and duplicate-suppression identity when
+            // an earlier callback unloads the owner or its halo.
+            Iterator tickIterator = ticksToRun.iterator();
+
+            while (tickIterator.hasNext()) {
+                NextTickListEntry nextticklistentry = (NextTickListEntry) tickIterator.next();
+                long ownerKey = chunkKeyFromBlockCoords(nextticklistentry.a, nextticklistentry.c);
+
+                if (!this.isScheduledTickOwnerReady(ownerKey)) {
+                    continue;
                 }
 
                 this.E.remove(nextticklistentry);
                 this.F.remove(nextticklistentry);
                 this.unindexScheduledTick(nextticklistentry);
-                byte b0 = 8;
+                int blockId = this.getTypeId(nextticklistentry.a, nextticklistentry.b, nextticklistentry.c);
 
-                if (this.a(nextticklistentry.a - b0, nextticklistentry.b - b0, nextticklistentry.c - b0, nextticklistentry.a + b0, nextticklistentry.b + b0, nextticklistentry.c + b0)) {
-                    int k = this.getTypeId(nextticklistentry.a, nextticklistentry.b, nextticklistentry.c);
-
-                    if (k == nextticklistentry.d && k > 0) {
-                        Block.byId[k].a(this, nextticklistentry.a, nextticklistentry.b, nextticklistentry.c, this.random);
-                    }
+                if (blockId == nextticklistentry.d && blockId > 0) {
+                    Block.byId[blockId].a(this, nextticklistentry.a, nextticklistentry.b, nextticklistentry.c, this.random);
                 }
             }
 

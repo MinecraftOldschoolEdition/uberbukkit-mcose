@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "AAA"
+  ],
+  "key": {
+    "A": {
+      "id": "minecraft:sandstone",
+      "legacy_metadata": -1
+    }
+  },
+  "result": {
+    "id": "minecraft:stone_slab",
+    "count": 3,
+    "legacy_metadata": 1
+  }
+}

@@ -3,10 +3,15 @@ package net.minecraft.server.registry;
 import net.minecraft.server.util.ResourceLocation;
 
 import java.util.Collection;
+import java.util.Map;
 import java.util.Set;
 
 public final class StructureTypeRegistryApi {
     private StructureTypeRegistryApi() {}
+
+    public static boolean publishAtomic(Map<ResourceLocation, StructureType> staged) {
+        return Registries.STRUCTURE_TYPE.registerAllAtomic(staged);
+    }
 
     public static boolean register(ResourceLocation key, StructureType value) {
         return RegistryApiSupport.register(Registries.STRUCTURE_TYPE, key, value);
@@ -44,4 +49,3 @@ public final class StructureTypeRegistryApi {
         return RegistryApiSupport.canonicalizeIdentifier(Registries.STRUCTURE_TYPE, any);
     }
 }
-

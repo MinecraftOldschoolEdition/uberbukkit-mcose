@@ -8,6 +8,7 @@ import java.util.UUID;
 import java.util.regex.Pattern;
 
 public class PoseidonConfig extends Configuration {
+    public static final boolean DEFAULT_ENTITY_ACTIVATION_ENABLED = false;
     private static PoseidonConfig singleton;
     private final int configVersion = 6;
     private Integer[] treeBlacklistIDs;
@@ -304,9 +305,9 @@ public class PoseidonConfig extends Configuration {
         generateConfigOption("settings.entity-tracking.action-priority.mob-update-frequency", 4);
         generateConfigOption("settings.entity-tracking.action-priority.vehicle-update-frequency", 4);
 
-        // Entity Activation Settings - throttles far-away idle mob AI.
-        generateConfigOption("settings.entity-activation.info", "Controls Paper-style throttling for far-away idle creature AI. Projectiles, items, vehicles, players, TNT, and active combat/leash states remain fully ticked.");
-        generateConfigOption("settings.entity-activation.enabled", true);
+        // Entity Activation Settings - opt-in because throttling changes legacy gameplay.
+        generateConfigOption("settings.entity-activation.info", "Optional Paper-style throttling for far-away idle creature AI. Disabled by default to preserve legacy gameplay; projectiles, items, vehicles, players, TNT, and active combat/leash states remain fully ticked when enabled.");
+        generateConfigOption("settings.entity-activation.enabled", DEFAULT_ENTITY_ACTIVATION_ENABLED);
         generateConfigOption("settings.entity-activation.monster-range", 32);
         generateConfigOption("settings.entity-activation.animal-range", 32);
         generateConfigOption("settings.entity-activation.water-range", 16);

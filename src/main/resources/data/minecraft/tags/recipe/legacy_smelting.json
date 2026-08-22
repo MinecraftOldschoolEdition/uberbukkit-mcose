@@ -1,0 +1,16 @@
+{
+  "replace": false,
+  "values": [
+    "minecraft:smelting/iron_ore",
+    "minecraft:smelting/gold_ore",
+    "minecraft:smelting/diamond_ore",
+    "minecraft:smelting/sand",
+    "minecraft:smelting/porkchop",
+    "minecraft:smelting/cod",
+    "minecraft:smelting/cobblestone",
+    "minecraft:smelting/clay_ball",
+    "minecraft:smelting/cactus",
+    "minecraft:smelting/oak_log",
+    "minecraft:smelting/wet_sponge"
+  ]
+}

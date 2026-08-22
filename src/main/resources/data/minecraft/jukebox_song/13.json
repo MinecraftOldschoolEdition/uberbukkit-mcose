@@ -1,0 +1,10 @@
+{
+  "sound_event": "minecraft:music_disc.13",
+  "description": {
+    "translate": "jukebox_song.minecraft.13"
+  },
+  "length_in_seconds": 178.0,
+  "comparator_output": 1,
+  "legacy_record_name": "13",
+  "legacy_sound_path": "streaming/13"
+}

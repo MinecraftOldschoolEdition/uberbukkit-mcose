@@ -1,0 +1,12 @@
+{
+  "type": "minecraft:smelting",
+  "ingredient": {
+    "id": "minecraft:cactus",
+    "legacy_metadata": -1
+  },
+  "result": {
+    "id": "minecraft:dye",
+    "count": 1,
+    "legacy_metadata": 2
+  }
+}

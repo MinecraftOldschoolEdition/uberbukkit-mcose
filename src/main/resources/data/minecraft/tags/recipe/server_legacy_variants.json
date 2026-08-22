@@ -1,0 +1,13 @@
+{
+  "replace": false,
+  "values": [
+    "minecraft:server/ladder_gap",
+    "minecraft:server/sandstone_duplicate",
+    "minecraft:server/pumpkin_seeds_wildcard",
+    "minecraft:server/glowstone_legacy",
+    "minecraft:server/white_wool_legacy",
+    "minecraft:server/stone_pressure_plate_legacy",
+    "minecraft:server/oak_pressure_plate_legacy",
+    "minecraft:server/stone_slab_legacy"
+  ]
+}

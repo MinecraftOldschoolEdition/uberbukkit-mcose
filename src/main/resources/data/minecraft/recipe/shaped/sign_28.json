@@ -1,0 +1,23 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "AAA",
+    "AAA",
+    " B "
+  ],
+  "key": {
+    "A": {
+      "id": "minecraft:oak_planks",
+      "legacy_metadata": -1
+    },
+    "B": {
+      "id": "minecraft:stick",
+      "legacy_metadata": 0
+    }
+  },
+  "result": {
+    "id": "minecraft:sign",
+    "count": 1,
+    "legacy_metadata": 0
+  }
+}

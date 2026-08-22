@@ -1,0 +1,22 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "ABA",
+    "ABA"
+  ],
+  "key": {
+    "A": {
+      "id": "minecraft:stick",
+      "legacy_metadata": 0
+    },
+    "B": {
+      "id": "minecraft:oak_planks",
+      "legacy_metadata": -1
+    }
+  },
+  "result": {
+    "id": "minecraft:oak_fence_gate",
+    "count": 1,
+    "legacy_metadata": 0
+  }
+}

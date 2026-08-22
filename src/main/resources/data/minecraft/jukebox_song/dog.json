@@ -1,0 +1,10 @@
+{
+  "sound_event": "minecraft:music_disc.dog",
+  "description": {
+    "translate": "jukebox_song.minecraft.dog"
+  },
+  "length_in_seconds": 0.0,
+  "comparator_output": 0,
+  "legacy_record_name": "dog",
+  "legacy_sound_path": "streaming/Dog"
+}

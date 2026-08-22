@@ -1,0 +1,19 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "AAA",
+    "A A",
+    "A A"
+  ],
+  "key": {
+    "A": {
+      "id": "minecraft:gold_ingot",
+      "legacy_metadata": 0
+    }
+  },
+  "result": {
+    "id": "minecraft:golden_leggings",
+    "count": 1,
+    "legacy_metadata": 0
+  }
+}

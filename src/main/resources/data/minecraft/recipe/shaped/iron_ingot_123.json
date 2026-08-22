@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "A"
+  ],
+  "key": {
+    "A": {
+      "id": "minecraft:iron_block",
+      "legacy_metadata": -1
+    }
+  },
+  "result": {
+    "id": "minecraft:iron_ingot",
+    "count": 9,
+    "legacy_metadata": 0
+  }
+}

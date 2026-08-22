@@ -3,10 +3,15 @@ package net.minecraft.server.registry;
 import net.minecraft.server.util.ResourceLocation;
 
 import java.util.Collection;
+import java.util.Map;
 import java.util.Set;
 
 public final class JukeboxSongRegistryApi {
     private JukeboxSongRegistryApi() {}
+
+    public static boolean publishAtomic(Map<ResourceLocation, JukeboxSong> staged) {
+        return Registries.JUKEBOX_SONG.registerAllAtomic(staged);
+    }
 
     public static boolean register(ResourceLocation key, JukeboxSong value) {
         return RegistryApiSupport.register(Registries.JUKEBOX_SONG, key, value);
@@ -44,4 +49,3 @@ public final class JukeboxSongRegistryApi {
         return RegistryApiSupport.canonicalizeIdentifier(Registries.JUKEBOX_SONG, any);
     }
 }
-

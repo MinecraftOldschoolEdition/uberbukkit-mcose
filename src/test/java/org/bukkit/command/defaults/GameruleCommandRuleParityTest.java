@@ -24,7 +24,8 @@ public class GameruleCommandRuleParityTest {
         "keepInventory",
         "punchToPrimeTNT",
         "punchSheepForWool",
-        "toggleFoodStacking"
+        "toggleFoodStacking",
+        "hoeGrassForSeeds"
     };
 
     private static final String[] INTEGER_RULES = {

@@ -1,0 +1,10 @@
+{
+  "sound_event": "minecraft:music_disc.strad",
+  "description": {
+    "translate": "jukebox_song.minecraft.strad"
+  },
+  "length_in_seconds": 188.0,
+  "comparator_output": 9,
+  "legacy_record_name": "strad",
+  "legacy_sound_path": "streaming/strad"
+}

@@ -1,0 +1,12 @@
+{
+  "type": "minecraft:smelting",
+  "ingredient": {
+    "id": "minecraft:cobblestone",
+    "legacy_metadata": -1
+  },
+  "result": {
+    "id": "minecraft:stone",
+    "count": 1,
+    "legacy_metadata": 0
+  }
+}

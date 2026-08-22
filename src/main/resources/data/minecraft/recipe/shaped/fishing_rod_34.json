@@ -1,0 +1,23 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "  A",
+    " AB",
+    "A B"
+  ],
+  "key": {
+    "A": {
+      "id": "minecraft:stick",
+      "legacy_metadata": 0
+    },
+    "B": {
+      "id": "minecraft:string",
+      "legacy_metadata": 0
+    }
+  },
+  "result": {
+    "id": "minecraft:fishing_rod",
+    "count": 1,
+    "legacy_metadata": 0
+  }
+}

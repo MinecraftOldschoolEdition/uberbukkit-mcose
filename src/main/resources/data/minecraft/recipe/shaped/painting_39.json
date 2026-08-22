@@ -1,0 +1,23 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "AAA",
+    "ABA",
+    "AAA"
+  ],
+  "key": {
+    "A": {
+      "id": "minecraft:stick",
+      "legacy_metadata": 0
+    },
+    "B": {
+      "id": "minecraft:white_wool",
+      "legacy_metadata": -1
+    }
+  },
+  "result": {
+    "id": "minecraft:painting",
+    "count": 1,
+    "legacy_metadata": 0
+  }
+}

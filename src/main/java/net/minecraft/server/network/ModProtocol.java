@@ -1,6 +1,7 @@
 package net.minecraft.server.network;
 
 import net.minecraft.server.PacketLimits;
+import net.minecraft.server.registry.RegistryDataFingerprint;
 import net.minecraft.server.registry.RegistrySyncSnapshot;
 
 import java.io.ByteArrayInputStream;
@@ -34,6 +35,12 @@ public final class ModProtocol {
     public static final int FEATURE_MODERN_TRAPDOOR_PLACEMENT = 1 << 13;
     /** Native block-state visuals use the client model system; ordinary entity/block packets remain the state transport. */
     public static final int FEATURE_BLOCK_MODEL_STATES = 1 << 14;
+    /** Versioned public server-directory management over authenticated server-side HTTPS. */
+    public static final int FEATURE_SERVER_DIRECTORY = 1 << 15;
+    /** Requires canonical data-registry agreement before extension bootstrap completes. */
+    public static final int FEATURE_REGISTRY_DATA_FINGERPRINT = 1 << 16;
+    /** Server-provided rules GUI, including the first-join consent gate. */
+    public static final int FEATURE_SERVER_RULES = 1 << 17;
 
     public static final String CHANNEL_HELLO = "MCOSE|MOD_HELLO";
     public static final String CHANNEL_HELLO_ACK = "MCOSE|MOD_HELLO_ACK";
@@ -97,7 +104,80 @@ public final class ModProtocol {
     }
 
     public static int readRegistryRequestVersion(byte[] payload) {
-        return readHelloVersion(payload);
+        RegistryRequestInfo request = readRegistryRequestInfo(payload);
+        return request.valid ? request.version : -1;
+    }
+
+    public static byte[] createRegistryRequestPayload(int protocolVersion) {
+        try {
+            ByteArrayOutputStream baos = new ByteArrayOutputStream(4);
+            DataOutputStream out = new DataOutputStream(baos);
+            out.writeInt(protocolVersion);
+            out.flush();
+            return baos.toByteArray();
+        } catch (Throwable t) {
+            return new byte[0];
+        }
+    }
+
+    public static byte[] createRegistryRequestPayload(
+            int protocolVersion,
+            String synchronizedDataFingerprint) {
+        try {
+            if (!isSha256(synchronizedDataFingerprint)) {
+                return new byte[0];
+            }
+            ByteArrayOutputStream baos = new ByteArrayOutputStream(70);
+            DataOutputStream out = new DataOutputStream(baos);
+            out.writeInt(protocolVersion);
+            out.writeUTF(synchronizedDataFingerprint);
+            out.flush();
+            return baos.toByteArray();
+        } catch (Throwable t) {
+            return new byte[0];
+        }
+    }
+
+    /** Strictly decodes either the legacy four-byte request or the negotiated hash shape. */
+    public static RegistryRequestInfo readRegistryRequestInfo(byte[] payload) {
+        if (payload == null || payload.length < 4) {
+            return new RegistryRequestInfo(-1, "", false);
+        }
+        try {
+            DataInputStream in = new DataInputStream(new ByteArrayInputStream(payload));
+            int version = in.readInt();
+            String fingerprint = in.available() == 0 ? "" : in.readUTF();
+            boolean valid = in.available() == 0
+                    && (fingerprint.length() == 0 || isSha256(fingerprint));
+            in.close();
+            return new RegistryRequestInfo(version, fingerprint, valid);
+        } catch (Throwable ignored) {
+            return new RegistryRequestInfo(-1, "", false);
+        }
+    }
+
+    /**
+     * Applies the negotiated compatibility contract before any registry state
+     * is admitted: modern peers must match exactly, while old peers are safe
+     * only against the immutable built-in data baseline.
+     */
+    public static boolean registryRequestMatches(
+            RegistryRequestInfo request,
+            int expectedProtocolVersion,
+            boolean synchronizedDataFingerprintNegotiated,
+            String localSynchronizedDataFingerprint) {
+        if (request == null || !request.valid || request.version != expectedProtocolVersion
+                || !isSha256(localSynchronizedDataFingerprint)) {
+            return false;
+        }
+        if (synchronizedDataFingerprintNegotiated) {
+            return request.hasSynchronizedDataFingerprint()
+                    && localSynchronizedDataFingerprint.equals(
+                            request.synchronizedDataFingerprint);
+        }
+        return !request.hasSynchronizedDataFingerprint()
+                && RegistryDataFingerprint.isBuiltInSynchronizedData(
+                        localSynchronizedDataFingerprint);
     }
 
     public static int resolveServerSupportedFeatures() {
@@ -114,7 +194,10 @@ public final class ModProtocol {
                 | FEATURE_BLOCK_MODEL_VISUALS
                 | FEATURE_DROP_ALL_ITEMS
                 | FEATURE_MODERN_TRAPDOOR_PLACEMENT
-                | FEATURE_BLOCK_MODEL_STATES;
+                | FEATURE_BLOCK_MODEL_STATES
+                | FEATURE_SERVER_DIRECTORY
+                | FEATURE_REGISTRY_DATA_FINGERPRINT
+                | FEATURE_SERVER_RULES;
         if (net.minecraft.server.ZstdRuntime.isAvailable()) {
             features |= FEATURE_CHUNK_ZSTD;
         }
@@ -210,10 +293,31 @@ public final class ModProtocol {
     }
 
     public static byte[] createRegistrySyncPayload(RegistrySyncSnapshot snapshot) {
+        return createRegistrySyncPayload(snapshot, true);
+    }
+
+    public static byte[] createRegistrySyncPayload(
+            RegistrySyncSnapshot snapshot,
+            boolean includeSynchronizedDataFingerprint) {
         if (snapshot == null) {
             return new byte[0];
         }
-        return snapshot.toBytes();
+        return includeSynchronizedDataFingerprint
+                ? snapshot.toBytes()
+                : snapshot.toLegacyBytes();
+    }
+
+    private static boolean isSha256(String value) {
+        if (value == null || value.length() != 64) {
+            return false;
+        }
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     public static byte[] createSkinPartsPayload(String username, int modelPartMask) {
@@ -268,6 +372,26 @@ public final class ModProtocol {
         public HelloInfo(int version, int featureBits) {
             this.version = version;
             this.featureBits = featureBits;
+        }
+    }
+
+    public static final class RegistryRequestInfo {
+        public final int version;
+        public final String synchronizedDataFingerprint;
+        public final boolean valid;
+
+        public RegistryRequestInfo(
+                int version,
+                String synchronizedDataFingerprint,
+                boolean valid) {
+            this.version = version;
+            this.synchronizedDataFingerprint = synchronizedDataFingerprint == null
+                    ? "" : synchronizedDataFingerprint;
+            this.valid = valid;
+        }
+
+        public boolean hasSynchronizedDataFingerprint() {
+            return isSha256(this.synchronizedDataFingerprint);
         }
     }
 

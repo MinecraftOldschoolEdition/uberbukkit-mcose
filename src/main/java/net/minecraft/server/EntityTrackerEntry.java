@@ -662,7 +662,7 @@ public class EntityTrackerEntry {
                         painting.c,
                         painting.d,
                         painting.a,
-                        painting.e.A));
+                        painting.getPaintingVariant().getLegacyTitle()));
     }
 
     void syncNativeBlockModelVisual(EntityPlayer observer) {

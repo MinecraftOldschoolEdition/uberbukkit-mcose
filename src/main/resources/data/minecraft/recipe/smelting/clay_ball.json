@@ -1,0 +1,12 @@
+{
+  "type": "minecraft:smelting",
+  "ingredient": {
+    "id": "minecraft:clay_ball",
+    "legacy_metadata": -1
+  },
+  "result": {
+    "id": "minecraft:brick",
+    "count": 1,
+    "legacy_metadata": 0
+  }
+}

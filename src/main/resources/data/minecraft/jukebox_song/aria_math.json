@@ -1,0 +1,10 @@
+{
+  "sound_event": "minecraft:music_disc.aria_math",
+  "description": {
+    "translate": "jukebox_song.minecraft.aria_math"
+  },
+  "length_in_seconds": 0.0,
+  "comparator_output": 0,
+  "legacy_record_name": "aria math",
+  "legacy_sound_path": "streaming/Aria Math"
+}

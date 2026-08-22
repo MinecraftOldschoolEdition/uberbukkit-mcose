@@ -77,6 +77,11 @@ public final class DefaultPermissions {
     public static void registerCorePermissions() {
         Permission parent = registerPermission(ROOT, "Gives the user the ability to use all Craftbukkit utilities and commands");
 
+        registerPermission(
+                "mcose.serverbrowser.advertise",
+                "Allows a player to create, update, or remove this server's public MCOSE server-browser listing.",
+                PermissionDefault.OP);
+
         CommandPermissions.registerPermissions(parent);
         BroadcastPermissions.registerPermissions(parent);
 

@@ -3,6 +3,7 @@ package net.minecraft.server.registry;
 import net.minecraft.server.Block;
 import net.minecraft.server.CraftingRecipe;
 import net.minecraft.server.Item;
+import net.minecraft.server.PaintingVariant;
 import net.minecraft.server.WorldGenerator;
 import net.minecraft.server.Achievement;
 import net.minecraft.server.Statistic;
@@ -36,6 +37,7 @@ public final class Registries {
     public static final SimpleRegistry<Statistic> STAT = new SimpleRegistry<Statistic>();
     public static final SimpleRegistry<Achievement> ACHIEVEMENT = new SimpleRegistry<Achievement>();
     public static final SimpleRegistry<net.minecraft.server.EnumArt> PAINTING_MOTIVE = new SimpleRegistry<net.minecraft.server.EnumArt>();
+    public static final SimpleRegistry<PaintingVariant> PAINTING_VARIANT = new SimpleRegistry<PaintingVariant>();
     public static final SimpleRegistry<JukeboxSong> JUKEBOX_SONG = new SimpleRegistry<JukeboxSong>();
     public static final SimpleRegistry<SpawnGroup> SPAWN_GROUP = new SimpleRegistry<SpawnGroup>();
     
@@ -82,6 +84,7 @@ public final class Registries {
         REGISTRIES.register(new ResourceLocation("minecraft", "stat"), STAT);
         REGISTRIES.register(new ResourceLocation("minecraft", "achievement"), ACHIEVEMENT);
         REGISTRIES.register(new ResourceLocation("minecraft", "painting_motive"), PAINTING_MOTIVE);
+        REGISTRIES.register(new ResourceLocation("minecraft", "painting_variant"), PAINTING_VARIANT);
         REGISTRIES.register(new ResourceLocation("minecraft", "jukebox_song"), JUKEBOX_SONG);
         REGISTRIES.register(new ResourceLocation("minecraft", "spawn_group"), SPAWN_GROUP);
         
@@ -106,4 +109,3 @@ public final class Registries {
 
     private Registries() {}
 }
-

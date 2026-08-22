@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "#"
+  ],
+  "key": {
+    "#": {
+      "id": "minecraft:redstone_block",
+      "legacy_metadata": -1
+    }
+  },
+  "result": {
+    "id": "minecraft:redstone",
+    "count": 9,
+    "legacy_metadata": 0
+  }
+}

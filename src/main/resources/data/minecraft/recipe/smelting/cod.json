@@ -1,0 +1,12 @@
+{
+  "type": "minecraft:smelting",
+  "ingredient": {
+    "id": "minecraft:cod",
+    "legacy_metadata": -1
+  },
+  "result": {
+    "id": "minecraft:cooked_cod",
+    "count": 1,
+    "legacy_metadata": 0
+  }
+}

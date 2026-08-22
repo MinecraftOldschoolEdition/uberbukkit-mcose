@@ -1,0 +1,10 @@
+{
+  "sound_event": "minecraft:music_disc.far",
+  "description": {
+    "translate": "jukebox_song.minecraft.far"
+  },
+  "length_in_seconds": 174.0,
+  "comparator_output": 5,
+  "legacy_record_name": "far",
+  "legacy_sound_path": "streaming/far"
+}

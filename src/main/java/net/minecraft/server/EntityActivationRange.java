@@ -243,7 +243,11 @@ final class EntityActivationRange {
         }
 
         PoseidonConfig config = PoseidonConfig.getInstance();
-        enabled = getConfigBoolean(config, "settings.entity-activation.enabled", true);
+        enabled = getConfigBoolean(
+                config,
+                "settings.entity-activation.enabled",
+                PoseidonConfig.DEFAULT_ENTITY_ACTIVATION_ENABLED
+        );
         int monsterRange = getConfigInt(config, "settings.entity-activation.monster-range", DEFAULT_MONSTER_RANGE, 1, 256);
         int animalRange = getConfigInt(config, "settings.entity-activation.animal-range", DEFAULT_ANIMAL_RANGE, 1, 256);
         int waterRange = getConfigInt(config, "settings.entity-activation.water-range", DEFAULT_WATER_RANGE, 1, 256);

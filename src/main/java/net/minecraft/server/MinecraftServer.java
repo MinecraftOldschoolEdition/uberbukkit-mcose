@@ -274,14 +274,6 @@ public class MinecraftServer implements Runnable, ICommandListener {
             log.info("Allow commands: host/operators only");
         }
 
-        try {
-            net.minecraft.server.registry.BlockRegistryBootstrap.initialize();
-            net.minecraft.server.registry.ItemRegistryBootstrap.initialize();
-            net.minecraft.server.registry.LegacyIdBridge.refresh();
-        } catch (Throwable registryFailure) {
-            log.log(Level.WARNING, "[RegistryBootstrap] Failed to initialize core registries before world IO; continuing.", registryFailure);
-        }
-        
         String preflightWorldName = this.propertyManager.getString("level-name", "world");
         try {
             WorldLoaderServer preflightLoader = new WorldLoaderServer(this.worldContainer);
@@ -322,6 +314,18 @@ public class MinecraftServer implements Runnable, ICommandListener {
         }
 
         this.serverConfigurationManager = new ServerConfigurationManager(this);
+        // STARTUP plugins/configuration and PVN recipe additions are now in
+        // place, but no WorldServer has been constructed yet. Keep the single
+        // full registry transaction at this exact lifecycle boundary.
+        try {
+            initializeRegistriesForStartup();
+        } catch (Throwable registryFailure) {
+            log.log(Level.SEVERE,
+                    "[RegistryBootstrap] Registry data failed before world construction; startup aborted.",
+                    registryFailure);
+            this.logStartupFailureContext("Registry bootstrap failed", registryFailure);
+            return false;
+        }
         // CraftBukkit - removed trackers
         long j = System.nanoTime();
         String s1 = this.propertyManager.getString("level-name", "world");
@@ -338,10 +342,6 @@ public class MinecraftServer implements Runnable, ICommandListener {
 
         log.info("Preparing level \"" + s1 + "\"");
         this.a(new WorldLoaderServer(this.worldContainer), s1, k);
-        // Bootstrap registries in deterministic order.
-        try {
-            net.minecraft.server.registry.RegistryBootstrap.initialize();
-        } catch (Throwable ignored) {}
 
         try {
             ModLoader.initialize(new File("."));
@@ -1263,6 +1263,11 @@ public class MinecraftServer implements Runnable, ICommandListener {
             log.log(Level.SEVERE, "Failed to start the minecraft server", exception);
             logStaticStartupFailureContext("Failed to construct MinecraftServer instance", exception, options);
         }
+    }
+
+    /** Startup-only boundary kept separate so configured-data failures remain testable and fatal. */
+    static void initializeRegistriesForStartup() {
+        net.minecraft.server.registry.RegistryBootstrap.initialize();
     }
 
     public File a(String s) {

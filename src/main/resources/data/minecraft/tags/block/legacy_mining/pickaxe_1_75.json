@@ -1,0 +1,29 @@
+{
+  "values": [
+    "minecraft:gold_block",
+    "minecraft:iron_block",
+    "minecraft:diamond_block",
+    "minecraft:lapis_block",
+    "minecraft:redstone_block",
+    "minecraft:coal_block",
+    "minecraft:stone",
+    "minecraft:cobblestone",
+    "minecraft:mossy_cobblestone",
+    "minecraft:sandstone",
+    "minecraft:bricks",
+    "minecraft:dispenser",
+    "minecraft:piston",
+    "minecraft:sticky_piston",
+    "minecraft:piston_head",
+    "minecraft:moving_piston",
+    "minecraft:netherrack",
+    "minecraft:furnace",
+    "minecraft:lit_furnace",
+    "minecraft:stone_bricks",
+    "minecraft:cobblestone_stairs",
+    "minecraft:brick_stairs",
+    "minecraft:stone_brick_stairs",
+    "minecraft:stone_slab",
+    "minecraft:double_stone_slab"
+  ]
+}

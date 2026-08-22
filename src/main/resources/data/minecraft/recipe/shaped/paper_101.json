@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "AAA"
+  ],
+  "key": {
+    "A": {
+      "id": "minecraft:sugar_cane",
+      "legacy_metadata": 0
+    }
+  },
+  "result": {
+    "id": "minecraft:paper",
+    "count": 3,
+    "legacy_metadata": 0
+  }
+}

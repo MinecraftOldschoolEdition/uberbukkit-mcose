@@ -145,6 +145,11 @@ public class UberbukkitConfig extends Configuration {
         writeDefault("client.allowed_protocols.info2", "6 - a1.2.3_05 to a1.2.6; 7 - b1.0 to b1.1_02; 8 - b1.2 to b1.2_02; 9 - b1.3(_01); 10 - b1.4(_01); 11 - b1.5(_01); 12 - b1.6_test_build_3; 13 - b1.6 to b1.6.6, 14 - b1.7 to b1.7.3");
         writeDefault("client.minimum_version.value", ModVersion.getMajorMinor(ModVersion.VERSION));
         writeDefault("client.minimum_version.info", "Minimum MCOSE client major.minor required. Only major.minor is checked; prerelease suffixes are ignored (for example, \"1.8 Pre-Release 1\" is treated as 1.8).");
+
+        writeDefault("server-browser.enabled", true);
+        writeDefault("server-browser.api-base-url", "https://minecraftoldschool.com");
+        writeDefault("server-browser.public-address", "");
+        writeDefault("server-browser.info", "Set public-address to advertise through the website API. No server-browser token is required.");
     }
 
     private void writeDefault(String key, Object defaultValue) {
