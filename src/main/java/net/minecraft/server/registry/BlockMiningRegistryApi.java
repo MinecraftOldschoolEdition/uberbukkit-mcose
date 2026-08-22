@@ -363,6 +363,15 @@ public final class BlockMiningRegistryApi {
         return BlockTags.synchronizedMiningTags();
     }
 
+    /** Immutable metadata-rule view used by semantic fingerprinting. */
+    public static Map<Integer, BlockMiningRule> snapshotMetadataRules(
+            Block block) {
+        Map<Integer, BlockMiningRule> metadata =
+                state.byBlockMetadata.get(block);
+        return metadata == null
+                ? Collections.<Integer, BlockMiningRule>emptyMap() : metadata;
+    }
+
     private static State currentTagState() {
         State current = state;
         long registryRevision = BlockRegistry.registrationRevision();

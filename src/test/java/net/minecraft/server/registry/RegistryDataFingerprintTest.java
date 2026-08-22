@@ -16,8 +16,8 @@ public class RegistryDataFingerprintTest {
     }
 
     @Test
-    public void builtInSemanticFingerprintMatchesClientSchemaThree() {
-        assertEquals(3, RegistryDataFingerprint.SCHEMA_VERSION);
+    public void builtInSemanticFingerprintMatchesClientSchemaFour() {
+        assertEquals(4, RegistryDataFingerprint.SCHEMA_VERSION);
         String fingerprint = RegistryDataFingerprint.captureSynchronizedData();
         assertEquals(RegistryDataFingerprint.BUILT_IN_SYNCHRONIZED_DATA,
                 fingerprint);

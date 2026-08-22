@@ -26,7 +26,10 @@ import net.minecraft.server.util.ResourceLocation;
  * the same ordering they always did. Classpath data identifies those built-ins;
  * the layered provider supplies their authoritative values. Plugins appended
  * after the sorted built-in prefix, or overriding a furnace input, are retained
- * by identity. The five legacy additions remain the final unsorted tail.</p>
+ * by identity. The five legacy additions remain the final unsorted tail.
+ * As with the legacy startup lifecycle, asynchronous plugin access while this
+ * main-thread cutover is actively committing is unsupported; engine/world
+ * readers begin only after central registry bootstrap completes.</p>
  */
 public final class RecipeRegistryBootstrap {
     private static final ResourceLocation LEGACY_BASELINE =

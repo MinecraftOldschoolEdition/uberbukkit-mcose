@@ -3,7 +3,15 @@ package net.minecraft.server.registry;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.security.MessageDigest;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import net.minecraft.server.Block;
+import net.minecraft.server.RecyclingManager;
 import net.minecraft.server.CraftingRecipe;
 import net.minecraft.server.Item;
 import net.minecraft.server.ItemStack;
@@ -21,15 +29,24 @@ import net.minecraft.server.util.ResourceLocation;
  * value consumed by legacy save, wire, selection, and playback paths does.</p>
  */
 public final class RegistryDataFingerprint {
-    public static final int SCHEMA_VERSION = 3;
+    public static final int SCHEMA_VERSION = 4;
     public static final String BUILT_IN_SYNCHRONIZED_DATA =
             "badd3383912d245e1a9f07592a16676ba19bda2917159a1055a1a463adda8664";
+    private static final Comparator<ResourceLocation> KEY_ORDER =
+            new Comparator<ResourceLocation>() {
+                public int compare(ResourceLocation left, ResourceLocation right) {
+                    int path = left.getPath().compareTo(right.getPath());
+                    return path != 0 ? path
+                            : left.getNamespace().compareTo(right.getNamespace());
+                }
+            };
 
     private RegistryDataFingerprint() {}
 
     public static String captureSynchronizedData() {
         PaintingVariantRegistryBootstrap.initialize();
         JukeboxSongRegistryBootstrap.initialize();
+        BlockMiningRegistryBootstrap.initialize();
         RecipeRegistryBootstrap.initialize();
 
         try {
@@ -106,6 +123,9 @@ public final class RegistryDataFingerprint {
                 out.writeInt(output.count);
                 out.writeInt(output.getData());
             }
+
+            writeBlockMining(out);
+            writeRecycling(out);
             out.flush();
 
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
@@ -135,6 +155,123 @@ public final class RegistryDataFingerprint {
             throws Exception {
         out.writeUTF(stackKey(stack).toString());
         out.writeInt(stack.getData());
+    }
+
+    private static void writeBlockMining(DataOutputStream out)
+            throws Exception {
+        out.writeUTF("minecraft:block_mining");
+        List<TagKey<Block>> tags = BlockMiningRegistryApi.synchronizedTagKeys();
+        out.writeInt(tags.size());
+        Set<ResourceLocation> commonRuleKeys =
+                new LinkedHashSet<ResourceLocation>();
+        for (int i = 0; i < tags.size(); i++) {
+            TagKey<Block> tag = tags.get(i);
+            out.writeUTF(tag.location().toString());
+            ArrayList<ResourceLocation> members =
+                    new ArrayList<ResourceLocation>(
+                            BlockMiningRegistryApi.tagMemberKeys(tag));
+            Collections.sort(members, KEY_ORDER);
+            out.writeInt(members.size());
+            for (int memberIndex = 0; memberIndex < members.size(); memberIndex++) {
+                ResourceLocation member = members.get(memberIndex);
+                out.writeUTF(member.toString());
+                if (i < 3) commonRuleKeys.add(member);
+            }
+        }
+
+        out.writeUTF("minecraft:block_mining/rules");
+        ArrayList<ResourceLocation> orderedRuleKeys =
+                new ArrayList<ResourceLocation>(commonRuleKeys);
+        Collections.sort(orderedRuleKeys, KEY_ORDER);
+        out.writeInt(orderedRuleKeys.size());
+        for (int i = 0; i < orderedRuleKeys.size(); i++) {
+            ResourceLocation key = orderedRuleKeys.get(i);
+            Block block = BlockRegistry.get(key);
+            if (block == null || !key.equals(BlockRegistry.getKey(block))) {
+                throw new IllegalStateException(
+                        "Mining tag member has no canonical block: " + key);
+            }
+            out.writeUTF(key.toString());
+            writeMiningRule(out, BlockMiningRegistryApi.get(block));
+        }
+
+        out.writeUTF("minecraft:block_mining/metadata");
+        ArrayList<Block> metadataBlocks = new ArrayList<Block>();
+        for (int i = 0; i < Block.byId.length; i++) {
+            Block block = Block.byId[i];
+            if (block != null
+                    && !BlockMiningRegistryApi.snapshotMetadataRules(block).isEmpty()) {
+                metadataBlocks.add(block);
+            }
+        }
+        Collections.sort(metadataBlocks, new Comparator<Block>() {
+            public int compare(Block left, Block right) {
+                return KEY_ORDER.compare(
+                        requireBlockKey(left), requireBlockKey(right));
+            }
+        });
+        out.writeInt(metadataBlocks.size());
+        for (int i = 0; i < metadataBlocks.size(); i++) {
+            Block block = metadataBlocks.get(i);
+            out.writeUTF(requireBlockKey(block).toString());
+            Map<Integer, BlockMiningRule> metadata =
+                    BlockMiningRegistryApi.snapshotMetadataRules(block);
+            ArrayList<Integer> values =
+                    new ArrayList<Integer>(metadata.keySet());
+            Collections.sort(values);
+            out.writeInt(values.size());
+            for (int valueIndex = 0; valueIndex < values.size(); valueIndex++) {
+                Integer value = values.get(valueIndex);
+                out.writeInt(value.intValue());
+                writeMiningRule(out, metadata.get(value));
+            }
+        }
+    }
+
+    private static void writeMiningRule(
+            DataOutputStream out,
+            BlockMiningRule rule) throws Exception {
+        if (rule == null || rule.getPreferredTool() == null) {
+            throw new IllegalStateException("Mining rule cannot be null");
+        }
+        out.writeUTF(rule.getPreferredTool().name());
+        out.writeBoolean(rule.isEnforcePreferredTool());
+        out.writeInt(Float.floatToIntBits(rule.getSpeedMultiplier()));
+        out.writeBoolean(rule.allowsDropsWithoutPreferredTool());
+    }
+
+    private static void writeRecycling(DataOutputStream out)
+            throws Exception {
+        out.writeUTF("mcose:recycling");
+        Map<ResourceLocation, RecyclingManager.Definition> definitions =
+                RecyclingManager.getInstance().definitions();
+        ArrayList<ResourceLocation> keys =
+                new ArrayList<ResourceLocation>(definitions.keySet());
+        Collections.sort(keys, KEY_ORDER);
+        out.writeInt(keys.size());
+        for (int i = 0; i < keys.size(); i++) {
+            ResourceLocation key = keys.get(i);
+            RecyclingManager.Definition definition = definitions.get(key);
+            if (definition == null || !key.equals(definition.getInputKey())) {
+                throw new IllegalStateException(
+                        "Invalid recycling definition for " + key);
+            }
+            out.writeUTF(key.toString());
+            out.writeUTF(definition.getMethod().name());
+            out.writeUTF(definition.getResultKey().toString());
+            out.writeInt(definition.getCount());
+            out.writeInt(definition.getLegacyMetadata());
+            out.writeBoolean(definition.isLegacyInert());
+        }
+    }
+
+    private static ResourceLocation requireBlockKey(Block block) {
+        ResourceLocation key = BlockRegistry.getKey(block);
+        if (key == null || BlockRegistry.get(key) != block) {
+            throw new IllegalStateException(
+                    "Block mining metadata has no canonical block key");
+        }
+        return key;
     }
 
     private static ResourceLocation itemOrBlockKey(int id) {

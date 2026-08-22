@@ -75,6 +75,12 @@ public class RegistryDataLoaderLayeringTest {
 
     @Test
     public void tagStackAppendsDeduplicatesAndHonorsReplaceInPriorityOrder() {
+        List<ResourceLocation> empty = RegistryDataLoader.loadRequiredTag(
+                "test_registry",
+                TEST_TAG,
+                new TestLayeredProvider("{\"values\":[]}", null));
+        assertTrue(empty.isEmpty());
+
         List<ResourceLocation> appended = RegistryDataLoader.loadRequiredTag(
                 "test_registry",
                 TEST_TAG,
@@ -333,6 +339,65 @@ public class RegistryDataLoaderLayeringTest {
         assertEquals(asKeys("first"), loaded.get(TEST_TAG));
         assertEquals(1, provider.opens("ordered"));
         assertEquals(1, provider.opens("nested"));
+    }
+
+    @Test
+    public void loadAllSnapshotsEveryEntryBeforeAnyDecoderRuns() {
+        final String[] second = new String[]{"{\"value\":\"before\"}"};
+        final String firstPath = "data/minecraft/test_registry/a.json";
+        final String secondPath = "data/minecraft/test_registry/b.json";
+        RegistryDataLoader.LayeredResourceProvider provider =
+                new RegistryDataLoader.LayeredResourceProvider() {
+                    public InputStream open(String path) throws IOException {
+                        RegistryDataLoader.RegistryResource resource = getResource(path);
+                        return resource == null ? null : resource.open();
+                    }
+
+                    public RegistryDataLoader.RegistryResource getResource(String path) {
+                        if (firstPath.equals(path)) {
+                            return resource("mutable", "{\"value\":\"first\"}");
+                        }
+                        if (secondPath.equals(path)) {
+                            return new RegistryDataLoader.RegistryResource() {
+                                public String sourceId() {
+                                    return "mutable";
+                                }
+
+                                public InputStream open() throws IOException {
+                                    return new ByteArrayInputStream(
+                                            second[0].getBytes("UTF-8"));
+                                }
+                            };
+                        }
+                        return null;
+                    }
+
+                    public List<RegistryDataLoader.RegistryResource> getResourceStack(
+                            String path) {
+                        RegistryDataLoader.RegistryResource resource = getResource(path);
+                        return resource == null
+                                ? Collections.<RegistryDataLoader.RegistryResource>emptyList()
+                                : Collections.singletonList(resource);
+                    }
+
+                    public List<String> listResources(String root) {
+                        return Arrays.asList(firstPath, secondPath);
+                    }
+                };
+
+        Map<ResourceLocation, String> loaded = RegistryDataLoader.loadAll(
+                "test_registry",
+                provider,
+                new RegistryDataLoader.Decoder<String>() {
+                    public String decode(ResourceLocation key, JsonObject json) {
+                        if ("a".equals(key.getPath())) {
+                            second[0] = "{\"value\":\"after\"}";
+                        }
+                        return json.get("value").getAsString();
+                    }
+                });
+        assertEquals("first", loaded.get(new ResourceLocation("minecraft", "a")));
+        assertEquals("before", loaded.get(new ResourceLocation("minecraft", "b")));
     }
 
     private static void putJarEntry(

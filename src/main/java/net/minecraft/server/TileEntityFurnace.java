@@ -243,21 +243,9 @@ public class TileEntityFurnace extends TileEntity implements IInventory {
             // Check for smelt-recyclable items first (ore-based tools/armor)
             ItemStack recycleResult = RecyclingManager.getInstance().getSmeltRecycleResult(this.items[0]);
             if (recycleResult != null) {
-                // CraftBukkit start
-                CraftItemStack source = new CraftItemStack(this.items[0]);
-                CraftItemStack result = new CraftItemStack(recycleResult.cloneItemStack());
-
-                FurnaceSmeltEvent furnaceSmeltEvent = new FurnaceSmeltEvent(this.world.getWorld().getBlockAt(this.x, this.y, this.z), source, result);
-                this.world.getServer().getPluginManager().callEvent(furnaceSmeltEvent);
-
-                if (furnaceSmeltEvent.isCancelled()) {
-                    return;
-                }
-
-                org.bukkit.inventory.ItemStack oldResult = furnaceSmeltEvent.getResult();
-                ItemStack newResult = new ItemStack(oldResult.getTypeId(), oldResult.getAmount(), oldResult.getDurability());
-                recycleResult = newResult;
-                // CraftBukkit end
+                recycleResult = this.fireFurnaceSmeltEvent(
+                        this.items[0], recycleResult);
+                if (recycleResult == null) return;
 
                 if (this.items[2] == null) {
                     this.items[2] = recycleResult.cloneItemStack();
@@ -272,21 +260,8 @@ public class TileEntityFurnace extends TileEntity implements IInventory {
             
             // Fall back to normal furnace smelting
             ItemStack itemstack = FurnaceRecipes.getInstance().a(this.items[0]);
-
-            // CraftBukkit start
-            CraftItemStack source = new CraftItemStack(this.items[0]);
-            CraftItemStack result = new CraftItemStack(itemstack.cloneItemStack());
-
-            FurnaceSmeltEvent furnaceSmeltEvent = new FurnaceSmeltEvent(this.world.getWorld().getBlockAt(this.x, this.y, this.z), source, result);
-            this.world.getServer().getPluginManager().callEvent(furnaceSmeltEvent);
-
-            if (furnaceSmeltEvent.isCancelled()) {
-                return;
-            }
-
-            org.bukkit.inventory.ItemStack oldResult = furnaceSmeltEvent.getResult();
-            ItemStack newResult = new ItemStack(oldResult.getTypeId(), oldResult.getAmount(), oldResult.getDurability());
-            itemstack = newResult;
+            itemstack = this.fireFurnaceSmeltEvent(this.items[0], itemstack);
+            if (itemstack == null) return;
 
             if (this.items[2] == null) {
                 this.items[2] = itemstack.cloneItemStack();
@@ -303,6 +278,30 @@ public class TileEntityFurnace extends TileEntity implements IInventory {
                 this.items[0] = null;
             }
         }
+    }
+
+    /**
+     * Shared CraftBukkit event seam for ordinary smelting and recycling.
+     * A null return retains the historical cancellation behavior.
+     */
+    protected ItemStack fireFurnaceSmeltEvent(
+            ItemStack sourceStack,
+            ItemStack proposedResult) {
+        CraftItemStack source = new CraftItemStack(sourceStack);
+        CraftItemStack result = new CraftItemStack(
+                proposedResult.cloneItemStack());
+        FurnaceSmeltEvent event = new FurnaceSmeltEvent(
+                this.world.getWorld().getBlockAt(this.x, this.y, this.z),
+                source,
+                result);
+        this.world.getServer().getPluginManager().callEvent(event);
+        if (event.isCancelled()) return null;
+
+        org.bukkit.inventory.ItemStack eventResult = event.getResult();
+        return new ItemStack(
+                eventResult.getTypeId(),
+                eventResult.getAmount(),
+                eventResult.getDurability());
     }
 
     private int fuelTime(ItemStack itemstack) {

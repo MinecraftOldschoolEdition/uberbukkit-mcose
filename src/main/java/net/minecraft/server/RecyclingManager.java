@@ -1,6 +1,8 @@
 package net.minecraft.server;
 
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import net.minecraft.server.registry.BlockRegistry;
@@ -165,15 +167,26 @@ public final class RecyclingManager {
                 new LinkedHashMap<ResourceLocation, Definition>();
         LinkedHashMap<Integer, Definition> byLegacyId =
                 new LinkedHashMap<Integer, Definition>();
-        for (Map.Entry<ResourceLocation, Definition> entry : definitions.entrySet()) {
-            ResourceLocation key = entry.getKey();
-            Definition definition = entry.getValue();
+        ArrayList<ResourceLocation> orderedKeys =
+                new ArrayList<ResourceLocation>(definitions.keySet());
+        Collections.sort(orderedKeys, new Comparator<ResourceLocation>() {
+            public int compare(ResourceLocation left, ResourceLocation right) {
+                if (left == null || right == null) {
+                    return left == right ? 0 : (left == null ? -1 : 1);
+                }
+                int path = left.getPath().compareTo(right.getPath());
+                return path != 0 ? path
+                        : left.getNamespace().compareTo(right.getNamespace());
+            }
+        });
+        for (int i = 0; i < orderedKeys.size(); i++) {
+            ResourceLocation key = orderedKeys.get(i);
+            Definition definition = definitions.get(key);
             if (key == null || definition == null
                     || !key.equals(definition.getInputKey())) {
                 throw new IllegalArgumentException(
                         "Recycling definition map key must equal its canonical input key");
             }
-            validateResolvedDefinition(definition);
             if (byKey.put(key, definition) != null) {
                 throw new IllegalArgumentException(
                         "Duplicate recycling input key " + key);
@@ -185,6 +198,7 @@ public final class RecyclingManager {
                         "Duplicate logical recycling input " + key + " and "
                                 + previous.getInputKey() + " use legacy ID " + legacyId);
             }
+            validateResolvedDefinition(definition);
         }
         return new PreparedState(expected, new State(byKey, byLegacyId));
     }
@@ -294,10 +308,15 @@ public final class RecyclingManager {
                     "Recycling definition has invalid method/count/metadata");
         }
         Item input = ItemRegistry.get(definition.getInputKey());
+        boolean permittedLegacyInert = input != null && input == Item.BOW
+                && new ResourceLocation("minecraft", "bow").equals(
+                        definition.getInputKey())
+                && input.e() <= 0;
         if (input == null
                 || !definition.getInputKey().equals(ItemRegistry.getKey(input))
                 || input.id != definition.getInputItemId()
-                || (input.e() <= 0) != definition.isLegacyInert()) {
+                || (input.e() <= 0 && !permittedLegacyInert)
+                || definition.isLegacyInert() != permittedLegacyInert) {
             throw new IllegalArgumentException(
                     "Recycling definition has a non-canonical, mismatched, or "
                             + "incorrectly marked inert input "
