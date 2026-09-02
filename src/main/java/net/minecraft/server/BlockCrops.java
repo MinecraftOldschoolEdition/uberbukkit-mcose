@@ -89,23 +89,6 @@ public class BlockCrops extends BlockFlower {
         return this.textureId + j;
     }
 
-    public void dropNaturally(World world, int i, int j, int k, int l, float f) {
-        super.dropNaturally(world, i, j, k, l, f);
-        if (!world.isStatic) {
-            for (int i1 = 0; i1 < 3; ++i1) {
-                if (world.random.nextInt(15) <= l) {
-                    float f1 = 0.7F;
-                    float f2 = world.random.nextFloat() * f1 + (1.0F - f1) * 0.5F;
-                    float f3 = world.random.nextFloat() * f1 + (1.0F - f1) * 0.5F;
-                    float f4 = world.random.nextFloat() * f1 + (1.0F - f1) * 0.5F;
-                    EntityItem entityitem = new EntityItem(world, (double) ((float) i + f2), (double) ((float) j + f3), (double) ((float) k + f4), new ItemStack(Item.SEEDS));
-                    entityitem.pickupDelay = 10;
-                    world.addEntity(entityitem);
-                }
-            }
-        }
-    }
-
     public int a(int i, Random random) {
         return i == 7 ? Item.WHEAT.id : -1;
     }

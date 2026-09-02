@@ -1,0 +1,5 @@
+{
+  "blocks": "#minecraft:legacy_mining/pickaxe_6",
+  "preferred_tool": "pickaxe",
+  "speed_multiplier": 6.0
+}

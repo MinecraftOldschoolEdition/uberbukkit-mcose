@@ -37,6 +37,312 @@ public class ContainerInputBehaviorTest {
     }
 
     @Test
+    public void pickupSwapsRatherThanMergesSameItemWithDifferentComponents() throws Exception {
+        TestHuman player = player();
+        TestContainer container = new TestContainer();
+        TestInventory inventory = new TestInventory(1);
+        ItemStack slotStack = namedStack(Block.STONE, 2, "slot");
+        ItemStack carriedStack = namedStack(Block.STONE, 3, "carried");
+        inventory.setItem(0, slotStack);
+        container.add(inventory, 0);
+        player.inventory.b(carriedStack);
+
+        container.a(0, 0, ContainerInput.PICKUP, player);
+
+        assertSame(carriedStack, inventory.getItem(0));
+        assertSame(slotStack, player.inventory.j());
+    }
+
+    @Test
+    public void pickupUsesResolvedDamageDefaultsAndTombstonesForIdentity() throws Exception {
+        TestHuman equivalentPlayer = player();
+        TestContainer equivalentContainer = new TestContainer();
+        TestInventory equivalentInventory = new TestInventory(1);
+        ItemStack pristine = new ItemStack(Item.IRON_PICKAXE, 1, 0);
+        ItemStack explicitZero = new ItemStack(Item.IRON_PICKAXE, 1, 0);
+        explicitZero.applyComponents(DataComponentPatch.builder()
+                .set(DataComponents.DAMAGE, Integer.valueOf(0))
+                .build());
+        equivalentInventory.setItem(0, pristine);
+        equivalentContainer.add(equivalentInventory, 0);
+        equivalentPlayer.inventory.b(explicitZero);
+
+        equivalentContainer.a(0, 0, ContainerInput.PICKUP, equivalentPlayer);
+
+        assertSame(pristine, equivalentInventory.getItem(0));
+        assertSame(explicitZero, equivalentPlayer.inventory.j());
+
+        TestHuman distinctPlayer = player();
+        TestContainer distinctContainer = new TestContainer();
+        TestInventory distinctInventory = new TestInventory(1);
+        ItemStack otherPristine = new ItemStack(Item.IRON_PICKAXE, 1, 0);
+        ItemStack removedDamage = new ItemStack(Item.IRON_PICKAXE, 1, 0);
+        removedDamage.applyComponents(DataComponentPatch.builder()
+                .remove(DataComponents.DAMAGE)
+                .build());
+        distinctInventory.setItem(0, otherPristine);
+        distinctContainer.add(distinctInventory, 0);
+        distinctPlayer.inventory.b(removedDamage);
+
+        distinctContainer.a(0, 0, ContainerInput.PICKUP, distinctPlayer);
+
+        assertSame(removedDamage, distinctInventory.getItem(0));
+        assertSame(otherPristine, distinctPlayer.inventory.j());
+    }
+
+    @Test
+    public void pickupDoesNotMergeStacksAboveRemovedMaxStackFallback() throws Exception {
+        TestHuman player = player();
+        TestContainer container = new TestContainer();
+        TestInventory inventory = new TestInventory(1);
+        ItemStack slotted = new ItemStack(Block.STONE, 1, 0);
+        slotted.applyComponents(DataComponentPatch.builder()
+                .remove(DataComponents.MAX_STACK_SIZE)
+                .build());
+        ItemStack carried = slotted.cloneItemStack();
+        inventory.setItem(0, slotted);
+        container.add(inventory, 0);
+        player.inventory.b(carried);
+
+        container.a(0, 0, ContainerInput.PICKUP, player);
+
+        assertEquals(1, slotted.getMaxStackSize());
+        assertEquals(1, inventory.getItem(0).count);
+        assertSame(slotted, inventory.getItem(0));
+        assertSame(carried, player.inventory.j());
+        assertEquals(1, carried.count);
+    }
+
+    @Test
+    public void exactStackComparisonIncludesStructuralItemComponents() {
+        ItemStack first = namedStack(Block.STONE, 2, "same");
+        ItemStack same = namedStack(Block.STONE, 2, "same");
+        ItemStack differentPatch = new ItemStack(Block.STONE, 2);
+        differentPatch.applyComponents(DataComponentPatch.builder()
+                .set(DataComponents.MAX_STACK_SIZE, Integer.valueOf(32))
+                .build());
+
+        assertTrue(ItemStack.equals(first, same));
+        assertFalse(ItemStack.equals(first, differentPatch));
+    }
+
+    @Test
+    public void exactStackComparisonUsesResolvedComponentsRatherThanPatchEncoding() {
+        ItemStack defaultsOnly = new ItemStack(Block.STONE, 2);
+        ItemStack explicitDefault = new ItemStack(Block.STONE, 2);
+        explicitDefault.applyComponents(DataComponentPatch.builder()
+                .set(DataComponents.MAX_STACK_SIZE, Integer.valueOf(64))
+                .build());
+
+        assertTrue(ItemStack.equals(defaultsOnly, explicitDefault));
+    }
+
+    @Test
+    public void clonedStackComponentsDoNotAliasTheSource() {
+        ItemStack source = namedStack(Block.STONE, 2, "source");
+        ItemStack copy = source.cloneItemStack();
+
+        assertSame(copy.tag, copy.getComponents().get(DataComponents.CUSTOM_DATA));
+        copy.tag.k("display").setString("Name", "copy");
+
+        assertEquals("source", source.tag.k("display").getString("Name"));
+        assertEquals("copy", copy.tag.k("display").getString("Name"));
+        assertEquals("copy", copy.getComponents().get(DataComponents.CUSTOM_DATA)
+                .k("display").getString("Name"));
+        assertFalse(ItemStack.equals(source, copy));
+    }
+
+    @Test
+    public void splitStackComponentsDoNotAliasTheSourceAndRetainOneLegacyView() {
+        ItemStack source = namedStack(Block.STONE, 5, "source");
+        ItemStack split = source.a(2);
+
+        assertEquals(3, source.count);
+        assertEquals(2, split.count);
+        assertSame(split.tag, split.getComponents().get(DataComponents.CUSTOM_DATA));
+        split.tag.k("display").setString("Name", "split");
+
+        assertEquals("source", source.tag.k("display").getString("Name"));
+        assertEquals("split", split.getComponents().get(DataComponents.CUSTOM_DATA)
+                .k("display").getString("Name"));
+    }
+
+    @Test
+    public void closingContainerReturnsCarriedStackToInventoryBeforeDropping() throws Exception {
+        TestHuman player = player();
+        TestContainer container = new TestContainer();
+        ItemStack carried = namedStack(Block.STONE, 5, "cursor");
+        player.inventory.b(carried);
+
+        container.a(player);
+
+        assertNull(player.inventory.j());
+        assertNull(player.dropped);
+        assertNotNull(player.inventory.getItem(0));
+        assertEquals(5, player.inventory.getItem(0).count);
+        assertEquals("cursor", player.inventory.getItem(0).tag
+                .k("display").getString("Name"));
+    }
+
+    @Test
+    public void closingContainerDropsOnlyTheCarriedRemainderWhenInventoryIsFull() throws Exception {
+        TestHuman player = player();
+        TestContainer container = new TestContainer();
+        for (int i = 0; i < player.inventory.items.length; i++) {
+            player.inventory.items[i] = new ItemStack(Block.DIRT, 64);
+        }
+        player.inventory.items[0] = namedStack(Block.STONE, 63, "same");
+        ItemStack carried = namedStack(Block.STONE, 5, "same");
+        player.inventory.b(carried);
+
+        container.a(player);
+
+        assertNull(player.inventory.j());
+        assertEquals(64, player.inventory.items[0].count);
+        assertSame(carried, player.dropped);
+        assertEquals(4, player.dropped.count);
+        assertEquals("same", player.dropped.tag.k("display").getString("Name"));
+    }
+
+    @Test
+    public void nbtEqualityAndCopyAreStructuralAndRecursive() {
+        NBTTagList firstList = new NBTTagList();
+        firstList.a(new NBTTagInt(3));
+        firstList.a(new NBTTagInt(7));
+        NBTTagCompound first = new NBTTagCompound();
+        first.a("bytes", new byte[] {1, 2, 3});
+        first.a("list", firstList);
+
+        NBTTagList secondList = new NBTTagList();
+        secondList.a(new NBTTagInt(3));
+        secondList.a(new NBTTagInt(7));
+        NBTTagCompound second = new NBTTagCompound();
+        second.a("list", secondList);
+        second.a("bytes", new byte[] {1, 2, 3});
+
+        assertEquals(first, second);
+        assertEquals(first.hashCode(), second.hashCode());
+
+        NBTTagCompound copy = (NBTTagCompound) first.copy();
+        copy.j("bytes")[0] = 9;
+        ((NBTTagInt) copy.l("list").a(0)).a = 11;
+
+        assertEquals(1, first.j("bytes")[0]);
+        assertEquals(3, ((NBTTagInt) first.l("list").a(0)).a);
+        assertFalse(first.equals(copy));
+    }
+
+    @Test
+    public void inventoryPickupDoesNotMergeSameItemWithDifferentComponents() throws Exception {
+        TestHuman player = playerWithFoodStacking(true);
+        player.inventory.setItem(0, namedStack(Block.STONE, 2, "existing"));
+        ItemStack incoming = namedStack(Block.STONE, 3, "incoming");
+
+        assertTrue(player.inventory.pickup(incoming));
+
+        assertEquals(2, player.inventory.getItem(0).count);
+        assertEquals(3, player.inventory.getItem(1).count);
+        assertEquals("incoming", player.inventory.getItem(1).tag.k("display").getString("Name"));
+        assertEquals(0, incoming.count);
+    }
+
+    @Test
+    public void inventoryPickupPreservesAndCopiesTheCompleteComponentPatch() throws Exception {
+        TestHuman player = playerWithFoodStacking(true);
+        ItemStack incoming = namedStack(Block.STONE, 3, "incoming");
+        incoming.applyComponents(DataComponentPatch.builder()
+                .set(DataComponents.MAX_STACK_SIZE, Integer.valueOf(32))
+                .build());
+
+        assertTrue(player.inventory.pickup(incoming));
+        ItemStack stored = player.inventory.getItem(0);
+
+        assertEquals(32, stored.getMaxStackSize());
+        assertTrue(ItemStack.isSameItemSameComponents(stored, incoming));
+        incoming.tag.k("display").setString("Name", "mutated");
+        assertEquals("incoming", stored.tag.k("display").getString("Name"));
+    }
+
+    @Test
+    public void ordinaryContainersAllow99WhileKeepingSmallerItemAndSlotLimits()
+            throws Exception {
+        ItemStack componentStack = new ItemStack(Block.STONE, 99, 0);
+        componentStack.applyComponents(DataComponentPatch.builder()
+                .set(DataComponents.MAX_STACK_SIZE, Integer.valueOf(99))
+                .build());
+
+        TestHuman player = player();
+        TestContainer playerContainer = new TestContainer();
+        playerContainer.add(player.inventory, 0);
+        ItemStack playerMoving = componentStack.cloneItemStack();
+        playerContainer.merge(playerMoving, 0, 1);
+        assertEquals(99, player.inventory.getItem(0).count);
+        assertEquals(0, playerMoving.count);
+
+        TileEntityChest chest = new TileEntityChest();
+        TestContainer chestContainer = new TestContainer();
+        chestContainer.add(chest, 0);
+        ItemStack chestMoving = componentStack.cloneItemStack();
+        chestContainer.merge(chestMoving, 0, 1);
+        assertEquals(99, chest.getItem(0).count);
+        assertEquals(0, chestMoving.count);
+
+        TestHuman itemLimitedPlayer = player();
+        TestContainer itemLimitedContainer = new TestContainer();
+        itemLimitedContainer.add(itemLimitedPlayer.inventory, 0);
+        ItemStack ordinaryStone = new ItemStack(Block.STONE, 99, 0);
+        itemLimitedContainer.merge(ordinaryStone, 0, 1);
+        assertEquals(64, itemLimitedPlayer.inventory.getItem(0).count);
+        assertEquals(35, ordinaryStone.count);
+
+        TestHuman slotLimitedPlayer = player();
+        TestContainer slotLimitedContainer = new TestContainer();
+        slotLimitedContainer.add(new LimitedSlot(slotLimitedPlayer.inventory, 0, 16));
+        ItemStack slotMoving = componentStack.cloneItemStack();
+        slotLimitedContainer.merge(slotMoving, 0, 1);
+        assertEquals(16, slotLimitedPlayer.inventory.getItem(0).count);
+        assertEquals(83, slotMoving.count);
+
+        ItemStack food = new ItemStack(Item.PORK, 99, 0);
+        food.applyComponents(DataComponentPatch.builder()
+                .set(DataComponents.MAX_STACK_SIZE, Integer.valueOf(99))
+                .build());
+        assertEquals(64, new SlotFurnaceInput(new TileEntityFurnace(), 0, 0, 0)
+                .getItemStackLimit(food, null));
+    }
+
+    @Test
+    public void creativePacketSlotsUseTheWindowZeroContainerMapAndRejectTheResultSlot() throws Exception {
+        TestHuman player = player();
+        player.defaultContainer = new ContainerPlayer(player.inventory);
+        ItemStack originalHotbar = new ItemStack(Block.DIRT, 7);
+        player.inventory.setItem(0, originalHotbar);
+
+        assertFalse(NetServerHandler.setCreativeInventorySlot(player, -2, new ItemStack(Block.STONE, 1)));
+        assertFalse(NetServerHandler.setCreativeInventorySlot(player, 0, new ItemStack(Block.STONE, 1)));
+        assertFalse(NetServerHandler.setCreativeInventorySlot(player, 45, new ItemStack(Block.STONE, 1)));
+        assertSame(originalHotbar, player.inventory.getItem(0));
+
+        ItemStack crafting = namedStack(Block.STONE, 2, "crafting");
+        assertTrue(NetServerHandler.setCreativeInventorySlot(player, 1, crafting));
+        crafting.tag.k("display").setString("Name", "mutated");
+        assertEquals("crafting", ((ContainerPlayer) player.defaultContainer).craftInventory
+                .getItem(0).tag.k("display").getString("Name"));
+
+        ItemStack armor = new ItemStack(Item.IRON_HELMET, 1);
+        assertTrue(NetServerHandler.setCreativeInventorySlot(player, 5, armor));
+        assertEquals(Item.IRON_HELMET.id, player.inventory.armor[3].id);
+
+        ItemStack main = new ItemStack(Block.STONE, 3);
+        assertTrue(NetServerHandler.setCreativeInventorySlot(player, 9, main));
+        assertEquals(3, player.inventory.getItem(9).count);
+
+        ItemStack hotbar = new ItemStack(Block.STONE, 4);
+        assertTrue(NetServerHandler.setCreativeInventorySlot(player, 36, hotbar));
+        assertEquals(4, player.inventory.getItem(0).count);
+    }
+
+    @Test
     public void pickupAllConsumesPartialStacksBeforeFullStacks() throws Exception {
         TestHuman player = player();
         TestContainer container = new TestContainer();
@@ -55,6 +361,25 @@ public class ContainerInputBehaviorTest {
         assertNull(inventory.getItem(1));
         assertNull(inventory.getItem(2));
         assertEquals(35, inventory.getItem(0).count);
+    }
+
+    @Test
+    public void pickupAllSkipsSameItemWithDifferentComponents() throws Exception {
+        TestHuman player = player();
+        TestContainer container = new TestContainer();
+        TestInventory inventory = new TestInventory(3);
+        inventory.setItem(0, namedStack(Block.STONE, 5, "other"));
+        inventory.setItem(1, namedStack(Block.STONE, 3, "wanted"));
+        for (int i = 0; i < 3; ++i) {
+            container.add(inventory, i);
+        }
+        player.inventory.b(namedStack(Block.STONE, 1, "wanted"));
+
+        container.a(2, 0, ContainerInput.PICKUP_ALL, player);
+
+        assertEquals(4, player.inventory.j().count);
+        assertEquals(5, inventory.getItem(0).count);
+        assertNull(inventory.getItem(1));
     }
 
     @Test
@@ -141,6 +466,43 @@ public class ContainerInputBehaviorTest {
     }
 
     @Test
+    public void quickCraftSkipsSameItemWithDifferentComponents() throws Exception {
+        TestHuman player = player();
+        TestContainer container = new TestContainer();
+        TestInventory inventory = new TestInventory(2);
+        inventory.setItem(0, namedStack(Block.STONE, 2, "other"));
+        container.add(inventory, 0);
+        container.add(inventory, 1);
+        player.inventory.b(namedStack(Block.STONE, 4, "wanted"));
+
+        container.a(-999, ContainerInput.getQuickCraftMask(0, 0), ContainerInput.QUICK_CRAFT, player);
+        container.a(0, ContainerInput.getQuickCraftMask(1, 0), ContainerInput.QUICK_CRAFT, player);
+        container.a(1, ContainerInput.getQuickCraftMask(1, 0), ContainerInput.QUICK_CRAFT, player);
+        container.a(-999, ContainerInput.getQuickCraftMask(2, 0), ContainerInput.QUICK_CRAFT, player);
+
+        assertEquals(2, inventory.getItem(0).count);
+        assertEquals(4, inventory.getItem(1).count);
+        assertNull(player.inventory.j());
+    }
+
+    @Test
+    public void quickMoveDoesNotMergeSameItemWithDifferentComponents() throws Exception {
+        TestContainer container = new TestContainer();
+        TestInventory inventory = new TestInventory(2);
+        inventory.setItem(0, namedStack(Block.STONE, 2, "other"));
+        container.add(inventory, 0);
+        container.add(inventory, 1);
+        ItemStack moving = namedStack(Block.STONE, 3, "wanted");
+
+        container.merge(moving, 0, 2);
+
+        assertEquals(2, inventory.getItem(0).count);
+        assertEquals(3, inventory.getItem(1).count);
+        assertEquals("wanted", inventory.getItem(1).tag.k("display").getString("Name"));
+        assertEquals(0, moving.count);
+    }
+
+    @Test
     public void rightQuickCraftPlacesOnePerVisitedSlot() throws Exception {
         TestHuman player = player();
         TestContainer container = new TestContainer();
@@ -213,6 +575,22 @@ public class ContainerInputBehaviorTest {
         assertNotNull(player.dropped);
         assertEquals(1, player.dropped.count);
         assertNull(player.inventory.j());
+    }
+
+    @Test
+    public void fullThrowReusesTheOriginalAmountWhenTheSourceRegenerates() throws Exception {
+        TestHuman player = player();
+        TestContainer container = new TestContainer();
+        TestInventory inventory = new TestInventory(1);
+        inventory.setItem(0, new ItemStack(Block.STONE, 3));
+        RegeneratingSlot slot = new RegeneratingSlot(inventory, 0);
+        container.add(slot);
+
+        container.a(0, 1, ContainerInput.THROW, player);
+
+        assertEquals(2, slot.takeCalls);
+        assertEquals(3, slot.requestedAmounts[0]);
+        assertEquals(3, slot.requestedAmounts[1]);
     }
 
     @Test
@@ -303,6 +681,16 @@ public class ContainerInputBehaviorTest {
         return player;
     }
 
+    private static ItemStack namedStack(Block block, int count, String name) {
+        ItemStack stack = new ItemStack(block, count);
+        NBTTagCompound display = new NBTTagCompound();
+        display.setString("Name", name);
+        NBTTagCompound tag = new NBTTagCompound();
+        tag.a("display", display);
+        stack.setTag(tag);
+        return stack;
+    }
+
     private static Unsafe unsafe() throws Exception {
         Field field = Unsafe.class.getDeclaredField("theUnsafe");
         field.setAccessible(true);
@@ -330,6 +718,10 @@ public class ContainerInputBehaviorTest {
             this.a(slot);
         }
 
+        void merge(ItemStack stack, int start, int end) {
+            this.a(stack, start, end, false, (World)null);
+        }
+
         public boolean b(EntityHuman player) {
             return true;
         }
@@ -346,6 +738,47 @@ public class ContainerInputBehaviorTest {
 
         public boolean canTakeStack() {
             return false;
+        }
+    }
+
+    private static final class LimitedSlot extends Slot {
+        private final int limit;
+
+        LimitedSlot(IInventory inventory, int index, int limit) {
+            super(inventory, index, 0, 0);
+            this.limit = limit;
+        }
+
+        @Override
+        public int d() {
+            return this.limit;
+        }
+    }
+
+    private static final class RegeneratingSlot extends Slot {
+        final int[] requestedAmounts = new int[2];
+        int takeCalls;
+
+        RegeneratingSlot(IInventory inventory, int index) {
+            super(inventory, index, 0, 0);
+        }
+
+        @Override
+        public ItemStack a(int amount) {
+            if (this.takeCalls < this.requestedAmounts.length) {
+                this.requestedAmounts[this.takeCalls] = amount;
+            }
+            ++this.takeCalls;
+            return super.a(amount);
+        }
+
+        @Override
+        public void a(ItemStack removed) {
+            if (this.takeCalls == 1) {
+                this.inventory.setItem(this.index, new ItemStack(Block.STONE, 7));
+            } else {
+                this.inventory.setItem(this.index, new ItemStack(Block.DIRT, 1));
+            }
         }
     }
 

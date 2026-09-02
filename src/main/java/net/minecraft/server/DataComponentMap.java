@@ -34,6 +34,17 @@ public final class DataComponentMap {
         return Collections.unmodifiableMap(this.values);
     }
 
+    @Override
+    public boolean equals(Object other) {
+        return this == other || other instanceof DataComponentMap
+                && this.values.equals(((DataComponentMap) other).values);
+    }
+
+    @Override
+    public int hashCode() {
+        return this.values.hashCode();
+    }
+
     public static final class Builder {
         private final Map<DataComponentType<?>, Object> values = new HashMap<DataComponentType<?>, Object>();
 

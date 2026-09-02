@@ -1,0 +1,7 @@
+{
+  "projectile_kind": "snowball",
+  "vertical_adjustment": 0.1,
+  "velocity": 1.1,
+  "uncertainty": 6.0,
+  "world_event": 1002
+}

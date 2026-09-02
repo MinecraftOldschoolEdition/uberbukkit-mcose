@@ -1,13 +1,20 @@
 package net.minecraft.server;
 
+import net.minecraft.server.registry.LegacyAdvancementDefinition;
+
 public class Achievement extends Statistic {
 
-    public final int a;
-    public final int b;
-    public final Achievement c;
+    public int a;
+    public int b;
+    public Achievement c;
     private final String l;
-    public final ItemStack d;
+    public ItemStack d;
     private boolean m;
+    private String dataTitleTranslationKey;
+    private String dataDescriptionTranslationKey;
+    private boolean dataShowToast = true;
+    private boolean dataAnnounceToChat = true;
+    private boolean dataHidden;
 
     public Achievement(int i, String s, int j, int k, Item item, Achievement achievement) {
         this(i, s, j, k, new ItemStack(item), achievement);
@@ -56,5 +63,39 @@ public class Achievement extends Statistic {
         super.d();
         AchievementList.e.add(this);
         return this;
+    }
+
+    public String getName() {
+        return this.dataTitleTranslationKey == null
+                ? this.f : StatisticCollector.a(this.dataTitleTranslationKey);
+    }
+
+    public String getDescription() {
+        return this.dataDescriptionTranslationKey == null
+                ? this.l : StatisticCollector.a(this.dataDescriptionTranslationKey);
+    }
+
+    public boolean isSpecial() { return this.m; }
+    public boolean shouldShowToast() { return this.dataShowToast; }
+    public boolean shouldAnnounceToChat() { return this.dataAnnounceToChat; }
+    public boolean isHidden() { return this.dataHidden; }
+
+    /** Applies a fully validated definition without changing this object's stat identity. */
+    public void applyDefinition(
+            LegacyAdvancementDefinition definition,
+            Achievement resolvedParent) {
+        if (definition == null) {
+            throw new IllegalArgumentException("Advancement definition is required");
+        }
+        this.a = definition.getColumn();
+        this.b = definition.getRow();
+        this.c = resolvedParent;
+        this.d = definition.createIconStack();
+        this.m = definition.isSpecial();
+        this.dataTitleTranslationKey = definition.getTitleTranslationKey();
+        this.dataDescriptionTranslationKey = definition.getDescriptionTranslationKey();
+        this.dataShowToast = definition.shouldShowToast();
+        this.dataAnnounceToChat = definition.shouldAnnounceToChat();
+        this.dataHidden = definition.isHidden();
     }
 }

@@ -8,6 +8,7 @@ import org.bukkit.event.inventory.FurnaceSmeltEvent;
 // CraftBukkit end
 
 import net.minecraft.server.registry.ItemCapabilityRegistryApi;
+import net.minecraft.server.registry.RecipeRegistryApi;
 
 public class TileEntityFurnace extends TileEntity implements IInventory {
 
@@ -115,7 +116,7 @@ public class TileEntityFurnace extends TileEntity implements IInventory {
     }
 
     public int getMaxStackSize() {
-        return 64;
+        return IInventory.DEFAULT_MAX_STACK_SIZE;
     }
 
     public boolean isBurning() {
@@ -134,8 +135,10 @@ public class TileEntityFurnace extends TileEntity implements IInventory {
         // CraftBukkit - moved from below
         if (this.isBurning() && this.canBurn()) {
             this.cookTime += elapsedTicks;
-            if (this.cookTime >= 200) {
-                this.cookTime %= 200;
+            int cookingTime = RecipeRegistryApi.getSmeltingCookingTime(
+                    this.items[0]);
+            if (this.cookTime >= cookingTime) {
+                this.cookTime %= cookingTime;
                 this.burn();
                 flag1 = true;
             }
@@ -167,12 +170,14 @@ public class TileEntityFurnace extends TileEntity implements IInventory {
                     flag1 = true;
                     if (this.items[1] != null) {
                         // Check if fuel item has a container (e.g., lava bucket -> empty bucket)
-                        Item containerItem = this.items[1].getItem().h(); // h() is getContainerItem()
+                        ItemStack craftingRemainder = ItemCapabilityRegistryApi
+                                .createCraftingRemainder(
+                                        this.items[1].getItem());
                         --this.items[1].count;
                         if (this.items[1].count == 0) {
                             // Return the container item (empty bucket) if applicable
-                            if (containerItem != null) {
-                                this.items[1] = new ItemStack(containerItem);
+                            if (craftingRemainder != null) {
+                                this.items[1] = craftingRemainder;
                             } else {
                                 this.items[1] = null;
                             }
@@ -234,7 +239,7 @@ public class TileEntityFurnace extends TileEntity implements IInventory {
 
     private int getFurnaceStackLimit(ItemStack itemstack) {
         return itemstack != null && itemstack.getItem() instanceof ItemFood
-                ? this.getMaxStackSize()
+                ? Math.min(64, this.getMaxStackSize())
                 : Math.min(this.getMaxStackSize(), itemstack.getMaxStackSize());
     }
 

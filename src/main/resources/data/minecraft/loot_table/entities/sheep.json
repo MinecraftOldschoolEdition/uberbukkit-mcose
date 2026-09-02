@@ -1,0 +1,288 @@
+{
+  "type": "minecraft:entity",
+  "pools": [
+    {
+      "entries": [
+        {
+          "type": "minecraft:alternatives",
+          "children": [
+            {
+              "type": "minecraft:item",
+              "name": "minecraft:white_wool",
+              "condition": {
+                "type": "minecraft:entity_properties",
+                "entity": "this",
+                "predicate": {
+                  "minecraft:components": {
+                    "minecraft:sheep/color": "white"
+                  },
+                  "minecraft:type_specific/sheep": {
+                    "sheared": false
+                  }
+                }
+              },
+              "legacy_metadata": 0
+            },
+            {
+              "type": "minecraft:item",
+              "name": "minecraft:white_wool",
+              "condition": {
+                "type": "minecraft:entity_properties",
+                "entity": "this",
+                "predicate": {
+                  "minecraft:components": {
+                    "minecraft:sheep/color": "orange"
+                  },
+                  "minecraft:type_specific/sheep": {
+                    "sheared": false
+                  }
+                }
+              },
+              "legacy_metadata": 1
+            },
+            {
+              "type": "minecraft:item",
+              "name": "minecraft:white_wool",
+              "condition": {
+                "type": "minecraft:entity_properties",
+                "entity": "this",
+                "predicate": {
+                  "minecraft:components": {
+                    "minecraft:sheep/color": "magenta"
+                  },
+                  "minecraft:type_specific/sheep": {
+                    "sheared": false
+                  }
+                }
+              },
+              "legacy_metadata": 2
+            },
+            {
+              "type": "minecraft:item",
+              "name": "minecraft:white_wool",
+              "condition": {
+                "type": "minecraft:entity_properties",
+                "entity": "this",
+                "predicate": {
+                  "minecraft:components": {
+                    "minecraft:sheep/color": "light_blue"
+                  },
+                  "minecraft:type_specific/sheep": {
+                    "sheared": false
+                  }
+                }
+              },
+              "legacy_metadata": 3
+            },
+            {
+              "type": "minecraft:item",
+              "name": "minecraft:white_wool",
+              "condition": {
+                "type": "minecraft:entity_properties",
+                "entity": "this",
+                "predicate": {
+                  "minecraft:components": {
+                    "minecraft:sheep/color": "yellow"
+                  },
+                  "minecraft:type_specific/sheep": {
+                    "sheared": false
+                  }
+                }
+              },
+              "legacy_metadata": 4
+            },
+            {
+              "type": "minecraft:item",
+              "name": "minecraft:white_wool",
+              "condition": {
+                "type": "minecraft:entity_properties",
+                "entity": "this",
+                "predicate": {
+                  "minecraft:components": {
+                    "minecraft:sheep/color": "lime"
+                  },
+                  "minecraft:type_specific/sheep": {
+                    "sheared": false
+                  }
+                }
+              },
+              "legacy_metadata": 5
+            },
+            {
+              "type": "minecraft:item",
+              "name": "minecraft:white_wool",
+              "condition": {
+                "type": "minecraft:entity_properties",
+                "entity": "this",
+                "predicate": {
+                  "minecraft:components": {
+                    "minecraft:sheep/color": "pink"
+                  },
+                  "minecraft:type_specific/sheep": {
+                    "sheared": false
+                  }
+                }
+              },
+              "legacy_metadata": 6
+            },
+            {
+              "type": "minecraft:item",
+              "name": "minecraft:white_wool",
+              "condition": {
+                "type": "minecraft:entity_properties",
+                "entity": "this",
+                "predicate": {
+                  "minecraft:components": {
+                    "minecraft:sheep/color": "gray"
+                  },
+                  "minecraft:type_specific/sheep": {
+                    "sheared": false
+                  }
+                }
+              },
+              "legacy_metadata": 7
+            },
+            {
+              "type": "minecraft:item",
+              "name": "minecraft:white_wool",
+              "condition": {
+                "type": "minecraft:entity_properties",
+                "entity": "this",
+                "predicate": {
+                  "minecraft:components": {
+                    "minecraft:sheep/color": "light_gray"
+                  },
+                  "minecraft:type_specific/sheep": {
+                    "sheared": false
+                  }
+                }
+              },
+              "legacy_metadata": 8
+            },
+            {
+              "type": "minecraft:item",
+              "name": "minecraft:white_wool",
+              "condition": {
+                "type": "minecraft:entity_properties",
+                "entity": "this",
+                "predicate": {
+                  "minecraft:components": {
+                    "minecraft:sheep/color": "cyan"
+                  },
+                  "minecraft:type_specific/sheep": {
+                    "sheared": false
+                  }
+                }
+              },
+              "legacy_metadata": 9
+            },
+            {
+              "type": "minecraft:item",
+              "name": "minecraft:white_wool",
+              "condition": {
+                "type": "minecraft:entity_properties",
+                "entity": "this",
+                "predicate": {
+                  "minecraft:components": {
+                    "minecraft:sheep/color": "purple"
+                  },
+                  "minecraft:type_specific/sheep": {
+                    "sheared": false
+                  }
+                }
+              },
+              "legacy_metadata": 10
+            },
+            {
+              "type": "minecraft:item",
+              "name": "minecraft:white_wool",
+              "condition": {
+                "type": "minecraft:entity_properties",
+                "entity": "this",
+                "predicate": {
+                  "minecraft:components": {
+                    "minecraft:sheep/color": "blue"
+                  },
+                  "minecraft:type_specific/sheep": {
+                    "sheared": false
+                  }
+                }
+              },
+              "legacy_metadata": 11
+            },
+            {
+              "type": "minecraft:item",
+              "name": "minecraft:white_wool",
+              "condition": {
+                "type": "minecraft:entity_properties",
+                "entity": "this",
+                "predicate": {
+                  "minecraft:components": {
+                    "minecraft:sheep/color": "brown"
+                  },
+                  "minecraft:type_specific/sheep": {
+                    "sheared": false
+                  }
+                }
+              },
+              "legacy_metadata": 12
+            },
+            {
+              "type": "minecraft:item",
+              "name": "minecraft:white_wool",
+              "condition": {
+                "type": "minecraft:entity_properties",
+                "entity": "this",
+                "predicate": {
+                  "minecraft:components": {
+                    "minecraft:sheep/color": "green"
+                  },
+                  "minecraft:type_specific/sheep": {
+                    "sheared": false
+                  }
+                }
+              },
+              "legacy_metadata": 13
+            },
+            {
+              "type": "minecraft:item",
+              "name": "minecraft:white_wool",
+              "condition": {
+                "type": "minecraft:entity_properties",
+                "entity": "this",
+                "predicate": {
+                  "minecraft:components": {
+                    "minecraft:sheep/color": "red"
+                  },
+                  "minecraft:type_specific/sheep": {
+                    "sheared": false
+                  }
+                }
+              },
+              "legacy_metadata": 14
+            },
+            {
+              "type": "minecraft:item",
+              "name": "minecraft:white_wool",
+              "condition": {
+                "type": "minecraft:entity_properties",
+                "entity": "this",
+                "predicate": {
+                  "minecraft:components": {
+                    "minecraft:sheep/color": "black"
+                  },
+                  "minecraft:type_specific/sheep": {
+                    "sheared": false
+                  }
+                }
+              },
+              "legacy_metadata": 15
+            }
+          ]
+        }
+      ],
+      "rolls": 1
+    }
+  ],
+  "random_sequence": "minecraft:entities/sheep"
+}

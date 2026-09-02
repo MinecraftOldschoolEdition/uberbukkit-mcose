@@ -2,6 +2,7 @@ package net.minecraft.server;
 
 import net.minecraft.server.event.EventBus;
 import net.minecraft.server.event.events.CraftingCompleteEvent;
+import net.minecraft.server.registry.ItemCapabilityRegistryApi;
 
 public class SlotResult extends Slot {
 
@@ -72,8 +73,10 @@ public class SlotResult extends Slot {
 
             if (itemstack1 != null) {
                 this.d.splitStack(i, 1);
-                if (itemstack1.getItem().i()) {
-                    this.d.setItem(i, new ItemStack(itemstack1.getItem().h()));
+                ItemStack remainder = ItemCapabilityRegistryApi
+                        .createCraftingRemainder(itemstack1.getItem());
+                if (remainder != null) {
+                    this.d.setItem(i, remainder);
                 }
             }
         }

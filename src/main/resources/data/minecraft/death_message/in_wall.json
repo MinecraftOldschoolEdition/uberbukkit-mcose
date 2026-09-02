@@ -1,0 +1,17 @@
+{
+  "default_key": "death.attack.inWall",
+  "actor_key": "death.attack.inWall.player",
+  "provenance": [
+    {
+      "action": "falling_block_place",
+      "max_age_ticks": 600,
+      "horizontal_radius": 2.5,
+      "vertical_radius": 64.0,
+      "vertical_relation": "source_above",
+      "default_key": "death.attack.inWall",
+      "actor_key": "death.attack.buried.pvp",
+      "item_key": "death.attack.buried.pvp.item",
+      "item_policy": "any"
+    }
+  ]
+}

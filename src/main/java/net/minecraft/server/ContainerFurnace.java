@@ -172,7 +172,6 @@ public class ContainerFurnace extends Container {
     }
 
     private boolean canStack(ItemStack first, ItemStack second) {
-        return first.id == second.id
-                && (!first.usesData() || first.getData() == second.getData());
+        return ItemStack.isSameItemSameComponents(first, second);
     }
 }

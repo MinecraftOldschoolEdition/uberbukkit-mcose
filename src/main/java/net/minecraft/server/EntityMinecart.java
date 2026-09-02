@@ -854,7 +854,7 @@ public class EntityMinecart extends Entity implements IInventory {
     }
 
     public int getMaxStackSize() {
-        return 64;
+        return IInventory.DEFAULT_MAX_STACK_SIZE;
     }
 
     public void update() {

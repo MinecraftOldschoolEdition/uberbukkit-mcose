@@ -94,6 +94,20 @@ public final class RecipeRegistryApi {
         ensureSynchronized();
     }
 
+    /** Returns the configured cook duration for the current furnace input. */
+    public static int getSmeltingCookingTime(ItemStack input) {
+        if (input == null) return SmeltingRecipe.DEFAULT_COOKING_TIME;
+        Map<Integer, SmeltingRecipe> current = smeltingRecipesByInput;
+        SmeltingRecipe recipe = current.get(
+                Integer.valueOf(input.id));
+        if (recipe == null
+                || (recipe.getInputMetadata() >= 0
+                        && recipe.getInputMetadata() != input.getData())) {
+            return SmeltingRecipe.DEFAULT_COOKING_TIME;
+        }
+        return recipe.getCookingTime();
+    }
+
     static synchronized SmeltingRecipe smeltingRecipeForCurrentOutput(
             int inputId,
             ItemStack output) {

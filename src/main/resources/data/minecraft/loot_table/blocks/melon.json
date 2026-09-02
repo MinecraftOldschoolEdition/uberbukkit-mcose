@@ -1,0 +1,21 @@
+{
+  "type": "minecraft:block",
+  "pools": [
+    {
+      "rolls": {
+        "type": "minecraft:uniform",
+        "min": 3,
+        "max": 7
+      },
+      "apply_drop_chance": true,
+      "placement": "minecraft:block",
+      "entries": [
+        {
+          "type": "minecraft:item",
+          "name": "minecraft:melon_slice",
+          "legacy_metadata": 0
+        }
+      ]
+    }
+  ]
+}

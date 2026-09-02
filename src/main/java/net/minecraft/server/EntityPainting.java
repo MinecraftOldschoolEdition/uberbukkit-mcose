@@ -33,12 +33,11 @@ public class EntityPainting extends Entity {
         this.c = j;
         this.d = k;
         ArrayList<PaintingVariant> arraylist = new ArrayList<PaintingVariant>();
-        PaintingVariant[] variants = PaintingVariantRegistryApi.values().toArray(
-                new PaintingVariant[PaintingVariantRegistryApi.size()]);
-        int i1 = variants.length;
+        List<PaintingVariant> variants = PaintingVariantRegistryApi.placeableValues();
+        int i1 = variants.size();
 
         for (int j1 = 0; j1 < i1; ++j1) {
-            PaintingVariant variant = variants[j1];
+            PaintingVariant variant = variants.get(j1);
             EnumArt enumart = variant.getLegacyArt();
 
             // uberbukkit - make paintings show just the motives that exist in the target version

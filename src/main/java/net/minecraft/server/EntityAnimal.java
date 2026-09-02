@@ -1,5 +1,7 @@
 package net.minecraft.server;
 
+import net.minecraft.server.registry.BlockTags;
+
 import net.minecraft.server.registry.PlayerCapabilityRegistryApi;
 
 public abstract class EntityAnimal extends EntityCreature implements IAnimal {
@@ -333,7 +335,12 @@ public abstract class EntityAnimal extends EntityCreature implements IAnimal {
         int j = MathHelper.floor(this.boundingBox.b);
         int k = MathHelper.floor(this.locZ);
 
-        return this.world.getTypeId(i, j - 1, k) == Block.GRASS.id && this.world.k(i, j, k) > 8 && super.d();
+        int belowId = this.world.getTypeId(i, j - 1, k);
+        Block below = belowId > 0 && belowId < Block.byId.length
+                ? Block.byId[belowId] : null;
+        return below != null
+                && BlockTags.is(below, BlockTags.ANIMALS_SPAWNABLE_ON)
+                && this.world.k(i, j, k) > 8 && super.d();
     }
 
     public int e() {

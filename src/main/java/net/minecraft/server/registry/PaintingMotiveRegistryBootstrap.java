@@ -13,8 +13,8 @@ public final class PaintingMotiveRegistryBootstrap {
         if (initialized) return;
         PaintingVariantRegistryBootstrap.initialize();
 
-        PaintingVariant[] variants = PaintingVariantRegistryApi.values().toArray(
-                new PaintingVariant[PaintingVariantRegistryApi.size()]);
+        java.util.List<PaintingVariant> variants =
+                PaintingVariantRegistryApi.placeableValues();
         for (PaintingVariant variant : variants) {
             EnumArt art = variant.getLegacyArt();
             ResourceLocation key = PaintingVariantRegistryApi.getKey(variant);

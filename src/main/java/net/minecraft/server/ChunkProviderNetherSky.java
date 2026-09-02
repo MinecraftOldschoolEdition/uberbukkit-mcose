@@ -1,6 +1,8 @@
 package net.minecraft.server;
 
 import java.util.Random;
+import net.minecraft.server.registry.ConfiguredFeatureDataBootstrap;
+import net.minecraft.server.registry.LegacyPlacedFeatureExecutor;
 
 public class ChunkProviderNetherSky implements IChunkProvider {
     private static final int LAVA_SPRING_ATTEMPTS = 3;
@@ -110,7 +112,9 @@ public class ChunkProviderNetherSky implements IChunkProvider {
             int z = baseZ + this.random.nextInt(16) + 8;
             int y = this.findInteriorFeatureY(x, z);
             if (y > 0) {
-                (new WorldGenHellLava("minecraft:lava")).a(this.world, this.random, x, y, z);
+                LegacyPlacedFeatureExecutor.generateSpringAt(
+                        this.world, this.random, x, y, z,
+                        ConfiguredFeatureDataBootstrap.SPRING_NETHER_OPEN);
             }
         }
 

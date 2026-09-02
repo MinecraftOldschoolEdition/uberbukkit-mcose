@@ -31,18 +31,23 @@ public class PaintingVariantDataLoaderTest {
     }
 
     @Test
-    public void builtInDataPreservesEveryLegacyPaintingDefinitionAndOrder() {
+    public void builtInDataPreservesLegacyOrderAndPublishesOptionalModernData() {
         PaintingVariantRegistryBootstrap.initialize();
 
         EnumArt[] legacy = EnumArt.values();
         Collection<PaintingVariant> registered = PaintingVariantRegistryApi.values();
-        assertEquals(legacy.length, registered.size());
+        List<PaintingVariant> placeable = PaintingVariantRegistryApi.placeableValues();
+        List<PaintingVariant> optional = PaintingVariantRegistryApi.optionalValues();
+        assertEquals(26, placeable.size());
+        assertEquals(17, optional.size());
+        assertEquals(43, registered.size());
         assertTrue(PaintingVariantRegistryApi.isFrozen());
 
         int index = 0;
-        for (PaintingVariant variant : registered) {
+        for (PaintingVariant variant : placeable) {
             EnumArt art = legacy[index++];
             assertSame(art, variant.getLegacyArt());
+            assertTrue(variant.hasLegacyBridge());
             assertEquals(art.A, variant.getLegacyTitle());
             assertEquals(art.B, variant.getPixelWidth());
             assertEquals(art.C, variant.getPixelHeight());
@@ -51,8 +56,47 @@ public class PaintingVariantDataLoaderTest {
             assertEquals(key, PaintingVariantRegistryApi.getKey(variant));
             assertEquals(key, variant.getAssetId());
         }
-        assertEquals("7455f1390ff273b1a823cf13a3ebf0a449a45e373e20155191e29553637b86d9",
+        assertEquals(legacy.length, index);
+
+        ArrayList<PaintingVariant> ordered =
+                new ArrayList<PaintingVariant>(registered);
+        assertEquals(placeable, ordered.subList(0, placeable.size()));
+        assertEquals(optional, ordered.subList(placeable.size(), ordered.size()));
+
+        LinkedHashMap<ResourceLocation, int[]> expected = expectedOptionalVariants();
+        index = 0;
+        for (Map.Entry<ResourceLocation, int[]> entry : expected.entrySet()) {
+            PaintingVariant variant = optional.get(index++);
+            assertSame(variant, PaintingVariantRegistryApi.get(entry.getKey()));
+            assertEquals(entry.getKey(), PaintingVariantRegistryApi.getKey(variant));
+            assertEquals(entry.getKey(), variant.getAssetId());
+            assertEquals(entry.getValue()[0], variant.getWidth());
+            assertEquals(entry.getValue()[1], variant.getHeight());
+            assertTrue(!variant.hasLegacyBridge());
+            assertEquals(null, variant.getLegacyArt());
+            assertEquals(null, variant.getLegacyTitle());
+        }
+        assertEquals(expected.size(), index);
+        assertImmutable(placeable);
+        assertImmutable(optional);
+        assertEquals("42ab2947baf8ec630782a94e48286d46d3de9b3ae0699dfebc75cddc0c53b211",
                 PaintingVariantRegistryApi.fingerprint());
+    }
+
+    @Test
+    public void modernOptionalCodecDoesNotCreateALegacySaveOrWireBridge() {
+        ResourceLocation key = new ResourceLocation("minecraft", "backyard");
+        PaintingVariant variant = PaintingVariant.decode(key, json(
+                "{\"asset_id\":\"minecraft:backyard\",\"width\":3,\"height\":4,"
+                        + "\"title\":{\"translate\":\"painting.minecraft.backyard.title\"},"
+                        + "\"author\":{\"translate\":\"painting.minecraft.backyard.author\"}}"),
+                null);
+        assertEquals(3, variant.getWidth());
+        assertEquals(4, variant.getHeight());
+        assertEquals(key, variant.getAssetId());
+        assertTrue(!variant.hasLegacyBridge());
+        assertEquals(null, variant.getLegacyArt());
+        assertEquals(null, variant.getLegacyTitle());
     }
 
     @Test
@@ -61,6 +105,7 @@ public class PaintingVariantDataLoaderTest {
                 PaintingVariantRegistryApi.getByLegacyTitle("SkullAndRoses").getLegacyArt());
         assertSame(EnumArt.MATTY,
                 PaintingVariantRegistryApi.getByLegacyTitle("Matty").getLegacyArt());
+        assertEquals(null, PaintingVariantRegistryApi.getByLegacyTitle("Backyard"));
         assertEquals(null, PaintingVariantRegistryApi.getByLegacyTitle("skullandroses"));
         assertEquals(null, PaintingVariantRegistryApi.getByLegacyTitle("MissingMotive"));
     }
@@ -261,6 +306,47 @@ public class PaintingVariantDataLoaderTest {
             fail("Expected behavior-changing painting data to be rejected");
         } catch (IllegalArgumentException expected) {
             assertTrue(expected.getMessage().length() > 0);
+        }
+    }
+
+    private static LinkedHashMap<ResourceLocation, int[]> expectedOptionalVariants() {
+        LinkedHashMap<ResourceLocation, int[]> expected =
+                new LinkedHashMap<ResourceLocation, int[]>();
+        optional(expected, "backyard", 3, 4);
+        optional(expected, "bouquet", 3, 3);
+        optional(expected, "cavebird", 3, 3);
+        optional(expected, "changing", 4, 2);
+        optional(expected, "cotan", 3, 3);
+        optional(expected, "endboss", 3, 3);
+        optional(expected, "fern", 3, 3);
+        optional(expected, "finding", 4, 2);
+        optional(expected, "lowmist", 4, 2);
+        optional(expected, "meditative", 1, 1);
+        optional(expected, "orb", 4, 4);
+        optional(expected, "owlemons", 3, 3);
+        optional(expected, "passage", 4, 2);
+        optional(expected, "pond", 3, 4);
+        optional(expected, "prairie_ride", 1, 2);
+        optional(expected, "sunflowers", 3, 3);
+        optional(expected, "tides", 3, 3);
+        return expected;
+    }
+
+    private static void optional(
+            Map<ResourceLocation, int[]> expected,
+            String path,
+            int width,
+            int height) {
+        expected.put(new ResourceLocation("minecraft", path),
+                new int[] { width, height });
+    }
+
+    private static void assertImmutable(List<PaintingVariant> variants) {
+        try {
+            variants.add(variants.get(0));
+            fail("Painting compatibility collection is mutable");
+        } catch (UnsupportedOperationException expected) {
+            // Expected.
         }
     }
 }

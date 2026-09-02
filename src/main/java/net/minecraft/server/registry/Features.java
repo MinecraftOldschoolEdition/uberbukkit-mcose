@@ -48,7 +48,7 @@ public final class Features {
     public static WorldGenerator create(ResourceLocation key) {
         if (key == null) return null;
         String path = key.getPath();
-        if ("dungeon".equals(path)) return new WorldGenDungeons();
+        if ("dungeon".equals(path) || "monster_room".equals(path)) return new WorldGenDungeons();
         if ("lake_water".equals(path)) return new WorldGenLakes("minecraft:water");
         if ("lake_lava".equals(path)) return new WorldGenLakes("minecraft:lava");
         return null;
@@ -61,5 +61,4 @@ public final class Features {
         return create(key);
     }
 }
-
 

@@ -1,0 +1,14 @@
+{
+  "type": "minecraft:legacy_clay",
+  "discard_chance_on_air_exposure": 0.0,
+  "size": 32,
+  "targets": [
+    {
+      "state": "minecraft:clay",
+      "target": {
+        "predicate_type": "minecraft:block_match",
+        "block": "minecraft:sand"
+      }
+    }
+  ]
+}

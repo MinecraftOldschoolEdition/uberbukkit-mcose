@@ -20,7 +20,7 @@ public class Packet107CreativeSetSlot extends Packet {
 
     public Packet107CreativeSetSlot(int slot, ItemStack stack) {
         this.slot = slot;
-        this.itemStack = stack;
+        this.itemStack = stack == null ? null : stack.cloneItemStack();
     }
 
     private static int normalizeIncomingCreativeItemId(int itemId) {
@@ -46,21 +46,18 @@ public class Packet107CreativeSetSlot extends Packet {
             byte count = datainputstream.readByte();
             short damage = datainputstream.readShort();
             int normalizedId = normalizeIncomingCreativeItemId(itemId);
-            if (isRegisteredItemId(normalizedId)) {
-                this.itemStack = new ItemStack(normalizedId, count, damage);
-            } else {
-                this.itemStack = null;
+            if (!isRegisteredItemId(normalizedId)) {
+                throw new IOException("Invalid creative item id " + itemId);
             }
-            
-            // Read NBT data if present (MCOSE protocol extension, pvn >= 14)
-            if (this.pvn >= 14) {
-                NBTTagCompound tag = PacketLimits.readCompressedNBT(datainputstream, PacketLimits.MAX_ITEM_NBT_BYTES, "item NBT");
-                if (this.itemStack != null) {
-                    this.itemStack.tag = tag;
-                }
+            if (count <= 0) {
+                throw new IOException("Invalid creative item count " + count);
             }
-        } else {
+            NBTTagCompound wireTag = PacketItemStackCodec.readTag(datainputstream, this.pvn);
+            this.itemStack = PacketItemStackCodec.decode(normalizedId, count, damage, wireTag);
+        } else if (itemId == -1) {
             this.itemStack = null;
+        } else {
+            throw new IOException("Invalid creative item id " + itemId);
         }
     }
 
@@ -75,18 +72,7 @@ public class Packet107CreativeSetSlot extends Packet {
             dataoutputstream.writeByte(this.itemStack.count);
             dataoutputstream.writeShort(this.itemStack.getData());
             
-            // Write NBT data if present (MCOSE protocol extension, pvn >= 14)
-            if (this.pvn >= 14) {
-                if (this.itemStack.tag != null) {
-                    try {
-                        PacketLimits.writeCompressedNBT(dataoutputstream, this.itemStack.tag, PacketLimits.MAX_ITEM_NBT_BYTES, "item NBT");
-                    } catch (Exception e) {
-                        dataoutputstream.writeShort(-1);
-                    }
-                } else {
-                    dataoutputstream.writeShort(-1);
-                }
-            }
+            PacketItemStackCodec.writeTag(dataoutputstream, this.itemStack, this.pvn);
         }
     }
 

@@ -11,6 +11,7 @@ import com.google.gson.JsonParser;
 import java.lang.reflect.Field;
 import java.util.Arrays;
 import java.util.Random;
+import net.minecraft.server.BiomeBase;
 import net.minecraft.server.Block;
 import net.minecraft.server.Item;
 import net.minecraft.server.util.ResourceLocation;
@@ -44,12 +45,22 @@ public class StructureTypeDataLoaderTest {
                 (String[])field(dungeon, "spawnerMobs"));
         assertArrayEquals(new int[] {1, 2, 0, 1},
                 (int[])field(dungeon, "spawnerWeights"));
+        assertArrayEquals(new String[] {"Skeleton", "Zombie", "Zombie", "Spider"},
+                dungeon.getSpawnerMobIds());
+        assertArrayEquals(new int[] {1, 2, 0, 1},
+                dungeon.getSpawnerMobWeights());
+        assertTrue(dungeon.getBiomes().isEmpty());
 
         StructureType shrine = StructureTypes.get(StructureTypes.HEROBRINE_SHRINE);
         assertEquals("Herobrine Shrine", shrine.getDisplayName());
         assertEquals(null, shrine.getLootTable());
         assertEquals(null, field(shrine, "spawnerMobs"));
         assertEquals(null, field(shrine, "spawnerWeights"));
+        assertEquals(Arrays.asList(new ResourceLocation("minecraft", "desert")),
+                Arrays.asList(shrine.getBiomes().toArray(
+                        new ResourceLocation[shrine.getBiomes().size()])));
+        assertTrue(shrine.isValidBiome(BiomeBase.DESERT));
+        assertFalse(shrine.isValidBiome(BiomeBase.PLAINS));
     }
 
     @Test

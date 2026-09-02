@@ -26,4 +26,19 @@ public class ModProtocolSpectatorModeTest {
         assertEquals(Integer.MIN_VALUE, ModProtocol.readSpectatorTargetPayload(new byte[3]));
         assertEquals(Integer.MIN_VALUE, ModProtocol.readSpectatorTargetPayload(new byte[5]));
     }
+
+    @Test
+    public void spectatorTeleportPayloadRoundTripsLegacyPlayerNames() {
+        byte[] payload = ModProtocol.createSpectatorTeleportPayload("Camera_Target1");
+
+        assertEquals("Camera_Target1", ModProtocol.readSpectatorTeleportPayload(payload));
+    }
+
+    @Test
+    public void malformedSpectatorTeleportPayloadIsRejected() {
+        assertEquals(0, ModProtocol.createSpectatorTeleportPayload("bad name").length);
+        assertEquals(0, ModProtocol.createSpectatorTeleportPayload("seventeen_chars_x").length);
+        assertEquals(null, ModProtocol.readSpectatorTeleportPayload(null));
+        assertEquals(null, ModProtocol.readSpectatorTeleportPayload(new byte[] {0, 1, 'x', 0}));
+    }
 }

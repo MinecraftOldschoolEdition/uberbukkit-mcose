@@ -6,6 +6,8 @@ import org.bukkit.event.entity.EntityInteractEvent;
 
 import java.util.Random;
 
+import net.minecraft.server.registry.BlockTags;
+
 // CraftBukkit start
 // CraftBukkit end
 
@@ -143,7 +145,10 @@ public class BlockSoil extends Block {
         for (int l = i - b0; l <= i + b0; ++l) {
             for (int i1 = k - b0; i1 <= k + b0; ++i1) {
                 int j1 = world.getTypeIdIfLoaded(l, j + 1, i1);
-                if (j1 == Block.CROPS.id || j1 == Block.PUMPKIN_STEM.id || j1 == Block.MELON_STEM.id) {
+                Block above = j1 > 0 && j1 < Block.byId.length
+                        ? Block.byId[j1] : null;
+                if (above != null
+                        && BlockTags.is(above, BlockTags.MAINTAINS_FARMLAND)) {
                     return true;
                 }
             }

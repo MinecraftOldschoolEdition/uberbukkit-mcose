@@ -1,0 +1,33 @@
+{
+  "type": "minecraft:cave",
+  "range": 8,
+  "count": {
+    "type": "minecraft:legacy_nested_random",
+    "bound": 40
+  },
+  "start_chance": {
+    "type": "minecraft:legacy_one_in",
+    "bound": 15
+  },
+  "y": {
+    "type": "minecraft:legacy_nested_random",
+    "bound": 120,
+    "offset": 8
+  },
+  "tunnel_thickness_multiplier": 1.0,
+  "horizontal_radius_multiplier": 1.0,
+  "room_vertical_radius_multiplier": 0.5,
+  "vertical_radius_multiplier": 1.0,
+  "floor_level": -0.7,
+  "maximum_carve_y": 120,
+  "lava_level": 10,
+  "replaceable_blocks": [
+    "minecraft:stone",
+    "minecraft:dirt",
+    "minecraft:grass_block"
+  ],
+  "avoided_fluids": [
+    "minecraft:water",
+    "minecraft:water_still"
+  ]
+}

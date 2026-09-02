@@ -1,0 +1,21 @@
+{
+  "type": "minecraft:block",
+  "pools": [
+    {
+      "rolls": {
+        "type": "minecraft:uniform",
+        "min": 4,
+        "max": 8
+      },
+      "apply_drop_chance": true,
+      "placement": "minecraft:block",
+      "entries": [
+        {
+          "type": "minecraft:item",
+          "name": "minecraft:dye",
+          "legacy_metadata": 4
+        }
+      ]
+    }
+  ]
+}

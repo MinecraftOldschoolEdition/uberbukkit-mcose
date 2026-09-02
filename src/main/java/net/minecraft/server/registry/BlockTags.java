@@ -34,6 +34,14 @@ public final class BlockTags {
     /** Present in the common corpus, but applied only by the legacy client. */
     public static final TagKey<Block> CLIENT_AXE_1_5_SUPPLEMENT =
             create("legacy_mining/client_axe_1_5_supplement");
+    public static final TagKey<Block> MAINTAINS_FARMLAND =
+            create("maintains_farmland");
+    public static final TagKey<Block> PREVENTS_NEARBY_LEAF_DECAY =
+            create("prevents_nearby_leaf_decay");
+    public static final TagKey<Block> CLIMBABLE =
+            create("climbable");
+    public static final TagKey<Block> ANIMALS_SPAWNABLE_ON =
+            create("animals_spawnable_on");
 
     private static final List<TagKey<Block>> SYNCHRONIZED_MINING_TAGS =
             Collections.unmodifiableList(Arrays.asList(
@@ -45,7 +53,11 @@ public final class BlockTags {
                     LEGACY_PICKAXE_1_75,
                     LEGACY_AXE_1_5,
                     LEGACY_SHOVEL_1_4,
-                    LEGACY_SHOVEL_1_5));
+                    LEGACY_SHOVEL_1_5,
+                    MAINTAINS_FARMLAND,
+                    PREVENTS_NEARBY_LEAF_DECAY,
+                    CLIMBABLE,
+                    ANIMALS_SPAWNABLE_ON));
 
     private static final List<TagKey<Block>> MINING_PROFILES =
             Collections.unmodifiableList(Arrays.asList(

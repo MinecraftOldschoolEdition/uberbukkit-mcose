@@ -183,8 +183,6 @@ public class PoseidonConfig extends Configuration {
         generateConfigOption("world.settings.block-pistons-pushing-furnaces.enabled", true);
         generateConfigOption("world.settings.pistons.transmutation-fix.enabled", true);
         generateConfigOption("world.settings.pistons.transmutation-fix.info", "This setting fixes block transmutation exploits.");
-        generateConfigOption("world.settings.pistons.sand-gravel-duping-fix.enabled", true);
-        generateConfigOption("world.settings.pistons.sand-gravel-duping-fix.info", "This setting fixes sand/gravel duplication exploits.");
         generateConfigOption("world.settings.pistons.other-fixes.enabled", true);
         generateConfigOption("world.settings.pistons.other-fixes.info", "This setting fixes various other piston exploits like creating illegal pistons, breaking bedrock and duplicating redstone torches.");
         generateConfigOption("world.settings.skeleton-shooting-sound-fix.info", "This setting fixes the sound of skeletons and players shooting not playing on clients.");

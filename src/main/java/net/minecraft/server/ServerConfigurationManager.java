@@ -545,6 +545,13 @@ public class ServerConfigurationManager {
         try {
             VanishAPI.applyForJoiner(player);
         } catch (Throwable ignore) {}
+
+        // Keep extension UI out of the login packet sequence.  In particular,
+        // first-join rules wait until this completed spawn path has queued a
+        // full terrain chunk for the player.
+        if (entityplayer.netServerHandler != null) {
+            entityplayer.netServerHandler.markServerRulesSpawned();
+        }
     }
 
     public void d(EntityPlayer entityplayer) {

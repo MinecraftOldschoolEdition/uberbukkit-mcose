@@ -12,7 +12,7 @@ public class SlotFurnaceInput extends Slot {
 
     public int getItemStackLimit(ItemStack itemstack, World world) {
         return itemstack != null && itemstack.getItem() instanceof ItemFood
-                ? this.d()
+                ? Math.min(64, this.d())
                 : super.getItemStackLimit(itemstack, world);
     }
 }

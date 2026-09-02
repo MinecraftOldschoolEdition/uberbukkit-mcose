@@ -2,6 +2,8 @@ package net.minecraft.server;
 
 import java.util.Random;
 
+import net.minecraft.server.registry.FireSpreadRegistryApi;
+
 import org.bukkit.event.block.BlockBurnEvent;
 import org.bukkit.event.block.BlockIgniteEvent;
 import org.bukkit.event.block.BlockIgniteEvent.IgniteCause;
@@ -15,34 +17,30 @@ import uk.betacraft.uberbukkit.UberbukkitConfig;
 // CraftBukkit end
 
 public class BlockFire extends Block {
-
-    private int[] a = new int[256];
-    private int[] b = new int[256];
-
     protected BlockFire(int i, int j) {
         super(i, j, Material.FIRE);
         this.a(true);
     }
 
     public void h() {
-        this.a(Block.WOOD.id, 5, 20);
-        this.a(Block.LOG.id, 5, 5);
-        this.a(Block.LEAVES.id, 30, 60);
-        this.a(Block.BOOKSHELF.id, 30, 20);
-        this.a(Block.TNT.id, 15, 100);
-        this.a(Block.LONG_GRASS.id, 60, 100);
-        this.a(Block.WOOL.id, 30, 60);
-
-        // uberbukkit
-        if (UberbukkitConfig.getInstance().getBoolean("mechanics.flammable_fences_stairs", true)) {
-            this.a(Block.FENCE.id, 5, 20);
-            this.a(Block.WOOD_STAIRS.id, 5, 20);
+        // The vanilla table is loaded from fire_spread JSON during registry
+        // bootstrap. Retain the UberBukkit compatibility switch as an
+        // effective runtime override, so reloads cannot silently re-enable it.
+        if (!UberbukkitConfig.getInstance().getBoolean(
+                "mechanics.flammable_fences_stairs", true)) {
+            this.a(Block.FENCE.id, 0, 0);
+            this.a(Block.WOOD_STAIRS.id, 0, 0);
         }
     }
 
+    /** Legacy mod bridge retained as a data-registry override layer. */
     private void a(int i, int j, int k) {
-        this.a[i] = j;
-        this.b[i] = k;
+        Block block = i >= 0 && i < Block.byId.length ? Block.byId[i] : null;
+        if (block == null || !FireSpreadRegistryApi.registerRuntimeOverride(
+                block, new FireSpreadRule(j, k))) {
+            throw new IllegalArgumentException(
+                    "Cannot register fire-spread odds for block " + i);
+        }
     }
 
     public AxisAlignedBB e(World world, int i, int j, int k) {
@@ -238,7 +236,7 @@ public class BlockFire extends Block {
     }
 
     private void a(World world, int i, int j, int k, int l, Random random, int i1) {
-        int j1 = this.b[world.getTypeId(i, j, k)];
+        int j1 = this.getFireSpreadRule(world, i, j, k).getBurnOdds();
 
         if (random.nextInt(l) < j1) {
             boolean flag = world.getTypeId(i, j, k) == Block.TNT.id;
@@ -307,13 +305,22 @@ public class BlockFire extends Block {
     }
 
     public boolean b(IBlockAccess iblockaccess, int i, int j, int k) {
-        return this.a[iblockaccess.getTypeId(i, j, k)] > 0;
+        return this.getFireSpreadRule(iblockaccess, i, j, k)
+                .getIgniteOdds() > 0;
     }
 
     public int f(World world, int i, int j, int k, int l) {
-        int i1 = this.a[world.getTypeId(i, j, k)];
+        int i1 = this.getFireSpreadRule(world, i, j, k).getIgniteOdds();
 
         return i1 > l ? i1 : l;
+    }
+
+    private FireSpreadRule getFireSpreadRule(
+            IBlockAccess access, int i, int j, int k) {
+        int blockId = access.getTypeId(i, j, k);
+        Block block = blockId >= 0 && blockId < Block.byId.length
+                ? Block.byId[blockId] : null;
+        return FireSpreadRegistryApi.get(block);
     }
 
     public boolean canPlace(World world, int i, int j, int k) {

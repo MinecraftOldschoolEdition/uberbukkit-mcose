@@ -6,6 +6,10 @@ import java.io.IOException;
 
 public class Packet19EntityAction extends Packet {
 
+    public static final int START_SPRINTING = 6;
+    public static final int STOP_SPRINTING = 7;
+    public static final int RELEASE_CHARGED_BOW = 8;
+
     public int a;
     public int animation;
 

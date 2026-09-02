@@ -1,14 +1,28 @@
 package net.minecraft.server;
 
 import java.util.Random;
+import net.minecraft.server.registry.ConfiguredCarverDefinition;
 
 public class MapGenCavesHell extends MapGenBase {
+    private final ConfiguredCarverDefinition configuration;
 
     public MapGenCavesHell() {
+        this(ConfiguredCarverDefinition.legacyNetherCaveDefaults());
+    }
+
+    public MapGenCavesHell(ConfiguredCarverDefinition configuration) {
+        if (configuration == null) {
+            throw new IllegalArgumentException(
+                    "Nether cave configuration cannot be null");
+        }
+        this.configuration = configuration;
+        this.a = configuration.getRange();
     }
 
     protected void a(int i, int j, byte[] abyte, double d0, double d1, double d2) {
-        this.a(i, j, abyte, d0, d1, d2, 1.0F + this.b.nextFloat() * 6.0F, 0.0F, 0.0F, -1, -1, 0.5D);
+        this.a(i, j, abyte, d0, d1, d2,
+                1.0F + this.b.nextFloat() * 6.0F, 0.0F, 0.0F, -1, -1,
+                this.configuration.getRoomVerticalRadiusMultiplier());
     }
 
     protected void a(int i, int j, byte[] abyte, double d0, double d1, double d2, float f, float f1, float f2, int k, int l, double d3) {
@@ -34,7 +48,7 @@ public class MapGenCavesHell extends MapGenBase {
         int j1 = random.nextInt(l / 2) + l / 4;
 
         for (boolean flag1 = random.nextInt(6) == 0; k < l; ++k) {
-            double d6 = 1.5D + (double) (MathHelper.sin((float) k * 3.1415927F / (float) l) * f * 1.0F);
+            double d6 = 1.5D + (double) (MathHelper.sin((float) k * 3.1415927F / (float) l) * f * this.configuration.getHorizontalRadiusMultiplier());
             double d7 = d6 * d3;
             float f5 = MathHelper.cos(f2);
             float f6 = MathHelper.sin(f2);
@@ -90,8 +104,8 @@ public class MapGenCavesHell extends MapGenBase {
                         i2 = 1;
                     }
 
-                    if (j2 > 120) {
-                        j2 = 120;
+                    if (j2 > this.configuration.getMaximumCarveY()) {
+                        j2 = this.configuration.getMaximumCarveY();
                     }
 
                     if (k2 < 0) {
@@ -112,7 +126,7 @@ public class MapGenCavesHell extends MapGenBase {
                             for (int l3 = j2 + 1; !flag2 && l3 >= i2 - 1; --l3) {
                                 i3 = (j3 * 16 + k3) * 128 + l3;
                                 if (l3 >= 0 && l3 < 128) {
-                                    if (abyte[i3] == Block.LAVA.id || abyte[i3] == Block.STATIONARY_LAVA.id) {
+                                    if (this.configuration.isAvoidedFluid(abyte[i3])) {
                                         flag2 = true;
                                     }
 
@@ -135,10 +149,10 @@ public class MapGenCavesHell extends MapGenBase {
                                 for (int j4 = j2 - 1; j4 >= i2; --j4) {
                                     double d14 = ((double) j4 + 0.5D - d1) / d7;
 
-                                    if (d14 > -0.7D && d12 * d12 + d14 * d14 + d13 * d13 < 1.0D) {
+                                    if (d14 > this.configuration.getFloorLevel() && d12 * d12 + d14 * d14 + d13 * d13 < 1.0D) {
                                         byte b0 = abyte[i4];
 
-                                        if (b0 == Block.NETHERRACK.id || b0 == Block.DIRT.id || b0 == Block.GRASS.id) {
+                                        if (this.configuration.isReplaceable(b0)) {
                                             abyte[i4] = 0;
                                         }
                                     }
@@ -158,15 +172,15 @@ public class MapGenCavesHell extends MapGenBase {
     }
 
     protected void a(World world, int i, int j, int k, int l, byte[] abyte) {
-        int i1 = this.b.nextInt(this.b.nextInt(this.b.nextInt(10) + 1) + 1);
+        int i1 = this.configuration.sampleCaveCount(this.b);
 
-        if (this.b.nextInt(5) != 0) {
+        if (!this.configuration.passesStartChance(this.b)) {
             i1 = 0;
         }
 
         for (int j1 = 0; j1 < i1; ++j1) {
             double d0 = (double) (i * 16 + this.b.nextInt(16));
-            double d1 = (double) this.b.nextInt(128);
+            double d1 = (double) this.configuration.sampleY(this.b);
             double d2 = (double) (j * 16 + this.b.nextInt(16));
             int k1 = 1;
 
@@ -180,7 +194,10 @@ public class MapGenCavesHell extends MapGenBase {
                 float f1 = (this.b.nextFloat() - 0.5F) * 2.0F / 8.0F;
                 float f2 = this.b.nextFloat() * 2.0F + this.b.nextFloat();
 
-                this.a(k, l, abyte, d0, d1, d2, f2 * 2.0F, f, f1, 0, 0, 0.5D);
+                this.a(k, l, abyte, d0, d1, d2,
+                        f2 * this.configuration.getTunnelThicknessMultiplier(),
+                        f, f1, 0, 0,
+                        this.configuration.getVerticalRadiusMultiplier());
             }
         }
     }

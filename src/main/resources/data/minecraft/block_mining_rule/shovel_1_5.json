@@ -1,0 +1,5 @@
+{
+  "blocks": "#minecraft:legacy_mining/shovel_1_5",
+  "preferred_tool": "shovel",
+  "speed_multiplier": 1.5
+}

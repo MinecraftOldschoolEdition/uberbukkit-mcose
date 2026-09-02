@@ -1,5 +1,10 @@
 package net.minecraft.server.registry;
 
+import java.util.Collection;
+import java.util.Collections;
+import java.util.LinkedHashSet;
+import java.util.Set;
+import net.minecraft.server.BiomeBase;
 import net.minecraft.server.util.ResourceLocation;
 
 import java.util.Random;
@@ -14,13 +19,18 @@ public class StructureType {
     private final ResourceLocation lootTable;
     private final String[] spawnerMobs;
     private final int[] spawnerWeights;
+    private final Set<ResourceLocation> biomes;
     
     private StructureType(Builder builder) {
         this.id = builder.id;
         this.displayName = builder.displayName;
         this.lootTable = builder.lootTable;
-        this.spawnerMobs = builder.spawnerMobs;
-        this.spawnerWeights = builder.spawnerWeights;
+        this.spawnerMobs = builder.spawnerMobs == null
+                ? null : builder.spawnerMobs.clone();
+        this.spawnerWeights = builder.spawnerWeights == null
+                ? null : builder.spawnerWeights.clone();
+        this.biomes = Collections.unmodifiableSet(
+                new LinkedHashSet<ResourceLocation>(builder.biomes));
     }
     
     public ResourceLocation getId() {
@@ -33,6 +43,34 @@ public class StructureType {
     
     public ResourceLocation getLootTable() {
         return lootTable;
+    }
+
+    /** Ordered legacy entity identifiers consumed by the spawner picker. */
+    public String[] getSpawnerMobIds() {
+        return this.spawnerMobs == null
+                ? new String[0] : this.spawnerMobs.clone();
+    }
+
+    /**
+     * Ordered picker weights, or {@code null} when the picker is uniform.
+     * The returned array is detached from this immutable descriptor.
+     */
+    public int[] getSpawnerMobWeights() {
+        return this.spawnerWeights == null
+                ? null : this.spawnerWeights.clone();
+    }
+
+    /** Empty means unrestricted; otherwise the biome must have a listed key. */
+    public boolean isValidBiome(BiomeBase biome) {
+        if (this.biomes.isEmpty()) return true;
+        if (biome == null) return false;
+        BiomeRegistryBootstrap.initialize();
+        ResourceLocation key = BiomeRegistryApi.getKey(biome);
+        return key != null && this.biomes.contains(key);
+    }
+
+    public Set<ResourceLocation> getBiomes() {
+        return this.biomes;
     }
     
     /**
@@ -96,6 +134,8 @@ public class StructureType {
         private ResourceLocation lootTable;
         private String[] spawnerMobs;
         private int[] spawnerWeights;
+        private final LinkedHashSet<ResourceLocation> biomes =
+                new LinkedHashSet<ResourceLocation>();
         
         public Builder(ResourceLocation id) {
             this.id = id;
@@ -134,10 +174,15 @@ public class StructureType {
             this.spawnerWeights = weights;
             return this;
         }
+
+        public Builder biomes(Collection<ResourceLocation> values) {
+            this.biomes.clear();
+            if (values != null) this.biomes.addAll(values);
+            return this;
+        }
         
         public StructureType build() {
             return new StructureType(this);
         }
     }
 }
-

@@ -1,0 +1,5 @@
+{
+  "type": "minecraft:block",
+  "adapter": "minecraft:moving_piston",
+  "pools": []
+}

@@ -74,6 +74,16 @@ public class RegistryDataLoaderLayeringTest {
     }
 
     @Test
+    public void duplicateObjectMembersAreRejectedAtEveryDepth() {
+        assertDuplicateObjectMemberRejected(
+                "{\"value\":\"first\",\"value\":\"second\"}",
+                "value");
+        assertDuplicateObjectMemberRejected(
+                "{\"display\":{\"frame\":\"task\",\"frame\":\"challenge\"}}",
+                "frame");
+    }
+
+    @Test
     public void tagStackAppendsDeduplicatesAndHonorsReplaceInPriorityOrder() {
         List<ResourceLocation> empty = RegistryDataLoader.loadRequiredTag(
                 "test_registry",
@@ -415,6 +425,25 @@ public class RegistryDataLoaderLayeringTest {
             keys.add(new ResourceLocation("minecraft", paths[i]));
         }
         return keys;
+    }
+
+    private static void assertDuplicateObjectMemberRejected(String json, String member) {
+        ResourceLocation key = new ResourceLocation("minecraft", "entry");
+        try {
+            RegistryDataLoader.loadRequired(
+                    "test_registry",
+                    Collections.singletonList(key),
+                    new TestLayeredProvider(json, null),
+                    new RegistryDataLoader.Decoder<String>() {
+                        public String decode(ResourceLocation ignored, JsonObject object) {
+                            return "decoded";
+                        }
+                    });
+            fail("Expected duplicate object member '" + member + "' to be rejected");
+        } catch (IllegalStateException expected) {
+            assertTrue(expected.getMessage(),
+                    expected.getMessage().contains("Duplicate key \"" + member + "\""));
+        }
     }
 
     private static final class TestLayeredProvider

@@ -1,0 +1,6 @@
+{
+  "default_key": "death.attack.explosion",
+  "actor_key": "death.attack.explosion.player",
+  "item_key": "death.attack.explosion.player.item",
+  "item_policy": "any"
+}

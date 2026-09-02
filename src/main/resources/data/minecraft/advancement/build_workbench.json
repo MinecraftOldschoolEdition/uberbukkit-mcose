@@ -1,0 +1,24 @@
+{
+  "parent": "minecraft:mine_wood",
+  "display": {
+    "icon": {
+      "id": "minecraft:crafting_table"
+    },
+    "title": { "translate": "achievement.buildWorkBench" },
+    "description": { "translate": "achievement.buildWorkBench.desc" },
+    "frame": "task",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": false
+  },
+  "criteria": {
+    "legacy_trigger": {
+      "trigger": "minecraft:legacy_trigger"
+    }
+  },
+  "requirements": [["legacy_trigger"]],
+  "legacy_layout": {
+    "column": 4,
+    "row": 0
+  }
+}

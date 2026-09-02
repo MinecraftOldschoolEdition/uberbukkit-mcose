@@ -10,6 +10,7 @@ import org.bukkit.event.player.PlayerPickupItemEvent;
 import uk.betacraft.uberbukkit.UberbukkitConfig;
 
 import java.util.List;
+import java.util.Random;
 
 // CraftBukkit start
 // CraftBukkit end
@@ -27,21 +28,33 @@ public class EntityArrow extends Entity {
     public EntityLiving shooter;
     private int j;
     private int k = 0;
+    private boolean adventureCombatArrow = false;
+    private boolean critical = false;
+    private double baseDamage = 2.0D;
 
     public EntityArrow(World world) {
         super(world);
+        // Beta 1.7.3 gives each arrow its own RNG. Poseidon's shared entity RNG
+        // must not make projectile spread depend on unrelated entity activity.
+        this.random = new Random();
         this.b(0.5F, 0.5F);
     }
 
     public EntityArrow(World world, double d0, double d1, double d2) {
         super(world);
+        this.random = new Random();
         this.b(0.5F, 0.5F);
         this.setPosition(d0, d1, d2);
         this.height = 0.0F;
     }
 
     public EntityArrow(World world, EntityLiving entityliving) {
+        this(world, entityliving, 1.5F, 1.0F);
+    }
+
+    public EntityArrow(World world, EntityLiving entityliving, float velocity, float inaccuracy) {
         super(world);
+        this.random = new Random();
         this.shooter = entityliving;
         this.fromPlayer = entityliving instanceof EntityHuman;
         this.b(0.5F, 0.5F);
@@ -54,7 +67,7 @@ public class EntityArrow extends Entity {
         this.motX = (double) (-MathHelper.sin(this.yaw / 180.0F * 3.1415927F) * MathHelper.cos(this.pitch / 180.0F * 3.1415927F));
         this.motZ = (double) (MathHelper.cos(this.yaw / 180.0F * 3.1415927F) * MathHelper.cos(this.pitch / 180.0F * 3.1415927F));
         this.motY = (double) (-MathHelper.sin(this.pitch / 180.0F * 3.1415927F));
-        this.a(this.motX, this.motY, this.motZ, 1.5F, 1.0F);
+        this.a(this.motX, this.motY, this.motZ, velocity, inaccuracy);
     }
 
     protected void b() {
@@ -175,6 +188,7 @@ public class EntityArrow extends Entity {
                     // CraftBukkit start
                     boolean stick;
                     Entity hitEntity = movingobjectposition.entity;
+                    int impactDamage = this.getImpactDamage();
                     boolean wasSkeletonAlive = hitEntity instanceof EntitySkeleton && ((EntitySkeleton) hitEntity).health > 0;
                     if (hitEntity instanceof EntityLiving) {
                         org.bukkit.Server server = this.world.getServer();
@@ -185,7 +199,7 @@ public class EntityArrow extends Entity {
                         Projectile projectile = (Projectile) this.getBukkitEntity();
                         // TODO deal with arrows being fired from a non-entity
 
-                        EntityDamageByEntityEvent event = new EntityDamageByEntityEvent(projectile, damagee, EntityDamageEvent.DamageCause.PROJECTILE, 4);
+                        EntityDamageByEntityEvent event = new EntityDamageByEntityEvent(projectile, damagee, EntityDamageEvent.DamageCause.PROJECTILE, impactDamage);
                         server.getPluginManager().callEvent(event);
                         this.shooter = (projectile.getShooter() == null) ? null : ((CraftLivingEntity) projectile.getShooter()).getHandle();
 
@@ -200,7 +214,7 @@ public class EntityArrow extends Entity {
                             stick = hitEntity.damageEntity(this, event.getDamage());
                         }
                     } else {
-                        stick = hitEntity.damageEntity(this.shooter, 4);
+                        stick = hitEntity.damageEntity(this.shooter, impactDamage);
                     }
                     if (stick) {
                         if (wasSkeletonAlive
@@ -294,6 +308,9 @@ public class EntityArrow extends Entity {
         nbttagcompound.a("shake", (byte) this.shake);
         nbttagcompound.a("inGround", (byte) (this.inGround ? 1 : 0));
         nbttagcompound.a("player", this.fromPlayer);
+        nbttagcompound.a("AdventureCombatArrow", this.adventureCombatArrow);
+        nbttagcompound.a("crit", this.critical);
+        nbttagcompound.a("damage", this.baseDamage);
     }
 
     public void a(NBTTagCompound nbttagcompound) {
@@ -305,6 +322,35 @@ public class EntityArrow extends Entity {
         this.shake = nbttagcompound.c("shake") & 255;
         this.inGround = nbttagcompound.c("inGround") == 1;
         this.fromPlayer = nbttagcompound.m("player");
+        this.adventureCombatArrow = nbttagcompound.m("AdventureCombatArrow");
+        this.critical = nbttagcompound.m("crit");
+        if (nbttagcompound.hasKey("damage")) {
+            this.baseDamage = nbttagcompound.h("damage");
+        }
+    }
+
+    private int getImpactDamage() {
+        if (!this.adventureCombatArrow) {
+            return 4;
+        }
+        double speed = MathHelper.a(this.motX * this.motX + this.motY * this.motY + this.motZ * this.motZ);
+        int damage = (int) Math.ceil(speed * this.baseDamage);
+        if (this.critical) {
+            damage += this.random.nextInt(damage / 2 + 2);
+        }
+        return damage;
+    }
+
+    public void setAdventureCombatArrow(boolean adventureCombatArrow) {
+        this.adventureCombatArrow = adventureCombatArrow;
+    }
+
+    public void setCritical(boolean critical) {
+        this.critical = critical;
+    }
+
+    public boolean isCritical() {
+        return this.critical;
     }
 
     public void b(EntityHuman entityhuman) {

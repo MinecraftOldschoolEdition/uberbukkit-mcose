@@ -1,0 +1,15 @@
+{
+  "type": "minecraft:spring_feature",
+  "hole_count": 1,
+  "requires_block_below": true,
+  "rock_count": 4,
+  "state": {
+    "id": "minecraft:water",
+    "properties": {
+      "falling": "false"
+    }
+  },
+  "valid_blocks": [
+    "minecraft:stone"
+  ]
+}

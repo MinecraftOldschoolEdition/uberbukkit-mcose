@@ -244,6 +244,16 @@ public final class BlockMiningRegistryApi {
         return state.byKey.size();
     }
 
+    /** Immutable effective rule snapshot used by semantic fingerprinting. */
+    public static Map<ResourceLocation, BlockMiningRule> snapshotRules() {
+        return state.byKey;
+    }
+
+    /** Server data and runtime overrides are synchronized unless explicitly local-only. */
+    public static boolean isRuleSynchronized(ResourceLocation key) {
+        return key != null;
+    }
+
     static int bootstrapDefaults() {
         int registered = 0;
         for (int i = 0; i < Block.byId.length; i++) {
@@ -341,21 +351,17 @@ public final class BlockMiningRegistryApi {
 
     public static boolean areTagBindingsCurrent() {
         return state.tagBindings.isForRevision(
-                BlockRegistry.registrationRevision());
+                BlockRegistry.trackedRegistrationRevision());
     }
 
     public static boolean isInTag(TagKey<Block> tag, Block block) {
-        synchronized (BlockRegistry.class) {
-            State current = currentTagState();
-            return current.tagBindings.contains(tag, block);
-        }
+        State current = currentTagState();
+        return current.tagBindings.contains(tag, block);
     }
 
     public static List<ResourceLocation> tagMemberKeys(TagKey<Block> tag) {
-        synchronized (BlockRegistry.class) {
-            State current = currentTagState();
-            return current.tagBindings.valueKeys(tag);
-        }
+        State current = currentTagState();
+        return current.tagBindings.valueKeys(tag);
     }
 
     /** Deterministic common tag order consumed by synchronized fingerprinting. */
@@ -374,7 +380,7 @@ public final class BlockMiningRegistryApi {
 
     private static State currentTagState() {
         State current = state;
-        long registryRevision = BlockRegistry.registrationRevision();
+        long registryRevision = BlockRegistry.trackedRegistrationRevision();
         if (!current.tagBindings.isForRevision(registryRevision)) {
             throw new IllegalStateException(
                     "Block tag bindings are stale for registry revision "

@@ -22,7 +22,9 @@ public final class DeathMessageHelper {
     }
 
     static String formatGeneric(EntityLiving victim) {
-        return WHITE + translate("death.attack.generic", getDisplayName(victim));
+        DeathMessageRule rule = DeathMessageRules.get(DamageTypes.GENERIC);
+        return formatTemplate(
+                rule.ordinary, getDisplayName(victim), null, null);
     }
 
     static String format(EntityLiving victim, DeathDamageSource source, EntityLiving killCredit) {
@@ -30,6 +32,30 @@ public final class DeathMessageHelper {
             return formatGeneric(victim);
         }
 
+        DeathDamageType type = source.getType();
+        if (type.getRegistryKey() != null) {
+            DeathMessageRule rule = DeathMessageRules.get(type.getRegistryKey());
+            Entity actor = source.getCausingEntity() != null
+                    ? source.getCausingEntity() : source.getDirectEntity();
+            String actorName = getEntityDisplayName(actor);
+            if (isEmpty(actorName)) {
+                actorName = source.getCausingEntityName();
+            }
+            if (isEmpty(actorName) && killCredit != null) {
+                actor = killCredit;
+                actorName = getDisplayName(killCredit);
+            }
+            return formatTemplate(
+                    rule.ordinary, getDisplayName(victim), actorName, actor);
+        }
+
+        return formatLegacy(victim, source, killCredit);
+    }
+
+    private static String formatLegacy(
+            EntityLiving victim,
+            DeathDamageSource source,
+            EntityLiving killCredit) {
         DeathDamageType type = source.getType();
         String deathMsg = "death.attack." + type.getMessageId();
         String victimName = getDisplayName(victim);
@@ -58,6 +84,24 @@ public final class DeathMessageHelper {
 
     static String formatFall(EntityLiving victim, CombatEntry knockOffEntry, Entity killingEntity) {
         DeathDamageSource knockOffSource = knockOffEntry.getSource();
+        DeathMessageRule rule = DeathMessageRules.get(DamageTypes.FALL);
+        if (rule.fallVariant != null) {
+            Entity actor = knockOffSource.getCausingEntity() != null
+                    ? knockOffSource.getCausingEntity()
+                    : knockOffSource.getDirectEntity();
+            String actorName = getEntityDisplayName(actor);
+            if (isEmpty(actorName)) {
+                actorName = knockOffSource.getCausingEntityName();
+            }
+            if (isEmpty(actorName) && killingEntity != null) {
+                actor = killingEntity;
+                actorName = getEntityDisplayName(killingEntity);
+            }
+            return formatTemplate(
+                    rule.fallVariant, getDisplayName(victim), actorName, actor);
+        }
+
+        // Unsupported/custom fall sources retain the server's prior fallback.
         if (!knockOffSource.getType().isFall()) {
             String killerName = getEntityDisplayName(killingEntity);
             Entity attackerEntity = knockOffSource.getCausingEntity() != null ? knockOffSource.getCausingEntity() : knockOffSource.getDirectEntity();
@@ -162,18 +206,25 @@ public final class DeathMessageHelper {
     }
 
     private static String getCustomWeaponName(Entity entity) {
+        ItemPresentation item = getHeldItemPresentation(entity);
+        return item != null && item.customNamed ? item.name : null;
+    }
+
+    private static ItemPresentation getHeldItemPresentation(Entity entity) {
         if (!(entity instanceof EntityLiving)) {
             return null;
         }
         ItemStack item = getHeldItem((EntityLiving) entity);
-        if (item == null || item.id == 0) {
+        if (item == null || item.id == 0 || item.getItem() == null) {
             return null;
         }
         String customName = item.getPatchedComponents().get(DataComponents.CUSTOM_NAME);
         if (!isEmpty(customName)) {
-            return customName;
+            return new ItemPresentation(customName, true);
         }
-        return null;
+        String translatedName = item.getItem().j();
+        return isEmpty(translatedName)
+                ? null : new ItemPresentation(translatedName, false);
     }
 
     private static ItemStack getHeldItem(EntityLiving entity) {
@@ -227,5 +278,29 @@ public final class DeathMessageHelper {
 
     private static boolean isEmpty(String value) {
         return value == null || value.length() == 0;
+    }
+
+    static String formatTemplate(
+            DeathMessageRule.Template template,
+            String victimName,
+            String actorName,
+            Entity actor) {
+        ItemPresentation item = getHeldItemPresentation(actor);
+        DeathMessage message = template.create(
+                victimName,
+                actorName,
+                item == null ? null : item.name,
+                item != null && item.customNamed);
+        return WHITE + message.format();
+    }
+
+    private static final class ItemPresentation {
+        private final String name;
+        private final boolean customNamed;
+
+        private ItemPresentation(String name, boolean customNamed) {
+            this.name = name;
+            this.customNamed = customNamed;
+        }
     }
 }

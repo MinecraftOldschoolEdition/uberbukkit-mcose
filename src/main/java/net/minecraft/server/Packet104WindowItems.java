@@ -31,11 +31,12 @@ public class Packet104WindowItems extends Packet {
     public void a(DataInputStream datainputstream) throws IOException {
         this.a = datainputstream.readByte();
         int short1 = datainputstream.readUnsignedShort();
-        if (short1 > 1024) {
+        if (short1 > 256) {
             throw new IOException("Too many window items: " + short1);
         }
 
         this.b = new ItemStack[short1];
+        NBTReadLimiter packetNbtLimiter = NBTReadLimiter.packet();
 
         for (int i = 0; i < short1; ++i) {
             short short2 = datainputstream.readShort();
@@ -44,12 +45,11 @@ public class Packet104WindowItems extends Packet {
                 byte b0 = datainputstream.readByte();
                 short short3 = datainputstream.readShort();
 
-                this.b[i] = new ItemStack(short2, b0, short3);
-                
-                // Read NBT data if present (MCOSE protocol extension)
-                if (this.pvn >= 14) {
-                    this.b[i].tag = PacketLimits.readCompressedNBT(datainputstream, PacketLimits.MAX_ITEM_NBT_BYTES, "item NBT");
-                }
+                NBTTagCompound wireTag = PacketItemStackCodec.readTag(
+                        datainputstream,
+                        this.pvn,
+                        packetNbtLimiter);
+                this.b[i] = PacketItemStackCodec.decode(short2, b0, short3, wireTag);
             }
         }
     }
@@ -66,18 +66,7 @@ public class Packet104WindowItems extends Packet {
                 dataoutputstream.writeByte((byte) this.b[i].count);
                 dataoutputstream.writeShort((short) this.b[i].getData());
                 
-                // Write NBT data if present (MCOSE protocol extension)
-                if (this.pvn >= 14) {
-                    if (this.b[i].tag != null) {
-                        try {
-                            PacketLimits.writeCompressedNBT(dataoutputstream, this.b[i].tag, PacketLimits.MAX_ITEM_NBT_BYTES, "item NBT");
-                        } catch (Exception e) {
-                            dataoutputstream.writeShort(-1);
-                        }
-                    } else {
-                        dataoutputstream.writeShort(-1);
-                    }
-                }
+                PacketItemStackCodec.writeTag(dataoutputstream, this.b[i], this.pvn);
             }
         }
     }

@@ -1,0 +1,24 @@
+{
+  "parent": "minecraft:portal",
+  "display": {
+    "icon": {
+      "id": "minecraft:gunpowder"
+    },
+    "title": { "translate": "achievement.ghastHunter" },
+    "description": { "translate": "achievement.ghastHunter.desc" },
+    "frame": "challenge",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": false
+  },
+  "criteria": {
+    "legacy_trigger": {
+      "trigger": "minecraft:legacy_trigger"
+    }
+  },
+  "requirements": [["legacy_trigger"]],
+  "legacy_layout": {
+    "column": -4,
+    "row": 11
+  }
+}

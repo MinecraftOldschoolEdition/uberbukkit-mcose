@@ -1,5 +1,8 @@
 package net.minecraft.server;
 
+import net.minecraft.server.registry.WorldPresetGeneratorRouting;
+import net.minecraft.server.util.ResourceLocation;
+
 public class WorldProviderHell extends WorldProvider {
 
     public WorldProviderHell() {
@@ -25,20 +28,30 @@ public class WorldProviderHell extends WorldProvider {
 
     public IChunkProvider getChunkProvider() {
         int terrainType = this.getNetherVariantTerrainType();
-        if (isNetherSkyTerrainType(terrainType)) {
+        ResourceLocation generatorKey = WorldPresetGeneratorRouting.generatorKey(
+                terrainType, WorldPresetGeneratorRouting.THE_NETHER);
+        if (WorldPresetGeneratorRouting.NETHER_SKY.equals(generatorKey)) {
             MinecraftServer.log.info("[WorldProviderHell] Selecting NetherSkyLevelSource (overworld terrainType=SKY)");
             return new ChunkProviderNetherSky(this.a, this.a.getSeed());
         }
-        if (terrainType == 6) {
+        if (WorldPresetGeneratorRouting.CLASSIC_NETHER.equals(generatorKey)) {
             MinecraftServer.log.info("[WorldProviderHell] Selecting ClassicHellLevelSource (terrainType=CLASSIC)");
             return new net.minecraft.server.Classic.ChunkProviderHellClassic(this.a, this.a.getSeed());
         }
-        MinecraftServer.log.info("[WorldProviderHell] Selecting default Nether generator");
-        return new ChunkProviderHell(this.a, this.a.getSeed());
+        if (WorldPresetGeneratorRouting.NETHER.equals(generatorKey)) {
+            MinecraftServer.log.info("[WorldProviderHell] Selecting default Nether generator");
+            return new ChunkProviderHell(this.a, this.a.getSeed());
+        }
+        throw new IllegalStateException(
+                "Unsupported Nether generator " + generatorKey
+                        + " for terrain type " + terrainType);
     }
 
     public boolean isNetherSkyVariant() {
-        return isNetherSkyTerrainType(this.getNetherVariantTerrainType());
+        return WorldPresetGeneratorRouting.NETHER_SKY.equals(
+                WorldPresetGeneratorRouting.generatorKey(
+                        this.getNetherVariantTerrainType(),
+                        WorldPresetGeneratorRouting.THE_NETHER));
     }
 
     public int getNetherVariantTerrainType() {

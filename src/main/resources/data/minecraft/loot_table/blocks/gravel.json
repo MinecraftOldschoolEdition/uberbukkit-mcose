@@ -1,0 +1,34 @@
+{
+  "type": "minecraft:block",
+  "pools": [
+    {
+      "rolls": 1,
+      "apply_drop_chance": true,
+      "placement": "minecraft:block",
+      "entries": [
+        {
+          "type": "minecraft:alternatives",
+          "children": [
+            {
+              "type": "minecraft:item",
+              "name": "minecraft:flint",
+              "conditions": [
+                {
+                  "condition": "minecraft:legacy_random_integer",
+                  "bound": 10,
+                  "equals": 0
+                }
+              ],
+              "legacy_metadata": 0
+            },
+            {
+              "type": "minecraft:item",
+              "name": "minecraft:gravel",
+              "legacy_metadata": 0
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

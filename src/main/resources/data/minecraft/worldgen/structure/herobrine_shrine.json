@@ -1,3 +1,6 @@
 {
-  "display_name": "Herobrine Shrine"
+  "display_name": "Herobrine Shrine",
+  "biomes": [
+    "minecraft:desert"
+  ]
 }

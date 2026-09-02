@@ -14,7 +14,11 @@ public class WorldGenPumpkin extends WorldGenerator {
             int k1 = k + random.nextInt(8) - random.nextInt(8);
 
             if (world.isEmpty(i1, j1, k1) && world.getTypeId(i1, j1 - 1, k1) == Block.GRASS.id && Block.PUMPKIN.canPlace(world, i1, j1, k1)) {
-                world.setRawTypeIdAndData(i1, j1, k1, Block.PUMPKIN.id, random.nextInt(4));
+                // Beta selected a carved-pumpkin facing here. Natural pumpkins
+                // are now plain, but retaining the draw keeps this patch and
+                // every later decoration feature on the Beta 1.7.3 stream.
+                random.nextInt(4);
+                world.setBlockState(i1, j1, k1, "minecraft:pumpkin");
             }
         }
 

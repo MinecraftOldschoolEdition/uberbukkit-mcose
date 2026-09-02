@@ -171,7 +171,7 @@ public abstract class Container {
 
                             slot1.a(inventoryplayer.j());
                         } else if (itemstack3 != null && slot1.isAllowed(itemstack3)) {
-                            if (itemstack2.id == itemstack3.id && (!itemstack2.usesData() || itemstack2.getData() == itemstack3.getData())) {
+                            if (this.canStacksMerge(itemstack2, itemstack3)) {
                                 k = j == 0 ? itemstack3.count : 1;
                                 if (k > slot1.d() - itemstack2.count) {
                                     k = slot1.d() - itemstack2.count;
@@ -191,7 +191,9 @@ public abstract class Container {
                                 slot1.c(itemstack3);
                                 inventoryplayer.b(itemstack2);
                             }
-                        } else if (itemstack3 != null && slot1.canTakeStack() && itemstack2.id == itemstack3.id && itemstack3.getMaxStackSize(entityhuman.world) > 1 && (!itemstack2.usesData() || itemstack2.getData() == itemstack3.getData())) {
+                        } else if (itemstack3 != null && slot1.canTakeStack()
+                                && this.canStacksMerge(itemstack2, itemstack3)
+                                && itemstack3.getMaxStackSize(entityhuman.world) > 1) {
                             k = itemstack2.count;
                             if (k > 0 && k + itemstack3.count <= itemstack3.getMaxStackSize(entityhuman.world)) {
                                 itemstack3.count += k;
@@ -316,8 +318,8 @@ public abstract class Container {
             return null;
         }
         ItemStack result = slot.getItem().cloneItemStack();
+        int amount = button == 0 ? 1 : slot.getItem().count;
         for (int iteration = 0; iteration < 128 && slot.b(); ++iteration) {
-            int amount = button == 0 ? 1 : slot.getItem().count;
             ItemStack dropped = slot.a(amount);
             if (dropped == null) {
                 break;
@@ -460,8 +462,7 @@ public abstract class Container {
     }
 
     private boolean canStacksMerge(ItemStack first, ItemStack second) {
-        return first != null && second != null && first.id == second.id
-                && (!first.usesData() || first.getData() == second.getData());
+        return ItemStack.isSameItemSameComponents(first, second);
     }
 
     private void resetQuickCraft() {
@@ -471,9 +472,15 @@ public abstract class Container {
 
     public void a(EntityHuman entityhuman) {
         InventoryPlayer inventoryplayer = entityhuman.inventory;
+        ItemStack carried = inventoryplayer.j();
 
-        if (inventoryplayer.j() != null) {
-            entityhuman.b(inventoryplayer.j());
+        if (carried != null) {
+            // 26.3 returns the authoritative cursor stack to normal inventory
+            // storage first and drops only what does not fit.
+            inventoryplayer.pickup(carried);
+            if (carried.count > 0) {
+                entityhuman.b(carried);
+            }
             inventoryplayer.b((ItemStack) null);
         }
     }
@@ -514,7 +521,7 @@ public abstract class Container {
             while (itemstack.count > 0 && (!flag && k < j || flag && k >= i)) {
                 slot = (Slot) this.e.get(k);
                 itemstack1 = slot.getItem();
-                if (itemstack1 != null && itemstack1.id == itemstack.id && (!itemstack.usesData() || itemstack.getData() == itemstack1.getData())) {
+                if (ItemStack.isSameItemSameComponents(itemstack1, itemstack)) {
                     int l = itemstack1.count + itemstack.count;
 
                     int limit = slot.getItemStackLimit(itemstack1, world);

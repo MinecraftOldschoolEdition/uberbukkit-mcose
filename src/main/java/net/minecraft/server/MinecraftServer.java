@@ -128,11 +128,13 @@ public class MinecraftServer implements Runnable, ICommandListener {
     
     // Friends verification handler for P2P verification on online-mode servers
     public final FriendsVerificationHandler friendsVerificationHandler;
+    public final net.minecraft.server.scoreboard.ServerScoreboardManager modernScoreboardManager;
 
     public MinecraftServer(OptionSet options) { // CraftBukkit - adds argument OptionSet
         new ThreadSleepForever(this);
         this.chatRoomManager = new VoiceChatRoomManager(this);
         this.friendsVerificationHandler = new FriendsVerificationHandler(this);
+        this.modernScoreboardManager = new net.minecraft.server.scoreboard.ServerScoreboardManager(this);
 
         // CraftBukkit start
         this.options = options;
@@ -143,6 +145,11 @@ public class MinecraftServer implements Runnable, ICommandListener {
         }
         Runtime.getRuntime().addShutdownHook(new ServerShutdownThread(this));
         // CraftBukkit end
+    }
+
+    /** 26.3-named scoreboard entry point for source-compatible mod ports. */
+    public net.minecraft.world.scores.Scoreboard getScoreboard() {
+        return this.modernScoreboardManager.getNamedScoreboard();
     }
 
     private File resolveWorldContainer() {
@@ -314,11 +321,11 @@ public class MinecraftServer implements Runnable, ICommandListener {
         }
 
         this.serverConfigurationManager = new ServerConfigurationManager(this);
-        // STARTUP plugins/configuration and PVN recipe additions are now in
-        // place, but no WorldServer has been constructed yet. Keep the single
-        // full registry transaction at this exact lifecycle boundary.
+        // Load mod content before the one registry/tag transaction so item
+        // identities and configured tags share the same immutable generation.
+        // No WorldServer has been constructed at this lifecycle boundary.
         try {
-            initializeRegistriesForStartup();
+            initializeModsAndRegistriesForStartup(new File("."));
         } catch (Throwable registryFailure) {
             log.log(Level.SEVERE,
                     "[RegistryBootstrap] Registry data failed before world construction; startup aborted.",
@@ -342,12 +349,6 @@ public class MinecraftServer implements Runnable, ICommandListener {
 
         log.info("Preparing level \"" + s1 + "\"");
         this.a(new WorldLoaderServer(this.worldContainer), s1, k);
-
-        try {
-            ModLoader.initialize(new File("."));
-        } catch (Throwable t) {
-            log.warning("[ModLoader] Failed during startup: " + t.getMessage());
-        }
 
         //Project Poseidon Start
         Poseidon.getServer().initializeServer();
@@ -615,6 +616,8 @@ public class MinecraftServer implements Runnable, ICommandListener {
             } // CraftBukkit
         }
 
+        this.modernScoreboardManager.initialize(new File(this.worldContainer, s));
+
         // CraftBukkit start
         for (World world : this.worlds) {
             this.server.getPluginManager().callEvent(new WorldLoadEvent(world.getWorld()));
@@ -683,6 +686,8 @@ public class MinecraftServer implements Runnable, ICommandListener {
             log.severe("[MCOSE] Failed to save players: " + e.getMessage());
             e.printStackTrace();
         }
+
+        this.modernScoreboardManager.save();
 
         log.info("Chunk saving complete (" + worldsSaved + "/" + this.worlds.size() + " worlds saved)");
         // CraftBukkit end
@@ -1011,6 +1016,10 @@ public class MinecraftServer implements Runnable, ICommandListener {
         this.networkListenThread.a();
         profiler.endSection();
 
+        profiler.startSection("scoreboard");
+        this.modernScoreboardManager.tick();
+        profiler.endSection();
+
         for (j = 0; j < this.worlds.size(); ++j) { // CraftBukkit
             // if (j == 0 || this.propertyManager.getBoolean("allow-nether", true)) { // CraftBukkit
             WorldServer worldserver = this.worlds.get(j); // CraftBukkit
@@ -1268,6 +1277,12 @@ public class MinecraftServer implements Runnable, ICommandListener {
     /** Startup-only boundary kept separate so configured-data failures remain testable and fatal. */
     static void initializeRegistriesForStartup() {
         net.minecraft.server.registry.RegistryBootstrap.initialize();
+    }
+
+    /** Registers mod content before capturing the immutable registry generation. */
+    static void initializeModsAndRegistriesForStartup(File serverDir) {
+        ModLoader.initialize(serverDir == null ? new File(".") : serverDir);
+        initializeRegistriesForStartup();
     }
 
     public File a(String s) {

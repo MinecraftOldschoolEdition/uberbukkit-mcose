@@ -7,6 +7,7 @@ import uk.betacraft.uberbukkit.UberbukkitConfig;
 import java.util.Random;
 
 import net.minecraft.server.registry.BlockCapabilityRegistryApi;
+import net.minecraft.server.registry.BlockTags;
 
 public class BlockLeaves extends BlockLeavesBase {
 
@@ -76,7 +77,11 @@ public class BlockLeaves extends BlockLeavesBase {
                         for (i2 = -b0; i2 <= b0; ++i2) {
                             for (j2 = -b0; j2 <= b0; ++j2) {
                                 k2 = world.getTypeId(i + l1, j + i2, k + j2);
-                                if (k2 == Block.LOG.id) {
+                                Block nearby = k2 > 0 && k2 < Block.byId.length
+                                        ? Block.byId[k2] : null;
+                                if (nearby != null && BlockTags.is(
+                                        nearby,
+                                        BlockTags.PREVENTS_NEARBY_LEAF_DECAY)) {
                                     this.a[(l1 + k1) * j1 + (i2 + k1) * b1 + j2 + k1] = 0;
                                 } else if (k2 == Block.LEAVES.id) {
                                     this.a[(l1 + k1) * j1 + (i2 + k1) * b1 + j2 + k1] = -2;
@@ -143,14 +148,6 @@ public class BlockLeaves extends BlockLeavesBase {
         int data = world.getData(i, j, k);
         this.g(world, i, j, k, data);
         world.setTypeId(i, j, k, 0);
-    }
-
-    public void dropNaturally(World world, int i, int j, int k, int l, float f) {
-        super.dropNaturally(world, i, j, k, l, f);
-
-        if ((l & 3) == 0 && world.random.nextFloat() < f && world.random.nextInt(200) == 0) {
-            this.a(world, i, j, k, new ItemStack(Item.APPLE.id, 1, 0));
-        }
     }
 
     public int a(Random random) {

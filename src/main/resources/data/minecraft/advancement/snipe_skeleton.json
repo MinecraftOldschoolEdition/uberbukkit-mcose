@@ -1,0 +1,24 @@
+{
+  "parent": "minecraft:build_bow",
+  "display": {
+    "icon": {
+      "id": "minecraft:arrow"
+    },
+    "title": { "translate": "achievement.snipeSkeleton" },
+    "description": { "translate": "achievement.snipeSkeleton.desc" },
+    "frame": "challenge",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": false
+  },
+  "criteria": {
+    "legacy_trigger": {
+      "trigger": "minecraft:legacy_trigger"
+    }
+  },
+  "requirements": [["legacy_trigger"]],
+  "legacy_layout": {
+    "column": 4,
+    "row": -4
+  }
+}

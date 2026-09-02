@@ -1,6 +1,7 @@
 package net.minecraft.server;
 
 import net.minecraft.server.registry.ItemRegistry;
+import net.minecraft.server.registry.ItemCapabilityRegistryApi;
 
 import java.util.Random;
 
@@ -78,8 +79,8 @@ public class Item {
     public static Item SIGN = (new ItemSign(67)).a(10, 2).a("sign");
     public static Item WOOD_DOOR = (new ItemDoor(68, Material.WOOD)).a(11, 2).a("doorWood");
     public static Item BUCKET = (new ItemBucket(69, 0)).a(10, 4).a("bucket");
-    public static Item WATER_BUCKET = (new ItemBucket(70, Block.WATER.id)).a(11, 4).a("bucketWater").a(BUCKET);
-    public static Item LAVA_BUCKET = (new ItemBucket(71, Block.LAVA.id)).a(12, 4).a("bucketLava").a(BUCKET);
+    public static Item WATER_BUCKET = (new ItemBucket(70, Block.WATER.id)).a(11, 4).a("bucketWater");
+    public static Item LAVA_BUCKET = (new ItemBucket(71, Block.LAVA.id)).a(12, 4).a("bucketLava");
     public static Item MINECART = (new ItemMinecart(72, 0)).a(7, 8).a("minecart");
     public static Item SADDLE = (new ItemSaddle(73)).a(8, 6).a("saddle");
     public static Item IRON_DOOR = (new ItemDoor(74, Material.ORE)).a(12, 2).a("doorIron");
@@ -87,7 +88,7 @@ public class Item {
     public static Item SNOW_BALL = (new ItemSnowball(76)).a(14, 0).a("snowball");
     public static Item BOAT = (new ItemBoat(77)).a(8, 8).a("boat");
     public static Item LEATHER = (new Item(78)).a(7, 6).a("leather");
-    public static Item MILK_BUCKET = (new ItemBucket(79, -1)).a(13, 4).a("milk").a(BUCKET);
+    public static Item MILK_BUCKET = (new ItemBucket(79, -1)).a(13, 4).a("milk");
     public static Item CLAY_BRICK = (new Item(80)).a(6, 1).a("brick");
     public static Item CLAY_BALL = (new Item(81)).a(9, 3).a("clay");
     public static Item SUGAR_CANE = (new ItemReed(82, Block.SUGAR_CANE_BLOCK)).a(11, 1).a("reeds");
@@ -145,7 +146,6 @@ public class Item {
     protected int textureId;
     protected boolean bi = false;
     protected boolean bj = false;
-    private Item craftingResult = null;
     private String name;
 
     protected Item(int i) {
@@ -263,17 +263,19 @@ public class Item {
         if (this.maxStackSize > 1) {
             throw new IllegalArgumentException("Max stack size must be 1 for items with crafting results");
         } else {
-            this.craftingResult = item;
+            ItemCapabilityRegistryApi.setLegacyCraftingRemainderOverride(
+                    this, item);
             return this;
         }
     }
 
     public Item h() {
-        return this.craftingResult;
+        return ItemCapabilityRegistryApi
+                .getLegacyCraftingRemainderItem(this);
     }
 
     public boolean i() {
-        return this.craftingResult != null;
+        return this.h() != null;
     }
 
     public String j() {

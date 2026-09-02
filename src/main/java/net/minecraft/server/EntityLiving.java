@@ -1,5 +1,7 @@
 package net.minecraft.server;
 
+import net.minecraft.server.registry.BlockTags;
+
 import com.legacyminecraft.poseidon.PoseidonConfig;
 import org.bukkit.craftbukkit.TrigMath;
 import org.bukkit.craftbukkit.entity.CraftEntity;
@@ -11,6 +13,9 @@ import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.entity.EntityRegainHealthEvent;
 import org.bukkit.event.entity.EntityRegainHealthEvent.RegainReason;
 
+import net.minecraft.server.registry.EntityLootTable;
+import net.minecraft.server.registry.LootTables;
+import uk.betacraft.uberbukkit.Uberbukkit;
 import uk.betacraft.uberbukkit.UberbukkitConfig;
 
 import java.util.List;
@@ -461,6 +466,9 @@ public abstract class EntityLiving extends Entity {
     }
 
     public void die(Entity entity) {
+        if (!this.world.isStatic && !(this instanceof EntityPlayer)) {
+            this.world.getServer().getServer().modernScoreboardManager.recordMobKill(entity);
+        }
         if (this.W >= 0 && entity != null) {
             entity.c(this, this.W);
         }
@@ -482,25 +490,97 @@ public abstract class EntityLiving extends Entity {
     }
 
     protected void q() {
-        int i = this.j();
-
         // CraftBukkit start - whole method
-        List<org.bukkit.inventory.ItemStack> loot = new java.util.ArrayList<org.bukkit.inventory.ItemStack>();
-        int count = this.random.nextInt(3);
-
-        if ((i > 0) && (count > 0)) {
-            loot.add(new org.bukkit.inventory.ItemStack(i, count));
-        }
-
-        CraftEntity entity = (CraftEntity) this.getBukkitEntity();
-        EntityDeathEvent event = new EntityDeathEvent(entity, loot);
-        org.bukkit.World bworld = this.world.getWorld();
-        this.world.getServer().getPluginManager().callEvent(event);
+        List<org.bukkit.inventory.ItemStack> loot = this.createDeathEventDrops();
+        EntityDeathEvent event = this.callBukkitDeathEvent(loot);
 
         for (org.bukkit.inventory.ItemStack stack : event.getDrops()) {
-            bworld.dropItemNaturally(entity.getLocation(), stack);
+            this.spawnDeathDropAtEntityPosition(stack);
         }
         // CraftBukkit end
+    }
+
+    protected EntityDeathEvent callBukkitDeathEvent(
+            List<org.bukkit.inventory.ItemStack> loot) {
+        CraftEntity entity = (CraftEntity) this.getBukkitEntity();
+        EntityDeathEvent event = new EntityDeathEvent(entity, loot);
+        this.world.getServer().getPluginManager().callEvent(event);
+        return event;
+    }
+
+    /**
+     * Builds the single mutable Bukkit death-event list. Entity-table counts
+     * are combined back into the same one-stack-per-legacy-entry shape that
+     * plugins received before the data-driven cutover.
+     */
+    protected List<org.bukkit.inventory.ItemStack> createDeathEventDrops() {
+        EntityLootTable table = LootTables.getEntityLootTable(this);
+        if (table != null) {
+            return this.combineEntityLootForDeathEvent(
+                    this.generateEntityDeathLoot(table));
+        }
+
+        List<org.bukkit.inventory.ItemStack> loot =
+                new java.util.ArrayList<org.bukkit.inventory.ItemStack>();
+        int itemId = this.j();
+        // Preserve UberBukkit's existing q() quirk: every no-table living
+        // entity advances nextInt(3), even when j() reports no drop.
+        int count = this.random.nextInt(3);
+        if (itemId > 0 && count > 0) {
+            loot.add(new org.bukkit.inventory.ItemStack(itemId, count));
+        }
+        return loot;
+    }
+
+    /** Server-only hook for legacy RNG overlays such as non-small slimes. */
+    protected List<ItemStack> generateEntityDeathLoot(EntityLootTable table) {
+        return table.generateEntityLoot(this, this.random);
+    }
+
+    private List<org.bukkit.inventory.ItemStack> combineEntityLootForDeathEvent(
+            List<ItemStack> generated) {
+        List<org.bukkit.inventory.ItemStack> combined =
+                new java.util.ArrayList<org.bukkit.inventory.ItemStack>();
+        for (int i = 0; i < generated.size(); i++) {
+            ItemStack stack = generated.get(i);
+            if (stack == null || stack.count <= 0) continue;
+
+            short metadata = (short)stack.getData();
+            org.bukkit.inventory.ItemStack previous = combined.isEmpty()
+                    ? null
+                    : combined.get(combined.size() - 1);
+            if (previous != null
+                    && previous.getTypeId() == stack.id
+                    && previous.getDurability() == metadata) {
+                previous.setAmount(previous.getAmount() + stack.count);
+                continue;
+            }
+
+            if (stack.id == Block.WOOL.id) {
+                combined.add(new org.bukkit.inventory.ItemStack(
+                        stack.id, stack.count, (short)0, Byte.valueOf((byte)metadata)));
+            } else if (metadata != 0) {
+                combined.add(new org.bukkit.inventory.ItemStack(
+                        stack.id, stack.count, metadata));
+            } else {
+                combined.add(new org.bukkit.inventory.ItemStack(stack.id, stack.count));
+            }
+        }
+        return combined;
+    }
+
+    /**
+     * Preserves the Bukkit death-event list while restoring Beta 1.7.3's
+     * entity-drop contract: the EntityItem starts at the dead entity's exact
+     * X/Z and requested Y offset. CraftWorld#dropItemNaturally adds a second
+     * random position offset and can cross into an unloaded neighboring chunk.
+     */
+    protected EntityItem spawnDeathDropAtEntityPosition(org.bukkit.inventory.ItemStack stack) {
+        if (stack == null
+                || !Uberbukkit.getProtocolHandler().canReceiveBlockItem(stack.getTypeId())) {
+            return null;
+        }
+        return this.a(new ItemStack(stack.getTypeId(), stack.getAmount(), stack.getDurability()), 0.0F);
     }
 
     protected int j() {
@@ -637,8 +717,10 @@ public abstract class EntityLiving extends Entity {
                     int ci = MathHelper.floor(this.locX);
                     int cj = MathHelper.floor(this.boundingBox.b);
                     int ck = MathHelper.floor(this.locZ);
-                    boolean feetLadder = this.world.getTypeId(ci, cj, ck) == Block.LADDER.id;
-                    boolean headLadder = this.world.getTypeId(ci, cj + 1, ck) == Block.LADDER.id;
+                    boolean feetLadder = isClimbableBlock(
+                            this.world.getTypeId(ci, cj, ck));
+                    boolean headLadder = isClimbableBlock(
+                            this.world.getTypeId(ci, cj + 1, ck));
                     if (!feetLadder && headLadder && this.aA > 0.0F) {
                         this.motY = 0.2D;
                     }
@@ -669,9 +751,15 @@ public abstract class EntityLiving extends Entity {
         int j = MathHelper.floor(this.boundingBox.b);
         int k = MathHelper.floor(this.locZ);
 
-        if (this.world.getTypeId(i, j, k) == Block.LADDER.id) return true;
-        if (this.world.getTypeId(i, j + 1, k) == Block.LADDER.id) return true;
+        if (isClimbableBlock(this.world.getTypeId(i, j, k))) return true;
+        if (isClimbableBlock(this.world.getTypeId(i, j + 1, k))) return true;
         return false;
+    }
+
+    private static boolean isClimbableBlock(int blockId) {
+        Block block = blockId > 0 && blockId < Block.byId.length
+                ? Block.byId[blockId] : null;
+        return block != null && BlockTags.is(block, BlockTags.CLIMBABLE);
     }
 
     public void b(NBTTagCompound nbttagcompound) {

@@ -8,6 +8,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 
 // CraftBukkit
 
@@ -120,28 +121,7 @@ public final class SpawnerCreature {
                         List list = biomebase.a(enumcreaturetype);
 
                         if (list != null && !list.isEmpty()) {
-                            int k1 = 0;
-
-                            BiomeMeta biomemeta;
-
-                            for (Iterator iterator1 = list.iterator(); iterator1.hasNext(); k1 += biomemeta.b) {
-                                biomemeta = (BiomeMeta) iterator1.next();
-                            }
-
-                            int l1 = world.random.nextInt(k1);
-
-                            biomemeta = (BiomeMeta) list.get(0);
-                            Iterator iterator2 = list.iterator();
-
-                            while (iterator2.hasNext()) {
-                                BiomeMeta biomemeta1 = (BiomeMeta) iterator2.next();
-
-                                l1 -= biomemeta1.b;
-                                if (l1 < 0) {
-                                    biomemeta = biomemeta1;
-                                    break;
-                                }
-                            }
+                            BiomeMeta biomemeta = selectSpawnEntry(list, world.random);
 
                             int i2 = chunkX * 16 + world.random.nextInt(16);
                             int j2 = world.random.nextInt(128);
@@ -198,7 +178,9 @@ public final class SpawnerCreature {
                                                                 continue labelTypes;
                                                             }
                                                         }
-                                                        if (l2 >= entityliving.l()) {
+                                                        int successfulSpawnCap = successfulSpawnCap(
+                                                                biomemeta, entityliving);
+                                                        if (l2 >= successfulSpawnCap) {
                                                             continue label113;
                                                         }
                                                     }
@@ -217,6 +199,32 @@ public final class SpawnerCreature {
 
             return i;
         }
+    }
+
+    /** Weighted legacy selection: exactly one bounded RNG call, no count roll. */
+    static BiomeMeta selectSpawnEntry(List list, Random random) {
+        if (list == null || list.isEmpty() || random == null) return null;
+        int totalWeight = 0;
+        for (Iterator iterator = list.iterator(); iterator.hasNext();) {
+            BiomeMeta entry = (BiomeMeta)iterator.next();
+            totalWeight += entry.b;
+        }
+        int choice = random.nextInt(totalWeight);
+        BiomeMeta selected = (BiomeMeta)list.get(0);
+        for (Iterator iterator = list.iterator(); iterator.hasNext();) {
+            BiomeMeta entry = (BiomeMeta)iterator.next();
+            choice -= entry.b;
+            if (choice < 0) {
+                selected = entry;
+                break;
+            }
+        }
+        return selected;
+    }
+
+    /** Data count owns bound entries; constructor-only entries retain legacy l(). */
+    static int successfulSpawnCap(BiomeMeta entry, EntityLiving entity) {
+        return entry != null && entry.c > 0 ? entry.c : entity.l();
     }
 
     private static boolean usesSkyWorldMobCaps(World world) {

@@ -6,15 +6,39 @@ public class WorldGenLakes extends WorldGenerator {
 
     private int a;
     private BlockStateKey state;
+    private BlockStateKey barrierState;
+    private int barrierBlockId;
 
     public WorldGenLakes(int i) {
         this.a = i;
         this.state = stateFromBlockId(i);
+        this.setLegacyBarrierState();
     }
 
     public WorldGenLakes(String blockId) {
         this.state = stateFromIdentifier(blockId).withProperty("variant", "still");
         this.a = BlockStateBridge.toLegacy(this.state).blockId;
+        this.setLegacyBarrierState();
+    }
+
+    public WorldGenLakes(BlockStateKey fluidState, BlockStateKey barrierState) {
+        if (fluidState == null || barrierState == null) {
+            throw new IllegalArgumentException(
+                    "Lake fluid and barrier states are required");
+        }
+        this.state = fluidState;
+        this.a = BlockStateBridge.toLegacy(fluidState).blockId;
+        this.barrierState = barrierState;
+        this.barrierBlockId = BlockStateBridge.toLegacy(barrierState).blockId;
+    }
+
+    private void setLegacyBarrierState() {
+        boolean lava = Block.byId[this.a] != null
+                && Block.byId[this.a].material == Material.LAVA;
+        this.barrierState = stateFromIdentifier(
+                lava ? "minecraft:stone" : "minecraft:air");
+        this.barrierBlockId = BlockStateBridge.toLegacy(
+                this.barrierState).blockId;
     }
 
     public boolean a(World world, Random random, int i, int j, int k) {
@@ -101,13 +125,14 @@ public class WorldGenLakes extends WorldGenerator {
             }
         }
 
-        if (Block.byId[this.a].material == Material.LAVA) {
+        if (this.barrierBlockId != 0) {
             for (i1 = 0; i1 < 16; ++i1) {
                 for (i2 = 0; i2 < 16; ++i2) {
                     for (j2 = 0; j2 < 8; ++j2) {
                         flag = !aboolean[(i1 * 16 + i2) * 8 + j2] && (i1 < 15 && aboolean[((i1 + 1) * 16 + i2) * 8 + j2] || i1 > 0 && aboolean[((i1 - 1) * 16 + i2) * 8 + j2] || i2 < 15 && aboolean[(i1 * 16 + i2 + 1) * 8 + j2] || i2 > 0 && aboolean[(i1 * 16 + (i2 - 1)) * 8 + j2] || j2 < 7 && aboolean[(i1 * 16 + i2) * 8 + j2 + 1] || j2 > 0 && aboolean[(i1 * 16 + i2) * 8 + (j2 - 1)]);
                         if (flag && (j2 < 4 || random.nextInt(2) != 0) && world.getMaterial(i + i1, j + j2, k + i2).isBuildable()) {
-                            world.setBlockState(i + i1, j + j2, k + i2, "minecraft:stone");
+                            setGeneratedBlock(world, i + i1, j + j2, k + i2,
+                                    this.barrierState);
                         }
                     }
                 }

@@ -2,13 +2,18 @@ package net.minecraft.server.registry;
 
 import net.minecraft.server.Block;
 import net.minecraft.server.Item;
+import net.minecraft.server.ItemComponentDefaults;
 import net.minecraft.server.ItemStack;
+import net.minecraft.server.ItemStackTemplate;
 import net.minecraft.server.Material;
+import net.minecraft.server.item.component.CookingFuel;
+import net.minecraft.server.registry.number.NumberProviders;
 import net.minecraft.server.util.ResourceLocation;
 import uk.betacraft.uberbukkit.Uberbukkit;
 
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
@@ -18,8 +23,19 @@ import java.util.Set;
  * Exposes furnace fuel duration semantics and core item properties.
  */
 public final class ItemCapabilityRegistryApi {
+    /** Legacy/mod overrides are deliberately outside synchronized data. */
+    private static final Map<Item, Item> craftingRemainderOverrides =
+            new IdentityHashMap<Item, Item>();
     private static final Map<ResourceLocation, Integer> furnaceFuelByKey = new LinkedHashMap<ResourceLocation, Integer>();
     private static final Map<Integer, Integer> furnaceFuelByLegacyId = new HashMap<Integer, Integer>();
+    private static volatile Map<ResourceLocation, CookingFuel> cookingFuelByKey =
+            Collections.emptyMap();
+    private static volatile Map<Integer, CookingFuel> cookingFuelByLegacyId =
+            Collections.emptyMap();
+    private static volatile Map<ResourceLocation, ItemStackTemplate>
+            craftingRemainderByKey = Collections.emptyMap();
+    private static volatile Map<Item, ItemStackTemplate>
+            craftingRemainderByItem = Collections.emptyMap();
     private static final Map<ResourceLocation, ItemProperties> propertiesByKey = new LinkedHashMap<ResourceLocation, ItemProperties>();
     private static final Map<Integer, ItemProperties> propertiesByLegacyId = new HashMap<Integer, ItemProperties>();
     private static final ItemRegistry.Listener ITEM_PROPERTY_LISTENER = new ItemRegistry.Listener() {
@@ -28,6 +44,8 @@ public final class ItemCapabilityRegistryApi {
         }
     };
     private static boolean propertyListenerRegistered = false;
+    private static boolean cookingFuelBindingsInitialized = false;
+    private static boolean craftingRemainderBindingsInitialized = false;
 
     private ItemCapabilityRegistryApi() {}
 
@@ -101,20 +119,26 @@ public final class ItemCapabilityRegistryApi {
         }
 
         int itemId = item.id;
+        ensureCookingFuelBindings();
+        CookingFuel component = cookingFuelByLegacyId.get(Integer.valueOf(itemId));
+        if (component != null) {
+            // The beta 1.6 target did not yet accept saplings as furnace fuel.
+            if (itemId == Block.SAPLING.id && Uberbukkit.getTargetPVN() < 11) {
+                return 0;
+            }
+            if (itemId == Block.WOOD_PLATE.id
+                    && Block.WOOD_PLATE.material != Material.WOOD) {
+                return 0;
+            }
+            return resolveBurnTicks(component);
+        }
+
+        // Preserve the legacy extension rule for wooden block items registered
+        // after the code-backed built-in attachment generation was published.
         if (itemId < 256 && Block.byId[itemId] != null && Block.byId[itemId].material == Material.WOOD) {
-            return 300;
-        }
-        if (itemId == Item.STICK.id) {
-            return 100;
-        }
-        if (itemId == Item.COAL.id) {
-            return 1600;
-        }
-        if (itemId == Item.LAVA_BUCKET.id) {
-            return 20000;
-        }
-        if (Uberbukkit.getTargetPVN() >= 11 && itemId == Block.SAPLING.id) {
-            return 100;
+            return resolveBurnTicks(new CookingFuel(
+                    NumberProviders.COOKING_TIME_WOOD_BLOCKS,
+                    NumberProviders.COOKING_DEFAULT_SPEED_MULTIPLIER));
         }
 
         return 0;
@@ -207,22 +231,212 @@ public final class ItemCapabilityRegistryApi {
         return Collections.unmodifiableSet(propertiesByKey.keySet());
     }
 
+    /** Immutable code-backed component assignments; plugin literal overrides are excluded. */
+    public static Map<ResourceLocation, CookingFuel> snapshotCookingFuelBindings() {
+        ensureCookingFuelBindings();
+        return cookingFuelByKey;
+    }
+
+    public static CookingFuel getCookingFuel(Item item) {
+        ensureCookingFuelBindings();
+        return getCookingFuelIfPresent(item);
+    }
+
+    /** Cache-safe lookup used while constructing default item components. */
+    public static CookingFuel getCookingFuelIfPresent(Item item) {
+        if (item == null) return null;
+        return cookingFuelByLegacyId.get(Integer.valueOf(item.id));
+    }
+
+    /** Creates a fresh remainder for one consumed item. Legacy API overrides win. */
+    public static ItemStack createCraftingRemainder(Item consumedItem) {
+        if (consumedItem == null) return null;
+        boolean overridden;
+        Item legacy;
+        synchronized (ItemCapabilityRegistryApi.class) {
+            overridden = craftingRemainderOverrides.containsKey(consumedItem);
+            legacy = craftingRemainderOverrides.get(consumedItem);
+        }
+        if (overridden) return legacy == null ? null : new ItemStack(legacy);
+        ensureCraftingRemainderBindings();
+        ItemStackTemplate template = craftingRemainderByItem.get(consumedItem);
+        return template == null ? null : template.create();
+    }
+
+    /** Item-only adapter retained for the legacy container-item interface. */
+    public static Item getLegacyCraftingRemainderItem(Item consumedItem) {
+        if (consumedItem == null) return null;
+        synchronized (ItemCapabilityRegistryApi.class) {
+            if (craftingRemainderOverrides.containsKey(consumedItem)) {
+                return craftingRemainderOverrides.get(consumedItem);
+            }
+        }
+        ensureCraftingRemainderBindings();
+        ItemStackTemplate template = craftingRemainderByItem.get(consumedItem);
+        return template == null ? null : template.getItem();
+    }
+
+    /** Immutable canonical bindings; legacy API overrides are excluded. */
+    public static Map<ResourceLocation, ItemStackTemplate>
+            snapshotCraftingRemainderBindings() {
+        ensureCraftingRemainderBindings();
+        return craftingRemainderByKey;
+    }
+
+    /** Compatibility adapter for the legacy Item container-item setter. */
+    public static synchronized void setLegacyCraftingRemainderOverride(
+            Item consumedItem,
+            Item remainderItem) {
+        if (consumedItem == null) {
+            throw new IllegalArgumentException("Consumed item cannot be null");
+        }
+        if (consumedItem.getMaxStackSize() > 1) {
+            throw new IllegalArgumentException(
+                    "Max stack size must be 1 for items with crafting results");
+        }
+        craftingRemainderOverrides.put(consumedItem, remainderItem);
+    }
+
+    public static synchronized void clearLegacyCraftingRemainderOverride(
+            Item consumedItem) {
+        if (consumedItem != null) {
+            craftingRemainderOverrides.remove(consumedItem);
+        }
+    }
+
+    static boolean publishCraftingRemainderBindings(
+            final long expectedItemRevision,
+            Map<ResourceLocation, ItemStackTemplate> staged) {
+        if (staged == null) {
+            throw new IllegalArgumentException(
+                    "Crafting-remainder bindings cannot be null");
+        }
+        final LinkedHashMap<ResourceLocation, ItemStackTemplate> byKey =
+                new LinkedHashMap<ResourceLocation, ItemStackTemplate>();
+        final IdentityHashMap<Item, ItemStackTemplate> byItem =
+                new IdentityHashMap<Item, ItemStackTemplate>();
+        for (Map.Entry<ResourceLocation, ItemStackTemplate> entry
+                : staged.entrySet()) {
+            ResourceLocation inputKey = entry.getKey();
+            ItemStackTemplate template = entry.getValue();
+            Item input = inputKey == null ? null : ItemRegistry.get(inputKey);
+            Item output = template == null ? null : template.getItem();
+            ResourceLocation outputKey = template == null
+                    ? null : template.getItemKey();
+            if (input == null || template == null || output == null
+                    || !inputKey.equals(ItemRegistry.getKey(input))
+                    || outputKey == null || ItemRegistry.get(outputKey) != output
+                    || !outputKey.equals(ItemRegistry.getKey(output))) {
+                throw new IllegalArgumentException(
+                        "Crafting-remainder binding must use canonical items: "
+                                + inputKey + " -> " + outputKey);
+            }
+            if (input.getMaxStackSize() > 1) {
+                throw new IllegalArgumentException(
+                        "Crafting-remainder input must stack to one: " + inputKey);
+            }
+            if (byItem.put(input, template) != null) {
+                throw new IllegalArgumentException(
+                        "Duplicate crafting-remainder input item " + inputKey);
+            }
+            byKey.put(inputKey, template);
+        }
+        final boolean[] published = new boolean[] {false};
+        boolean revisionMatched = ItemRegistry.publishIfRevision(
+                expectedItemRevision,
+                new Runnable() {
+                    public void run() {
+                        craftingRemainderByKey = Collections.unmodifiableMap(byKey);
+                        craftingRemainderByItem = Collections.unmodifiableMap(byItem);
+                        craftingRemainderBindingsInitialized = true;
+                        published[0] = true;
+                    }
+                });
+        return revisionMatched && published[0];
+    }
+
     static synchronized int bootstrapDefaults() {
-        if (registerFuel(Item.COAL, 1600)) {
-            // defaults retained for explicit capability map entries
-        }
-        if (registerFuel(Item.LAVA_BUCKET, 20000)) {
-            // defaults retained for explicit capability map entries
-        }
-        if (registerFuel(Item.STICK, 100)) {
-            // defaults retained for explicit capability map entries
-        }
-        if (Uberbukkit.getTargetPVN() >= 11) {
-            registerFuel(Block.SAPLING.id, 100);
-        }
+        NumberProviderRegistryBootstrap.initialize();
+        ItemRegistry.keys();
 
         ensurePropertiesCoverage();
+        if (cookingFuelBindingsInitialized) {
+            return propertiesByLegacyId.size();
+        }
+
+        LinkedHashMap<ResourceLocation, CookingFuel> byKey =
+                new LinkedHashMap<ResourceLocation, CookingFuel>();
+        HashMap<Integer, CookingFuel> byLegacyId =
+                new HashMap<Integer, CookingFuel>();
+
+        for (int i = 0; i < Block.byId.length; i++) {
+            Block block = Block.byId[i];
+            if (block == null || block.material != Material.WOOD
+                    || i >= Item.byId.length || Item.byId[i] == null) {
+                continue;
+            }
+            bindCookingFuel(byKey, byLegacyId, Item.byId[i],
+                    NumberProviders.COOKING_TIME_WOOD_BLOCKS);
+        }
+        // Pre-PVN12 servers construct this block with stone material. Retain
+        // its canonical wood-item attachment for client/server fingerprint
+        // parity; getFuelTicks gates the old profile's non-fuel behavior.
+        bindCookingFuel(byKey, byLegacyId, Item.byId[Block.WOOD_PLATE.id],
+                NumberProviders.COOKING_TIME_WOOD_BLOCKS);
+        bindCookingFuel(byKey, byLegacyId, Item.COAL,
+                NumberProviders.COOKING_TIME_COAL);
+        bindCookingFuel(byKey, byLegacyId, Item.byId[Block.COAL_BLOCK.id],
+                NumberProviders.COOKING_TIME_COAL_BLOCK);
+        bindCookingFuel(byKey, byLegacyId, Item.LAVA_BUCKET,
+                NumberProviders.COOKING_TIME_LAVA_BUCKET);
+        bindCookingFuel(byKey, byLegacyId, Item.STICK,
+                NumberProviders.COOKING_TIME_WOOD_ITEMS_EXTRA_SMALL);
+        // Keep client/server assignments identical at every target PVN. The
+        // historical availability gate is applied only when resolving ticks.
+        bindCookingFuel(byKey, byLegacyId, Item.byId[Block.SAPLING.id],
+                NumberProviders.COOKING_TIME_DRY_PLANTS);
+
+        cookingFuelByKey = Collections.unmodifiableMap(byKey);
+        cookingFuelByLegacyId = Collections.unmodifiableMap(byLegacyId);
+        cookingFuelBindingsInitialized = true;
+        ItemComponentDefaults.clear();
         return propertiesByLegacyId.size();
+    }
+
+    private static synchronized void ensureCookingFuelBindings() {
+        if (!cookingFuelBindingsInitialized) {
+            bootstrapDefaults();
+        }
+    }
+
+    private static void ensureCraftingRemainderBindings() {
+        if (!craftingRemainderBindingsInitialized) {
+            ItemCapabilityRegistryBootstrap.initialize();
+        }
+    }
+
+    private static void bindCookingFuel(
+            Map<ResourceLocation, CookingFuel> byKey,
+            Map<Integer, CookingFuel> byLegacyId,
+            Item item,
+            ResourceLocation burnTimeKey) {
+        if (item == null) {
+            throw new IllegalStateException(
+                    "Built-in cooking-fuel attachment has no item for " + burnTimeKey);
+        }
+        ResourceLocation itemKey = ItemRegistry.getKey(item);
+        if (itemKey == null) {
+            throw new IllegalStateException(
+                    "Built-in cooking-fuel item has no canonical key: " + item.id);
+        }
+        CookingFuel component = new CookingFuel(
+                burnTimeKey, NumberProviders.COOKING_DEFAULT_SPEED_MULTIPLIER);
+        byKey.put(itemKey, component);
+        byLegacyId.put(Integer.valueOf(item.id), component);
+    }
+
+    private static int resolveBurnTicks(CookingFuel component) {
+        return component.resolveBurnTimeTicks();
     }
 
     private static synchronized void ensurePropertiesCoverage() {
@@ -272,8 +486,7 @@ public final class ItemCapabilityRegistryApi {
             limit,
             item.e(),
             item.d(),
-            item.f(),
-            getFuelTicks(item)
+            item.f()
         );
     }
 
@@ -295,7 +508,6 @@ public final class ItemCapabilityRegistryApi {
         private final int maxDamage;
         private final boolean hasSubtypes;
         private final boolean damageable;
-        private final int fuelTicks;
 
         private ItemProperties(
             ResourceLocation key,
@@ -303,8 +515,7 @@ public final class ItemCapabilityRegistryApi {
             int maxStackSize,
             int maxDamage,
             boolean hasSubtypes,
-            boolean damageable,
-            int fuelTicks
+            boolean damageable
         ) {
             this.key = key;
             this.legacyId = legacyId;
@@ -312,7 +523,6 @@ public final class ItemCapabilityRegistryApi {
             this.maxDamage = maxDamage;
             this.hasSubtypes = hasSubtypes;
             this.damageable = damageable;
-            this.fuelTicks = fuelTicks;
         }
 
         public ResourceLocation getKey() {
@@ -340,7 +550,9 @@ public final class ItemCapabilityRegistryApi {
         }
 
         public int getFuelTicks() {
-            return fuelTicks;
+            Item item = this.legacyId < 0 || this.legacyId >= Item.byId.length
+                    ? null : Item.byId[this.legacyId];
+            return ItemCapabilityRegistryApi.getFuelTicks(item);
         }
     }
 }

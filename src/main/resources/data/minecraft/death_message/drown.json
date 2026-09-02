@@ -1,0 +1,16 @@
+{
+  "default_key": "death.attack.drown",
+  "actor_key": "death.attack.drown.player",
+  "provenance": [
+    {
+      "action": "water_place",
+      "max_age_ticks": 1200,
+      "horizontal_radius": 12.0,
+      "vertical_radius": 24.0,
+      "default_key": "death.attack.drown",
+      "actor_key": "death.attack.drown.pvp",
+      "item_key": "death.attack.drown.pvp.item",
+      "item_policy": "any"
+    }
+  ]
+}

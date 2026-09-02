@@ -41,6 +41,10 @@ public final class ModProtocol {
     public static final int FEATURE_REGISTRY_DATA_FINGERPRINT = 1 << 16;
     /** Server-provided rules GUI, including the first-join consent gate. */
     public static final int FEATURE_SERVER_RULES = 1 << 17;
+    /** 26.3 title/action-bar and scoreboard/team state over legacy Packet250. */
+    public static final int FEATURE_HUD_SCOREBOARD = 1 << 18;
+    /** Lossless DataComponentPatch carrier inside the existing compressed item-NBT field. */
+    public static final int FEATURE_ITEM_COMPONENT_ENVELOPE_V1 = 1 << 19;
 
     public static final String CHANNEL_HELLO = "MCOSE|MOD_HELLO";
     public static final String CHANNEL_HELLO_ACK = "MCOSE|MOD_HELLO_ACK";
@@ -49,6 +53,8 @@ public final class ModProtocol {
     public static final String CHANNEL_SKIN_PARTS = "MCOSE|SKINPARTS";
     public static final String CHANNEL_CLOUD_TIME = "MCOSE|CLOUD_TIME";
     public static final String CHANNEL_SPECTATOR = "MCOSE|SPECTATE";
+    /** Spectator-menu teleport request. The legacy player list exposes names rather than profile UUIDs. */
+    public static final String CHANNEL_SPECTATOR_TELEPORT = "MCOSE|SPTP";
     public static final String CHANNEL_BLOCK_MODEL_VISUAL = "MCOSE|BLOCK_MODEL";
 
     private ModProtocol() {}
@@ -197,7 +203,9 @@ public final class ModProtocol {
                 | FEATURE_BLOCK_MODEL_STATES
                 | FEATURE_SERVER_DIRECTORY
                 | FEATURE_REGISTRY_DATA_FINGERPRINT
-                | FEATURE_SERVER_RULES;
+                | FEATURE_SERVER_RULES
+                | FEATURE_HUD_SCOREBOARD
+                | FEATURE_ITEM_COMPONENT_ENVELOPE_V1;
         if (net.minecraft.server.ZstdRuntime.isAvailable()) {
             features |= FEATURE_CHUNK_ZSTD;
         }
@@ -211,6 +219,11 @@ public final class ModProtocol {
 
     public static boolean hasRequiredBlockModelVisuals(int featureBits) {
         int required = FEATURE_BLOCK_MODEL_VISUALS | FEATURE_BLOCK_MODEL_STATES;
+        return (featureBits & required) == required;
+    }
+
+    public static boolean hasItemComponentEnvelope(int featureBits) {
+        int required = FEATURE_ITEM_COMPONENTS | FEATURE_ITEM_COMPONENT_ENVELOPE_V1;
         return (featureBits & required) == required;
     }
 
@@ -290,6 +303,49 @@ public final class ModProtocol {
         } catch (Throwable ignored) {
             return Integer.MIN_VALUE;
         }
+    }
+
+    public static byte[] createSpectatorTeleportPayload(String playerName) {
+        if (!isValidLegacyPlayerName(playerName)) {
+            return new byte[0];
+        }
+        try {
+            ByteArrayOutputStream baos = new ByteArrayOutputStream(18);
+            DataOutputStream out = new DataOutputStream(baos);
+            PacketLimits.writeUtf(out, playerName, 16, "spectator player name");
+            out.flush();
+            return baos.toByteArray();
+        } catch (Throwable ignored) {
+            return new byte[0];
+        }
+    }
+
+    public static String readSpectatorTeleportPayload(byte[] payload) {
+        if (payload == null || payload.length < 3 || payload.length > 18) {
+            return null;
+        }
+        try {
+            DataInputStream in = new DataInputStream(new ByteArrayInputStream(payload));
+            String playerName = PacketLimits.readUtf(in, 16, "spectator player name");
+            boolean valid = in.available() == 0 && isValidLegacyPlayerName(playerName);
+            in.close();
+            return valid ? playerName : null;
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private static boolean isValidLegacyPlayerName(String playerName) {
+        if (playerName == null || playerName.length() < 1 || playerName.length() > 16) {
+            return false;
+        }
+        for (int i = 0; i < playerName.length(); ++i) {
+            char ch = playerName.charAt(i);
+            if (!Character.isLetterOrDigit(ch) && ch != '_') {
+                return false;
+            }
+        }
+        return true;
     }
 
     public static byte[] createRegistrySyncPayload(RegistrySyncSnapshot snapshot) {

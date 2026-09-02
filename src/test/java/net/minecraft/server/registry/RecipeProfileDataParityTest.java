@@ -111,7 +111,7 @@ public class RecipeProfileDataParityTest {
                     throw new AssertionError("Non-authoritative crafting index " + i);
                 }
             }
-            if (recipes.get(recipes.size() - 6) != plugin) {
+            if (recipes.get(recipes.size() - 7) != plugin) {
                 throw new AssertionError("STARTUP plugin moved out of pre-tail position");
             }
             if (Registries.RECIPE.getKey(plugin) == null) {

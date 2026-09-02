@@ -1,0 +1,16 @@
+{
+  "default_key": "death.attack.inFire",
+  "actor_key": "death.attack.inFire.player",
+  "provenance": [
+    {
+      "action": "flint_and_steel",
+      "max_age_ticks": 600,
+      "horizontal_radius": 8.0,
+      "vertical_radius": 16.0,
+      "default_key": "death.attack.inFire",
+      "actor_key": "death.attack.fire.pvp",
+      "item_key": "death.attack.fire.pvp.item",
+      "item_policy": "any"
+    }
+  ]
+}

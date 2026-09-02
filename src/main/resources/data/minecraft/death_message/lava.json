@@ -1,0 +1,16 @@
+{
+  "default_key": "death.attack.lava",
+  "actor_key": "death.attack.lava.player",
+  "provenance": [
+    {
+      "action": "lava_place",
+      "max_age_ticks": 1200,
+      "horizontal_radius": 8.0,
+      "vertical_radius": 24.0,
+      "default_key": "death.attack.lava",
+      "actor_key": "death.attack.lava.pvp",
+      "item_key": "death.attack.lava.pvp.item",
+      "item_policy": "any"
+    }
+  ]
+}

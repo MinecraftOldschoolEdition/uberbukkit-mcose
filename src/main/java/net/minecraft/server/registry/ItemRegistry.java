@@ -39,6 +39,7 @@ public final class ItemRegistry {
     private static final List<Listener> listeners = new ArrayList<Listener>();
     private static final MappedRegistry<Item> holders = new MappedRegistry<Item>();
     private static boolean scanned = false;
+    private static volatile long registrationRevision = 0L;
 
     public interface Listener {
         void onRegistered(ResourceLocation key, Item item);
@@ -52,12 +53,14 @@ public final class ItemRegistry {
         if (existing != null && existing != item) {
             return;
         }
+        boolean changed = !keyOf.containsKey(item);
         byKey.put(key, item);
         if (!keyOf.containsKey(item)) {
             keyOf.put(item, key);
         }
         holders.registerIfAbsent(key, item, legacyId);
         try { Registries.ITEM.registerIfAbsent(key, item); } catch (Throwable ignored) {}
+        if (changed) registrationRevision++;
         for (int i = 0; i < listeners.size(); i++) {
             try { listeners.get(i).onRegistered(key, item); } catch (Throwable ignored) {}
         }
@@ -196,6 +199,35 @@ public final class ItemRegistry {
     public static Collection<ResourceLocation> primaryKeys() {
         ensureScanned();
         return Collections.unmodifiableCollection(keyOf.values());
+    }
+
+    /** Monotonic identity generation captured by immutable item-tag bindings. */
+    public static synchronized long registrationRevision() {
+        ensureScanned();
+        return registrationRevision;
+    }
+
+    public static long getRegistrationRevision() {
+        return registrationRevision();
+    }
+
+    /**
+     * Returns the already-observed canonical generation without walking the
+     * legacy item array. Gameplay tag reads use this event-driven value; full
+     * scans stay confined to bootstrap/control-plane boundaries.
+     */
+    static long trackedRegistrationRevision() {
+        return registrationRevision;
+    }
+
+    /** Runs one publication while canonical item identity is unchanged. */
+    static synchronized boolean publishIfRevision(
+            long expectedRevision,
+            Runnable publication) {
+        ensureScanned();
+        if (registrationRevision != expectedRevision) return false;
+        publication.run();
+        return true;
     }
 
     public static Collection<ResourceLocation> displayKeys() {

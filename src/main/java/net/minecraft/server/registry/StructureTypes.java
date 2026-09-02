@@ -6,6 +6,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import net.minecraft.server.resource.RegistryDataLoader.LayeredResourceProvider;
 import net.minecraft.server.resource.RegistryDataLoader;
 import net.minecraft.server.util.ResourceLocation;
 
@@ -28,8 +29,10 @@ public final class StructureTypes {
         // The descriptor reference remains metadata only, but preserve the
         // original bootstrap dependency and registry API visibility.
         LootTables.initialize();
+        LayeredResourceProvider provider = RegistryDataLoader.createLayeredProvider(
+                configuredResourceRoot());
         List<ResourceLocation> keys = RegistryDataLoader.loadRequiredTag(
-                "worldgen/structure", LEGACY_ORDER);
+                "worldgen/structure", LEGACY_ORDER, provider);
         List<ResourceLocation> expected = Arrays.asList(DUNGEON, HEROBRINE_SHRINE);
         if (!expected.equals(keys)) {
             throw new IllegalStateException("Legacy structure order must remain " + expected
@@ -39,11 +42,23 @@ public final class StructureTypes {
         Map<ResourceLocation, StructureType> decoded = RegistryDataLoader.loadRequired(
                 "worldgen/structure",
                 keys,
+                provider,
                 new RegistryDataLoader.Decoder<StructureType>() {
                     public StructureType decode(ResourceLocation key, JsonObject json) {
                         return StructureTypeCodec.decode(key, json);
                     }
                 });
+        BiomeRegistryBootstrap.initialize();
+        for (Map.Entry<ResourceLocation, StructureType> entry
+                : decoded.entrySet()) {
+            for (ResourceLocation biome : entry.getValue().getBiomes()) {
+                if (BiomeRegistryApi.get(biome) == null) {
+                    throw new IllegalArgumentException(
+                            "Structure " + entry.getKey()
+                                    + " references unknown biome " + biome);
+                }
+            }
+        }
         if (!StructureTypeRegistryApi.publishAtomic(decoded)) {
             throw new IllegalStateException(
                     "Built-in structure descriptors could not be published atomically");
@@ -87,5 +102,11 @@ public final class StructureTypes {
 
     public static String canonicalizeIdentifier(String any) {
         return StructureTypeRegistryApi.canonicalizeIdentifier(any);
+    }
+
+    private static java.io.File configuredResourceRoot() {
+        String configured = System.getProperty("mcose.resourcesDir");
+        return configured == null || configured.length() == 0
+                ? null : new java.io.File(configured);
     }
 }

@@ -2,6 +2,8 @@ package net.minecraft.server;
 
 import java.util.IdentityHashMap;
 import java.util.Map;
+import net.minecraft.server.item.component.CookingFuel;
+import net.minecraft.server.registry.ItemCapabilityRegistryApi;
 
 /**
  * Default component prototypes derived from legacy item properties.
@@ -25,6 +27,12 @@ public final class ItemComponentDefaults {
         builder.set(DataComponents.MAX_STACK_SIZE, Integer.valueOf(item.getMaxStackSize()));
         if (item.e() > 0) {
             builder.set(DataComponents.MAX_DAMAGE, Integer.valueOf(item.e()));
+            builder.set(DataComponents.DAMAGE, Integer.valueOf(0));
+        }
+        CookingFuel cookingFuel =
+                ItemCapabilityRegistryApi.getCookingFuelIfPresent(item);
+        if (cookingFuel != null) {
+            builder.set(DataComponents.COOKING_FUEL, cookingFuel);
         }
 
         DataComponentMap defaults = builder.build();

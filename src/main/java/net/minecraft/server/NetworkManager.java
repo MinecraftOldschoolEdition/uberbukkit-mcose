@@ -29,6 +29,7 @@ import com.legacyminecraft.poseidon.event.PlayerReceivePacketEvent;
 import uk.betacraft.uberbukkit.Uberbukkit;
 import uk.betacraft.uberbukkit.packet.Packet62Sound;
 import uk.betacraft.uberbukkit.protocol.Protocol;
+import net.minecraft.server.network.ModProtocol;
 
 public class NetworkManager implements Packet.LoginPhaseState {
 
@@ -82,6 +83,10 @@ public class NetworkManager implements Packet.LoginPhaseState {
     private volatile boolean encryptionReadPaused = false;
     private volatile boolean encryptionEnabled = false;
     private volatile boolean statusReadPaused = false;
+    private volatile boolean itemComponentsReadEnabled = false;
+    private volatile boolean itemComponentsWriteEnabled = false;
+    private volatile boolean itemComponentsWriteBarrier = false;
+    private boolean modHelloCodecDecisionMade = false;
 
     private final boolean spamDetection;
 
@@ -204,7 +209,12 @@ public class NetworkManager implements Packet.LoginPhaseState {
             synchronized (this.g) {
                 boolean urgent = isOutboundUrgentPacket(packet);
                 boolean lowPriority = packet.k || isOutboundLowPriorityPacket(packet);
-                if (urgent) {
+                if (this.itemComponentsWriteBarrier && isItemComponentEnvelopeAck(packet)) {
+                    // The ACK is the write-side codec boundary. Put it ahead of any
+                    // inventory repair packets that became urgent while HELLO waited
+                    // for main-thread validation.
+                    this.urgentQueue.add(0, packet);
+                } else if (urgent) {
                     this.urgentQueue.add(packet);
                 } else if (lowPriority) {
                     if (shouldDropLowPriorityPacket(packet)) {
@@ -514,8 +524,17 @@ public class NetworkManager implements Packet.LoginPhaseState {
 
     private OutboundQueuedPacket pollUrgentPacket(long now) {
         synchronized (this.g) {
-            if (!this.urgentQueue.isEmpty() && (this.f == 0 || now - ((Packet) this.urgentQueue.get(0)).timestamp >= (long) this.f)) {
-                return this.removeQueuedPacket(this.urgentQueue);
+            for (int i = 0; i < this.urgentQueue.size(); i++) {
+                Packet candidate = (Packet) this.urgentQueue.get(i);
+                if (this.blocksItemComponentPacketForWrite(candidate)) {
+                    continue;
+                }
+                if (this.f == 0 || now - candidate.timestamp >= (long) this.f) {
+                    return this.removeQueuedPacket(this.urgentQueue, i);
+                }
+                if (!this.itemComponentsWriteBarrier) {
+                    break;
+                }
             }
 
             return null;
@@ -524,8 +543,17 @@ public class NetworkManager implements Packet.LoginPhaseState {
 
     private OutboundQueuedPacket pollHighPriorityPacket(long now) {
         synchronized (this.g) {
-            if (!this.highPriorityQueue.isEmpty() && (this.f == 0 || now - ((Packet) this.highPriorityQueue.get(0)).timestamp >= (long) this.f)) {
-                return this.removeQueuedPacket(this.highPriorityQueue);
+            for (int i = 0; i < this.highPriorityQueue.size(); i++) {
+                Packet candidate = (Packet) this.highPriorityQueue.get(i);
+                if (this.blocksItemComponentPacketForWrite(candidate)) {
+                    continue;
+                }
+                if (this.f == 0 || now - candidate.timestamp >= (long) this.f) {
+                    return this.removeQueuedPacket(this.highPriorityQueue, i);
+                }
+                if (!this.itemComponentsWriteBarrier) {
+                    break;
+                }
             }
 
             return null;
@@ -557,7 +585,11 @@ public class NetworkManager implements Packet.LoginPhaseState {
     }
 
     private OutboundQueuedPacket removeQueuedPacket(List queue) {
-        Packet packet = (Packet) queue.remove(0);
+        return this.removeQueuedPacket(queue, 0);
+    }
+
+    private OutboundQueuedPacket removeQueuedPacket(List queue, int index) {
+        Packet packet = (Packet) queue.remove(index);
         int packetBytes = packet.a() + 1;
 
         this.x -= packetBytes;
@@ -572,7 +604,11 @@ public class NetworkManager implements Packet.LoginPhaseState {
             throw new IOException("Output stream closed");
         }
 
-        Packet.a(packet, currentOutput);
+        try (PacketCodecContext.Scope ignored = PacketCodecContext.overrideItemComponents(
+                Boolean.valueOf(this.itemComponentsWriteEnabled))) {
+            Packet.a(packet, currentOutput);
+        }
+        this.updateItemComponentCodecAfterWrite(packet);
         int packetId = packet.b();
         e[packetId] += queuedPacket.packetBytes;
         queuedPacket.markEgress(
@@ -665,9 +701,14 @@ public class NetworkManager implements Packet.LoginPhaseState {
                 return false;
             }
 
-            Packet packet = Packet.a(this.input, this.p.c(), this.pvn, this); // uberbukkit - allows packets to be read accordingly to client version
+            Packet packet;
+            try (PacketCodecContext.Scope ignored = PacketCodecContext.overrideItemComponents(
+                    Boolean.valueOf(this.itemComponentsReadEnabled))) {
+                packet = Packet.a(this.input, this.p.c(), this.pvn, this); // uberbukkit - allows packets to be read accordingly to client version
+            }
 
             if (packet != null) {
+                this.updateItemComponentCodecAfterRead(packet);
                 if (packet instanceof Packet252SharedKey && this.p instanceof NetLoginHandler && !this.encryptionEnabled) {
                     // Stop the reader at the exact plaintext/encrypted boundary. The
                     // login handler enables AES after validating this packet.
@@ -1042,6 +1083,77 @@ public class NetworkManager implements Packet.LoginPhaseState {
         synchronized (this.g) {
             return this.x;
         }
+    }
+
+    void updateItemComponentCodecAfterRead(Packet packet) {
+        if (this.modHelloCodecDecisionMade || !isModHandshakePacket(packet, ModProtocol.CHANNEL_HELLO)) {
+            return;
+        }
+        this.modHelloCodecDecisionMade = true;
+        if (this.pvn >= 14 && hasValidItemComponentEnvelopePayload((Packet250CustomPayload) packet)) {
+            // Establish the read boundary at physical HELLO decode. A legacy
+            // inventory packet already in flight remains valid because the
+            // negotiated reader accepts payloads without the reserved carrier.
+            this.itemComponentsReadEnabled = true;
+            this.itemComponentsWriteBarrier = true;
+        }
+    }
+
+    void updateItemComponentCodecAfterWrite(Packet packet) {
+        if (!this.itemComponentsWriteBarrier || !isItemComponentEnvelopeAck(packet)) {
+            return;
+        }
+        // The peer cannot decode envelope bytes until this ACK itself is on the
+        // wire. Crossing the boundary only after Packet.a returned makes that
+        // ordering explicit for both buffered and unbuffered streams.
+        this.itemComponentsWriteEnabled = true;
+        this.itemComponentsWriteBarrier = false;
+    }
+
+    boolean isItemComponentsReadEnabled() {
+        return this.itemComponentsReadEnabled;
+    }
+
+    boolean isItemComponentsWriteEnabled() {
+        return this.itemComponentsWriteEnabled;
+    }
+
+    boolean hasItemComponentsWriteBarrier() {
+        return this.itemComponentsWriteBarrier;
+    }
+
+    boolean blocksItemComponentPacketForWrite(Packet packet) {
+        return this.itemComponentsWriteBarrier && isItemComponentInventoryPacket(packet);
+    }
+
+    private static boolean isItemComponentInventoryPacket(Packet packet) {
+        if (packet == null) {
+            return false;
+        }
+        int packetId = packet.b();
+        return packetId == 102 || packetId == 103 || packetId == 104 || packetId == 107;
+    }
+
+    private static boolean isItemComponentEnvelopeAck(Packet packet) {
+        return isModHandshakePacket(packet, ModProtocol.CHANNEL_HELLO_ACK)
+                && hasValidItemComponentEnvelopePayload((Packet250CustomPayload) packet);
+    }
+
+    private static boolean isModHandshakePacket(Packet packet, String channel) {
+        return packet instanceof Packet250CustomPayload
+                && channel.equals(((Packet250CustomPayload) packet).channel);
+    }
+
+    private static boolean hasValidItemComponentEnvelopePayload(Packet250CustomPayload packet) {
+        if (packet == null || packet.data == null || packet.data.length != 8) {
+            return false;
+        }
+        ModProtocol.HelloInfo hello = ModProtocol.readHelloInfo(packet.data);
+        return ModProtocol.isSupportedVersion(hello.version)
+                && ModProtocol.supportsFeatureBits(hello.version)
+                && ModProtocol.hasRequiredEntityFeatures(hello.featureBits)
+                && ModProtocol.hasRequiredBlockModelVisuals(hello.featureBits)
+                && ModProtocol.hasItemComponentEnvelope(hello.featureBits);
     }
 
     static boolean a(NetworkManager networkmanager) {

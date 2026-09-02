@@ -55,16 +55,6 @@ public class BlockPistonMoving extends BlockContainer {
         return 0;
     }
 
-    public void dropNaturally(World world, int i, int j, int k, int l, float f) {
-        if (!world.isStatic) {
-            TileEntityPiston tileentitypiston = this.b(world, i, j, k);
-
-            if (tileentitypiston != null) {
-                Block.byId[tileentitypiston.a()].g(world, i, j, k, tileentitypiston.e());
-            }
-        }
-    }
-
     public void doPhysics(World world, int i, int j, int k, int l) {
         if (!world.isStatic && world.getTileEntity(i, j, k) == null) {
             ;

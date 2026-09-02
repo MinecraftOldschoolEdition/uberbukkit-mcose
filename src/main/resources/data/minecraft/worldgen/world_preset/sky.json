@@ -1,0 +1,16 @@
+{
+  "dimensions": {
+    "minecraft:overworld": {
+      "type": "minecraft:sky",
+      "generator": { "type": "minecraft:sky" }
+    },
+    "minecraft:the_nether": {
+      "type": "minecraft:the_nether",
+      "generator": { "type": "minecraft:nether_sky" }
+    },
+    "minecraft:sky": {
+      "type": "minecraft:sky",
+      "generator": { "type": "minecraft:sky" }
+    }
+  }
+}

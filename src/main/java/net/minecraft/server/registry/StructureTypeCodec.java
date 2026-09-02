@@ -6,6 +6,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
 import java.math.BigDecimal;
 import java.util.Arrays;
+import java.util.LinkedHashSet;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -14,6 +15,7 @@ import net.minecraft.server.util.ResourceLocation;
 /** Decodes the legacy structure descriptor carried by a modern structure file. */
 public final class StructureTypeCodec {
     private static final int MAX_SPAWNER_ENTRIES = 64;
+    private static final int MAX_BIOME_ENTRIES = 256;
     private static final int MAX_WEIGHT = 1000000;
 
     private StructureTypeCodec() {}
@@ -23,7 +25,7 @@ public final class StructureTypeCodec {
             throw new IllegalArgumentException("Structure key and data are required");
         }
         requireOnlyFields(json, "structure", "display_name", "loot_table",
-                "spawner_mobs");
+                "spawner_mobs", "biomes");
 
         StructureType.Builder builder = StructureType.builder(key)
                 .displayName(requiredString(json, "display_name"));
@@ -61,6 +63,32 @@ public final class StructureTypeCodec {
                 throw new IllegalArgumentException("spawner total weight must be positive");
             }
             builder.spawnerMobs(mobs, weights);
+        }
+        if (json.has("biomes")) {
+            JsonArray biomeData = requiredArray(json, "biomes");
+            if (biomeData.size() == 0
+                    || biomeData.size() > MAX_BIOME_ENTRIES) {
+                throw new IllegalArgumentException(
+                        "biomes must contain 1-" + MAX_BIOME_ENTRIES
+                                + " entries when present");
+            }
+            LinkedHashSet<ResourceLocation> biomes =
+                    new LinkedHashSet<ResourceLocation>();
+            for (int i = 0; i < biomeData.size(); i++) {
+                JsonElement raw = biomeData.get(i);
+                if (raw == null || !raw.isJsonPrimitive()
+                        || !raw.getAsJsonPrimitive().isString()
+                        || raw.getAsString().length() == 0) {
+                    throw new IllegalArgumentException(
+                            "biome " + i + " must be a non-empty identifier");
+                }
+                ResourceLocation biome = new ResourceLocation(raw.getAsString());
+                if (!biomes.add(biome)) {
+                    throw new IllegalArgumentException(
+                            "duplicate biome " + biome);
+                }
+            }
+            builder.biomes(biomes);
         }
         return builder.build();
     }

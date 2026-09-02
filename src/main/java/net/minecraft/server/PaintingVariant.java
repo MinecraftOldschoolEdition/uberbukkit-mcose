@@ -28,9 +28,9 @@ public final class PaintingVariant {
     }
 
     public static PaintingVariant decode(ResourceLocation key, JsonObject json, EnumArt legacyArt) {
-        if (key == null || json == null || legacyArt == null) {
+        if (key == null || json == null) {
             throw new IllegalArgumentException(
-                    "Painting variant key, data, and legacy bridge are required");
+                    "Painting variant key and data are required");
         }
 
         int width = ranged(json, "width", 1, 16);
@@ -45,23 +45,26 @@ public final class PaintingVariant {
             throw new IllegalArgumentException("asset_id path cannot be empty");
         }
 
-        String legacyTitle = requiredString(json, "legacy_title").trim();
-        if (legacyTitle.length() == 0 || legacyTitle.length() > EnumArt.z) {
-            throw new IllegalArgumentException(
-                    "legacy_title must contain 1-" + EnumArt.z + " characters");
-        }
-        if (!legacyArt.A.equals(legacyTitle)) {
-            throw new IllegalArgumentException("legacy_title '" + legacyTitle
-                    + "' does not match compatibility art '" + legacyArt.A + "'");
-        }
-        if (width * 16 != legacyArt.B || height * 16 != legacyArt.C) {
-            throw new IllegalArgumentException("data dimensions " + width + "x" + height
-                    + " do not preserve legacy dimensions " + (legacyArt.B / 16)
-                    + "x" + (legacyArt.C / 16));
-        }
-        if (!assetId.equals(key)) {
-            throw new IllegalArgumentException("asset_id '" + assetId
-                    + "' does not preserve the built-in texture id '" + key + "'");
+        String legacyTitle = null;
+        if (legacyArt != null) {
+            legacyTitle = requiredString(json, "legacy_title").trim();
+            if (legacyTitle.length() == 0 || legacyTitle.length() > EnumArt.z) {
+                throw new IllegalArgumentException(
+                        "legacy_title must contain 1-" + EnumArt.z + " characters");
+            }
+            if (!legacyArt.A.equals(legacyTitle)) {
+                throw new IllegalArgumentException("legacy_title '" + legacyTitle
+                        + "' does not match compatibility art '" + legacyArt.A + "'");
+            }
+            if (width * 16 != legacyArt.B || height * 16 != legacyArt.C) {
+                throw new IllegalArgumentException("data dimensions " + width + "x" + height
+                        + " do not preserve legacy dimensions " + (legacyArt.B / 16)
+                        + "x" + (legacyArt.C / 16));
+            }
+            if (!assetId.equals(key)) {
+                throw new IllegalArgumentException("asset_id '" + assetId
+                        + "' does not preserve the built-in texture id '" + key + "'");
+            }
         }
 
         return new PaintingVariant(width, height, assetId, legacyTitle, legacyArt);
@@ -126,6 +129,10 @@ public final class PaintingVariant {
 
     public EnumArt getLegacyArt() {
         return this.legacyArt;
+    }
+
+    public boolean hasLegacyBridge() {
+        return this.legacyArt != null;
     }
 
     public String getLegacyTitle() {

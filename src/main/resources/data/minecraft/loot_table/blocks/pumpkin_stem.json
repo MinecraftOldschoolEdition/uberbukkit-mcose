@@ -1,0 +1,81 @@
+{
+  "type": "minecraft:block",
+  "pools": [
+    {
+      "rolls": 1,
+      "apply_drop_chance": true,
+      "placement": "minecraft:block",
+      "entries": [
+        {
+          "type": "minecraft:empty"
+        }
+      ]
+    },
+    {
+      "rolls": 1,
+      "apply_drop_chance": false,
+      "placement": "minecraft:legacy_plant",
+      "entries": [
+        {
+          "type": "minecraft:item",
+          "name": "minecraft:pumpkin_seeds",
+          "conditions": [
+            {
+              "condition": "minecraft:legacy_random_integer",
+              "bound": 15,
+              "less_or_equal_metadata": {
+                "mask": 15,
+                "maximum": 7
+              }
+            }
+          ],
+          "legacy_metadata": 0
+        }
+      ]
+    },
+    {
+      "rolls": 1,
+      "apply_drop_chance": false,
+      "placement": "minecraft:legacy_plant",
+      "entries": [
+        {
+          "type": "minecraft:item",
+          "name": "minecraft:pumpkin_seeds",
+          "conditions": [
+            {
+              "condition": "minecraft:legacy_random_integer",
+              "bound": 15,
+              "less_or_equal_metadata": {
+                "mask": 15,
+                "maximum": 7
+              }
+            }
+          ],
+          "legacy_metadata": 0
+        }
+      ]
+    },
+    {
+      "rolls": 1,
+      "apply_drop_chance": false,
+      "placement": "minecraft:legacy_plant",
+      "entries": [
+        {
+          "type": "minecraft:item",
+          "name": "minecraft:pumpkin_seeds",
+          "conditions": [
+            {
+              "condition": "minecraft:legacy_random_integer",
+              "bound": 15,
+              "less_or_equal_metadata": {
+                "mask": 15,
+                "maximum": 7
+              }
+            }
+          ],
+          "legacy_metadata": 0
+        }
+      ]
+    }
+  ]
+}

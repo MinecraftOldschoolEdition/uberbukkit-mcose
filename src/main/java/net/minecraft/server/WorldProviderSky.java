@@ -1,5 +1,8 @@
 package net.minecraft.server;
 
+import net.minecraft.server.registry.WorldPresetGeneratorRouting;
+import net.minecraft.server.util.ResourceLocation;
+
 public class WorldProviderSky extends WorldProvider {
 
     public WorldProviderSky() {}
@@ -12,6 +15,15 @@ public class WorldProviderSky extends WorldProvider {
 
     @Override
     public IChunkProvider getChunkProvider() {
+        int terrainType = this.a != null && this.a.worldData != null
+                ? this.a.worldData.getTerrainType() : 0;
+        ResourceLocation generatorKey = WorldPresetGeneratorRouting.generatorKey(
+                terrainType, WorldPresetGeneratorRouting.SKY);
+        if (!WorldPresetGeneratorRouting.SKY_GENERATOR.equals(generatorKey)) {
+            throw new IllegalStateException(
+                    "Unsupported Sky generator " + generatorKey
+                            + " for terrain type " + terrainType);
+        }
         return new ChunkProviderSky(this.a, this.a.getSeed());
     }
 

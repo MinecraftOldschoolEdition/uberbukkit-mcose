@@ -73,3 +73,8 @@ mechanics:
     spawn_slimes: true
 experimental:
     force_fix_chunk_coords_corruption: false
+server-browser:
+    api-base-url: https://minecraftoldschool.com
+    public-address: ''
+    enabled: true
+    info: Set public-address to advertise through the website API. No server-browser token is required.

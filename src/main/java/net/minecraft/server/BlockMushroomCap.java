@@ -1,5 +1,7 @@
 package net.minecraft.server;
 
+import java.util.Random;
+
 public class BlockMushroomCap extends Block {
     private int type; // 0=brown, 1=red
 
@@ -27,5 +29,14 @@ public class BlockMushroomCap extends Block {
     public int a(int side) {
         return this.textureId;
     }
-}
 
+    public int a(Random random) {
+        int count = random.nextInt(10) - 7;
+        if (count < 0) count = 0;
+        return count;
+    }
+
+    public int a(int metadata, Random random) {
+        return Block.BROWN_MUSHROOM.id + this.type;
+    }
+}

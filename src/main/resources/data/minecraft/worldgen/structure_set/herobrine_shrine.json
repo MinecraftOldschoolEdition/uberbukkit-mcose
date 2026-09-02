@@ -1,0 +1,21 @@
+{
+  "structures": [
+    {
+      "structure": "minecraft:herobrine_shrine",
+      "weight": 1
+    }
+  ],
+  "placement": {
+    "type": "minecraft:legacy_random_chance",
+    "chance": 750000,
+    "salt": 777777777,
+    "chunk_x_multiplier": 341873128712,
+    "chunk_z_multiplier": 132897987541,
+    "candidate_offset": {
+      "min": 8,
+      "bound": 16
+    },
+    "generation_y": 64,
+    "locate_y": 72
+  }
+}

@@ -22,8 +22,12 @@ public class RegistryRuntimeSnapshotTest {
         assertNotNull(world.lookupUntyped(id("jukebox_song")));
         assertNull(world.lookupUntyped(id("recipe")));
         assertNull(world.lookupUntyped(id("loot_table")));
+        assertNull(world.lookupUntyped(id("number_provider")));
+        assertNull(world.lookupUntyped(id("advancement")));
         assertNotNull(reloadable.lookupUntyped(id("recipe")));
         assertNotNull(reloadable.lookupUntyped(id("loot_table")));
+        assertNotNull(reloadable.lookupUntyped(id("number_provider")));
+        assertNotNull(reloadable.lookupUntyped(id("advancement")));
         assertEquals(0, snapshot.getLayers().getLayer(RegistryLayer.DIMENSIONS).size());
     }
 

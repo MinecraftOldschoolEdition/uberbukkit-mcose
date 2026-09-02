@@ -1,0 +1,23 @@
+{
+  "display": {
+    "icon": {
+      "id": "minecraft:book"
+    },
+    "title": { "translate": "achievement.openInventory" },
+    "description": { "translate": "achievement.openInventory.desc" },
+    "frame": "task",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": false
+  },
+  "criteria": {
+    "legacy_trigger": {
+      "trigger": "minecraft:legacy_trigger"
+    }
+  },
+  "requirements": [["legacy_trigger"]],
+  "legacy_layout": {
+    "column": 0,
+    "row": 0
+  }
+}

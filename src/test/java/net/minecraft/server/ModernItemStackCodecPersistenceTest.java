@@ -10,12 +10,85 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
 
 public class ModernItemStackCodecPersistenceTest {
 
     @BeforeClass
     public static void initializeBlocksBeforeItems() {
         assertNotNull(Block.STONE);
+    }
+
+    @Test
+    public void damageableItemDefaultsIncludeZeroDamage() {
+        ItemStack pristine = new ItemStack(Item.IRON_PICKAXE, 1, 0);
+
+        assertEquals(Integer.valueOf(Item.IRON_PICKAXE.e()),
+                pristine.getPatchedComponents().get(DataComponents.MAX_DAMAGE));
+        assertEquals(Integer.valueOf(1),
+                pristine.getPatchedComponents().get(DataComponents.MAX_STACK_SIZE));
+        assertEquals(Integer.valueOf(0),
+                pristine.getPatchedComponents().get(DataComponents.DAMAGE));
+    }
+
+    @Test
+    public void removedMaxStackSizeResolvesToTheSnapshotFallbackOfOne() {
+        ItemStack stack = new ItemStack(Block.STONE, 1, 0);
+        stack.applyComponents(DataComponentPatch.builder()
+                .remove(DataComponents.MAX_STACK_SIZE)
+                .build());
+
+        assertEquals(1, stack.getMaxStackSize());
+        assertFalse(stack.isStackable());
+    }
+
+    @Test
+    public void effectiveDurabilityComponentsDriveDamageAccessors() {
+        ItemStack overridden = new ItemStack(Item.IRON_PICKAXE, 1, 0);
+        overridden.applyComponents(DataComponentPatch.builder()
+                .set(DataComponents.MAX_DAMAGE, Integer.valueOf(10))
+                .set(DataComponents.DAMAGE, Integer.valueOf(14))
+                .build());
+
+        assertTrue(overridden.d());
+        assertTrue(overridden.f());
+        assertEquals(10, overridden.i());
+
+        ItemStack noDamageValue = new ItemStack(Item.IRON_PICKAXE, 1, 0);
+        noDamageValue.applyComponents(DataComponentPatch.builder()
+                .remove(DataComponents.DAMAGE)
+                .build());
+        assertFalse(noDamageValue.d());
+        assertFalse(noDamageValue.f());
+
+        ItemStack noMaximum = new ItemStack(Item.IRON_PICKAXE, 1, 0);
+        noMaximum.applyComponents(DataComponentPatch.builder()
+                .remove(DataComponents.MAX_DAMAGE)
+                .build());
+        assertFalse(noMaximum.d());
+        assertFalse(noMaximum.f());
+        assertEquals(0, noMaximum.i());
+    }
+
+    @Test
+    public void damageMutationPreservesEveryUnrelatedPatchEntry() {
+        ResourceLocation unknownValue = new ResourceLocation("example", "durability_value");
+        ResourceLocation unknownRemoval = new ResourceLocation("example", "durability_removal");
+        ItemStack stack = new ItemStack(Item.IRON_PICKAXE, 1, 0);
+        stack.applyComponents(DataComponentPatch.builder()
+                .set(DataComponents.MAX_DAMAGE, Integer.valueOf(10))
+                .set(DataComponents.CUSTOM_NAME, "component tool")
+                .remove(DataComponents.ENCHANTMENTS)
+                .setUnknown(unknownValue, new NBTTagString("opaque"))
+                .removeUnknown(unknownRemoval)
+                .build());
+
+        stack.setItemDamage(7);
+        assertDurabilityPatch(stack, 7, unknownValue, unknownRemoval);
+
+        stack.damage(3, null);
+        assertEquals(0, stack.count);
+        assertDurabilityPatch(stack, 10, unknownValue, unknownRemoval);
     }
 
     @Test
@@ -107,5 +180,19 @@ public class ModernItemStackCodecPersistenceTest {
         nbt.a("count", 1);
         nbt.a("id", (short)Item.SIGN.id);
         return nbt;
+    }
+
+    private static void assertDurabilityPatch(
+            ItemStack stack,
+            int expectedDamage,
+            ResourceLocation unknownValue,
+            ResourceLocation unknownRemoval) {
+        DataComponentPatch patch = stack.getComponents();
+        assertEquals(Integer.valueOf(10), patch.get(DataComponents.MAX_DAMAGE));
+        assertEquals(Integer.valueOf(expectedDamage), patch.get(DataComponents.DAMAGE));
+        assertEquals("component tool", patch.get(DataComponents.CUSTOM_NAME));
+        assertTrue(patch.getRemovedTypes().contains(DataComponents.ENCHANTMENTS));
+        assertEquals(new NBTTagString("opaque"), patch.getUnknownComponents().get(unknownValue));
+        assertTrue(patch.getUnknownRemovedComponents().contains(unknownRemoval));
     }
 }

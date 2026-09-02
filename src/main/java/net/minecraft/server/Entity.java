@@ -22,7 +22,7 @@ import net.minecraft.server.registry.EntityTypeRegistry;
 // CraftBukkit start
 // CraftBukkit end
 
-public abstract class Entity implements SyncedDataHolder {
+public abstract class Entity implements SyncedDataHolder, net.minecraft.world.scores.ScoreHolder {
     protected static final EntityDataAccessor<Byte> DATA_SHARED_FLAGS_ID = SynchedEntityData.defineId(Entity.class, EntityDataSerializers.BYTE);
     protected static final EntityDataAccessor<Integer> DATA_AIR_SUPPLY_ID = SynchedEntityData.defineId(Entity.class, EntityDataSerializers.INT);
     protected static final EntityDataAccessor<String> DATA_CUSTOM_NAME_ID = SynchedEntityData.defineId(Entity.class, EntityDataSerializers.STRING);
@@ -46,7 +46,6 @@ public abstract class Entity implements SyncedDataHolder {
     // uberbukkit
     private static final boolean trampleFarmlandAboveFence = UberbukkitConfig.getInstance().getBoolean("mechanics.trample_farmland_above_fence", false);
 
-    private static int entityCount = 0;
     public int id;
     public double aH;
     public boolean aI;
@@ -81,6 +80,7 @@ public abstract class Entity implements SyncedDataHolder {
     public float bl;
     public float bm;
     public float fallDistance; // CraftBukkit - private -> public
+    private float pendingShallowWaterFallDistance;
     private int b;
     public double bo;
     public double bp;
@@ -124,7 +124,7 @@ public abstract class Entity implements SyncedDataHolder {
     protected int numCollisions; // Paper-style per-entity collision budget
 
     public Entity(World world) {
-        this.id = entityCount++;
+        this.id = world == null ? World.getNextDetachedEntityId() : world.getNextEntityId();
         this.aH = 1.0D;
         this.aI = false;
         this.boundingBox = AxisAlignedBB.a(0.0D, 0.0D, 0.0D, 0.0D, 0.0D, 0.0D);
@@ -164,6 +164,20 @@ public abstract class Entity implements SyncedDataHolder {
         this.synchedEntityData = new SynchedEntityData(this);
         this.defineSynchedData();
         this.b();
+    }
+
+    public String getScoreboardName() {
+        return this instanceof EntityHuman && ((EntityHuman)this).name != null
+            ? ((EntityHuman)this).name : this.uniqueId.toString();
+    }
+
+    public String getDisplayName() {
+        if (this instanceof EntityPlayer) {
+            EntityPlayer player = (EntityPlayer)this;
+            if (player.displayName != null && player.displayName.length() > 0) return player.displayName;
+        }
+        String custom = this.getCustomName();
+        return custom == null || custom.length() == 0 ? this.getScoreboardName() : custom;
     }
 
     protected void defineSynchedData() {
@@ -339,11 +353,26 @@ public abstract class Entity implements SyncedDataHolder {
             }
 
             if (this.shouldResetFallDistanceInWater()) {
+                this.pendingShallowWaterFallDistance = 0.0F;
                 this.fallDistance = 0.0F;
+            } else if (this.isWaterAtFallDamageLandingColumn()) {
+                if (this.pendingShallowWaterFallDistance <= 0.0F
+                        && this.fallDistance > 0.0F && this.motY < 0.0D) {
+                    this.pendingShallowWaterFallDistance = this.fallDistance;
+                }
+                this.fallDistance = 0.0F;
+            } else {
+                // A bank can leave only the edge of the bounds touching water. That
+                // is not a shallow-water landing and must not retain an older fall.
+                this.pendingShallowWaterFallDistance = 0.0F;
             }
             this.bA = true;
             this.fireTicks = 0;
         } else {
+            if (this.pendingShallowWaterFallDistance > 0.0F) {
+                this.pendingShallowWaterFallDistance = 0.0F;
+                this.fallDistance = 0.0F;
+            }
             this.bA = false;
         }
 
@@ -761,16 +790,23 @@ public abstract class Entity implements SyncedDataHolder {
     }
 
     /**
-     * The legacy safe-water boundary lies between two and three full source
-     * blocks. Shallower water preserves non-player fall distance; deep water
-     * clears it consistently.
+     * Players override this to accept any water contact. Non-player entities
+     * retain one incoming fall through shallow water, while deep water clears it.
      */
     protected boolean shouldResetFallDistanceInWater() {
         return this.getWaterDepthForFallDamage() >= 2.5D;
     }
 
     protected boolean isInWaterForFallDamage() {
-        return this.bA || this.world != null && this.boundingBox != null
+        return this.bA || this.isPostMoveBoundingBoxInWaterForFallDamage();
+    }
+
+    /**
+     * Samples only the bounds produced by the current movement step. The cached
+     * water flag was sampled before movement and can still be true on an exit tick.
+     */
+    protected boolean isPostMoveBoundingBoxInWaterForFallDamage() {
+        return this.world != null && this.boundingBox != null
                 && this.world.a(this.boundingBox.shrink(0.001D, 0.001D, 0.001D), Material.WATER);
     }
 
@@ -806,6 +842,10 @@ public abstract class Entity implements SyncedDataHolder {
         return calculateWaterDepthForFallDamage(this.world.getData(x, topY, z), topY - bottomY + 1);
     }
 
+    private boolean isWaterAtFallDamageLandingColumn() {
+        return this.getWaterDepthForFallDamage() > 0.0D;
+    }
+
     private boolean isWaterBlockForFallDamage(int x, int y, int z) {
         int blockId = this.world.getTypeId(x, y, z);
         return blockId > 0 && Block.byId[blockId] != null
@@ -818,9 +858,34 @@ public abstract class Entity implements SyncedDataHolder {
     }
 
     protected void a(double d0, boolean flag) {
-        if (this.isInWaterForFallDamage() && this.shouldResetFallDistanceInWater()) {
+        if (this.isPostMoveBoundingBoxInWaterForFallDamage()) {
+            if (this.shouldResetFallDistanceInWater()) {
+                this.fallDistance = 0.0F;
+                this.pendingShallowWaterFallDistance = 0.0F;
+                return;
+            }
+
+            if (!this.isWaterAtFallDamageLandingColumn()) {
+                this.pendingShallowWaterFallDistance = 0.0F;
+            } else {
+                if (this.pendingShallowWaterFallDistance <= 0.0F
+                        && this.fallDistance > 0.0F && (flag || d0 < 0.0D)) {
+                    this.pendingShallowWaterFallDistance = this.fallDistance;
+                }
+                this.fallDistance = 0.0F;
+                if (flag && this.pendingShallowWaterFallDistance > 0.0F) {
+                    this.fallDistance = this.pendingShallowWaterFallDistance;
+                    this.pendingShallowWaterFallDistance = 0.0F;
+                } else {
+                    if (d0 >= 0.0D) {
+                        this.pendingShallowWaterFallDistance = 0.0F;
+                    }
+                    return;
+                }
+            }
+        } else if (this.pendingShallowWaterFallDistance > 0.0F) {
+            this.pendingShallowWaterFallDistance = 0.0F;
             this.fallDistance = 0.0F;
-            return;
         }
 
         if (flag) {
@@ -1013,6 +1078,14 @@ public abstract class Entity implements SyncedDataHolder {
     }
 
     public void collide(Entity entity) {
+        if (this.world != null && entity != null && entity.world == this.world) {
+            org.bukkit.craftbukkit.CraftServer craftServer = this.world.getServer();
+            MinecraftServer minecraftServer = craftServer == null ? null : craftServer.getServer();
+            if (minecraftServer != null && !minecraftServer.modernScoreboardManager.getScoreboard()
+                    .allowsCollision(this.getScoreboardName(), entity.getScoreboardName())) {
+                return;
+            }
+        }
         if (entity.passenger != this && entity.vehicle != this) {
             double d0 = entity.locX - this.locX;
             double d1 = entity.locZ - this.locZ;
@@ -1458,6 +1531,14 @@ public abstract class Entity implements SyncedDataHolder {
 
     public void setSneak(boolean flag) {
         this.a(1, flag);
+    }
+
+    public boolean isSprinting() {
+        return this.d(3);
+    }
+
+    public void setSprinting(boolean sprinting) {
+        this.a(3, sprinting);
     }
 
     public boolean hasSpectatorVisibilityFlag() {

@@ -2,6 +2,8 @@ package net.minecraft.server;
 
 public interface IInventory {
 
+    int DEFAULT_MAX_STACK_SIZE = 99;
+
     int getSize();
 
     ItemStack getItem(int i);

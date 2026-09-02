@@ -10,6 +10,8 @@ public class WorldDataGameRulesTest {
     public void defaultOffRulesStartDisabled() {
         assertFalse(new WorldData(1234L, "gamerule-defaults").getToggleFoodStacking());
         assertFalse(new WorldData(1234L, "gamerule-defaults").getHoeGrassForSeeds());
+        assertFalse(new WorldData(1234L, "gamerule-defaults").getAdventureMovement());
+        assertFalse(new WorldData(1234L, "gamerule-defaults").getAdventureCombat());
     }
 
     @Test
@@ -19,6 +21,8 @@ public class WorldDataGameRulesTest {
         worldData.setPunchSheepForWool(true);
         worldData.setToggleFoodStacking(true);
         worldData.setHoeGrassForSeeds(true);
+        worldData.setAdventureMovement(true);
+        worldData.setAdventureCombat(true);
 
         NBTTagCompound saved = worldData.a();
         NBTTagCompound gameRules = saved.k("GameRules");
@@ -26,16 +30,22 @@ public class WorldDataGameRulesTest {
         assertTrue(gameRules.m("punchSheepForWool"));
         assertTrue(gameRules.m("toggleFoodStacking"));
         assertTrue(gameRules.m("hoeGrassForSeeds"));
+        assertTrue(gameRules.m("adventureMovement"));
+        assertTrue(gameRules.m("adventureCombat"));
         assertTrue(saved.m("PunchToPrimeTNT"));
         assertTrue(saved.m("PunchSheepForWool"));
         assertTrue(saved.m("ToggleFoodStacking"));
         assertTrue(saved.m("HoeGrassForSeeds"));
+        assertTrue(saved.m("AdventureMovement"));
+        assertTrue(saved.m("AdventureCombat"));
 
         WorldData restored = new WorldData(saved);
         assertTrue(restored.getPunchToPrimeTNT());
         assertTrue(restored.getPunchSheepForWool());
         assertTrue(restored.getToggleFoodStacking());
         assertTrue(restored.getHoeGrassForSeeds());
+        assertTrue(restored.getAdventureMovement());
+        assertTrue(restored.getAdventureCombat());
     }
 
     @Test
@@ -46,6 +56,8 @@ public class WorldDataGameRulesTest {
         gameRules.a("punchSheepForWool", false);
         gameRules.a("toggleFoodStacking", false);
         gameRules.a("hoeGrassForSeeds", false);
+        gameRules.a("adventureMovement", false);
+        gameRules.a("adventureCombat", false);
         level.a("GameRules", gameRules);
 
         WorldData worldData = new WorldData(level);
@@ -54,5 +66,7 @@ public class WorldDataGameRulesTest {
         assertFalse(worldData.getPunchSheepForWool());
         assertFalse(worldData.getToggleFoodStacking());
         assertFalse(worldData.getHoeGrassForSeeds());
+        assertFalse(worldData.getAdventureMovement());
+        assertFalse(worldData.getAdventureCombat());
     }
 }

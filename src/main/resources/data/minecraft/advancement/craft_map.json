@@ -1,0 +1,24 @@
+{
+  "parent": "minecraft:build_workbench",
+  "display": {
+    "icon": {
+      "id": "minecraft:map"
+    },
+    "title": { "translate": "achievement.craftMap" },
+    "description": { "translate": "achievement.craftMap.desc" },
+    "frame": "task",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": false
+  },
+  "criteria": {
+    "legacy_trigger": {
+      "trigger": "minecraft:legacy_trigger"
+    }
+  },
+  "requirements": [["legacy_trigger"]],
+  "legacy_layout": {
+    "column": 6,
+    "row": 1
+  }
+}

@@ -5,6 +5,7 @@
     "minecraft:crafting/coal_block",
     "minecraft:crafting/redstone_from_block",
     "minecraft:crafting/coal_from_block",
-    "minecraft:crafting/flint_and_steel"
+    "minecraft:crafting/flint_and_steel",
+    "minecraft:crafting/pumpkin_seeds"
   ]
 }

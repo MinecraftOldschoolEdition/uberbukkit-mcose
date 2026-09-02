@@ -1,5 +1,8 @@
 package net.minecraft.server;
 
+import net.minecraft.server.registry.WorldPresetGeneratorRouting;
+import net.minecraft.server.util.ResourceLocation;
+
 // No import needed if WorldChunkManagerAlpha is in the same package (net.minecraft.server)
 // If it was in net.minecraft.server.Alpha, it would be:
 // import net.minecraft.server.Alpha.WorldChunkManagerAlpha;
@@ -45,21 +48,26 @@ public class WorldProviderNormal extends WorldProvider {
     public IChunkProvider getChunkProvider() {
         if (this.a != null && this.a.worldData != null) {
             int terrainType = this.a.worldData.getTerrainType();
+            ResourceLocation generatorKey = WorldPresetGeneratorRouting.generatorKey(
+                    terrainType, WorldPresetGeneratorRouting.OVERWORLD);
             MinecraftServer.log.info("[WorldProviderNormal] Getting ChunkProvider for world: " + this.a.worldData.name + " (TerrainType ID: " + terrainType + "), Seed: " + this.a.getSeed());
 
-            if (terrainType == 1 || terrainType == 5) { // 1 for ALPHA, 5 for ALPHA_SNOW
+            if (WorldPresetGeneratorRouting.ALPHA.equals(generatorKey)) {
                 return new net.minecraft.server.Alpha.AlphaChunkProvider(this.a, this.a.getSeed(), false);
-            } else if (terrainType == 7) { // 7 for INFDEV
+            } else if (WorldPresetGeneratorRouting.INFDEV.equals(generatorKey)) {
                 return new net.minecraft.server.Infdev.InfdevChunkProvider(this.a, this.a.getSeed());
-            } else if (terrainType == 6) { // 6 for CLASSIC
+            } else if (WorldPresetGeneratorRouting.CLASSIC.equals(generatorKey)) {
                 return new net.minecraft.server.Classic.ChunkProviderClassic(this.a, this.a.getSeed());
-            } else if (terrainType == 2) { // 2 for FLAT
+            } else if (WorldPresetGeneratorRouting.FLAT.equals(generatorKey)) {
                 return new ChunkProviderFlat(this.a, this.a.getSeed(), false); // mapFeaturesEnabled = false
-            } else if (terrainType == 3) { // 3 for SKY
+            } else if (WorldPresetGeneratorRouting.SKY_GENERATOR.equals(generatorKey)) {
                 return new ChunkProviderSky(this.a, this.a.getSeed());
-            } else { // Default
+            } else if (WorldPresetGeneratorRouting.DEFAULT.equals(generatorKey)) {
                 return super.getChunkProvider();
             }
+            throw new IllegalStateException(
+                    "Unsupported overworld generator " + generatorKey
+                            + " for terrain type " + terrainType);
         } else {
             MinecraftServer.log.info("[WorldProviderNormal] Returning default ChunkProviderGenerate (world or worldData is null), Seed: " + (this.a != null ? this.a.getSeed() : "UNKNOWN_SEED"));
             return super.getChunkProvider(); 

@@ -769,7 +769,12 @@ public abstract class EntityHuman extends EntityLiving {
         int i = this.inventory.a(entity);
 
         if (i > 0) {
-            if (Uberbukkit.getTargetPVN() >= 11) {
+            boolean adventureCombat = this.isAdventureCombatEnabled();
+            boolean criticalHit = adventureCombat && this.isAdventureCriticalHit(entity);
+            boolean sprintKnockback = adventureCombat && this.isSprinting();
+            if (criticalHit) {
+                i = Math.round((float) i * 1.5F);
+            } else if (!adventureCombat && Uberbukkit.getTargetPVN() >= 11) {
                 if (this.motY < 0.0D) {
                     ++i;
                 }
@@ -819,6 +824,16 @@ public abstract class EntityHuman extends EntityLiving {
                 return;
             }
 
+            if (sprintKnockback) {
+                this.applyAdventureSprintKnockback(entity);
+                this.motX *= 0.6D;
+                this.motZ *= 0.6D;
+                this.setSprinting(false);
+            }
+            if (criticalHit && !this.world.isStatic) {
+                this.world.a(entity, (byte) 21);
+            }
+
             if (entity instanceof EntityPlayer && entity.velocityChanged && PoseidonConfig.getInstance().getBoolean("settings.player-knockback-fix.enabled", true)) {
                 boolean cancelled = false;
                 org.bukkit.entity.Player player = (org.bukkit.entity.Player) entity.getBukkitEntity();
@@ -863,6 +878,26 @@ public abstract class EntityHuman extends EntityLiving {
                 this.a(StatisticList.w, i);
             }
         }
+    }
+
+    private boolean isAdventureCombatEnabled() {
+        return this.world != null && this.world.worldData != null
+                && this.world.worldData.getAdventureCombat();
+    }
+
+    private boolean isAdventureCriticalHit(Entity target) {
+        return target instanceof EntityLiving && this.fallDistance > 0.0F && !this.onGround
+                && !this.p() && !this.a(Material.WATER) && this.vehicle == null && !this.isSprinting();
+    }
+
+    private void applyAdventureSprintKnockback(Entity target) {
+        float yawRadians = this.yaw * 3.1415927F / 180.0F;
+        target.motX -= (double) (MathHelper.sin(yawRadians) * 0.5F);
+        target.motZ += (double) (MathHelper.cos(yawRadians) * 0.5F);
+        if (!(target instanceof EntityLiving)) {
+            target.motY += 0.1D;
+        }
+        target.velocityChanged = true;
     }
 
     public void a(ItemStack itemstack) {
@@ -1101,6 +1136,7 @@ public abstract class EntityHuman extends EntityLiving {
 
             super.O();
             this.motY = jumpEvent.getJumpVelocity();
+            this.applySprintJumpBoost();
             this.a(StatisticList.u, 1);
             return;
         }
@@ -1127,6 +1163,10 @@ public abstract class EntityHuman extends EntityLiving {
             }
             f = moveEvent.getStrafe();
             f1 = moveEvent.getForward();
+			if (((EntityPlayer) this).isBowCharging()) {
+				f *= 0.2F;
+				f1 *= 0.2F;
+			}
         }
 
         double d0 = this.locX;
@@ -1135,6 +1175,30 @@ public abstract class EntityHuman extends EntityLiving {
 
         super.a(f, f1);
         this.h(this.locX - d0, this.locY - d1, this.locZ - d2);
+    }
+
+    @Override
+    public void a(float strafe, float forward, float speed) {
+        float movementSpeed = adventureMovementSpeed(speed, this.isSprinting(), this.isAdventureMovementEnabled());
+        super.a(strafe, forward, movementSpeed);
+    }
+
+    static float adventureMovementSpeed(float speed, boolean sprinting, boolean ruleEnabled) {
+        return sprinting && ruleEnabled ? speed * 1.3F : speed;
+    }
+
+    private boolean isAdventureMovementEnabled() {
+        return this.world != null && this.world.worldData != null
+                && this.world.worldData.getAdventureMovement();
+    }
+
+    private void applySprintJumpBoost() {
+        if (!this.isSprinting() || !this.isAdventureMovementEnabled()) {
+            return;
+        }
+        float yawRadians = this.yaw * 3.1415927F / 180.0F;
+        this.motX -= (double)(MathHelper.sin(yawRadians) * 0.2F);
+        this.motZ += (double)(MathHelper.cos(yawRadians) * 0.2F);
     }
 
     private void h(double d0, double d1, double d2) {

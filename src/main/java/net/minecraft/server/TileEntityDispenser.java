@@ -121,7 +121,7 @@ public class TileEntityDispenser extends TileEntity implements IInventory {
     }
 
     public int getMaxStackSize() {
-        return 64;
+        return IInventory.DEFAULT_MAX_STACK_SIZE;
     }
 
     public boolean a_(EntityHuman entityhuman) {

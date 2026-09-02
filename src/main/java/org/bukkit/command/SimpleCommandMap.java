@@ -43,6 +43,10 @@ public class SimpleCommandMap implements CommandMap {
         fallbackCommands.add(new LightningCommand());
         fallbackCommands.add(new GameruleCommand());
         fallbackCommands.add(new RulesCommand());
+        fallbackCommands.add(new TitleCommand());
+        fallbackCommands.add(new ScoreboardCommand());
+        fallbackCommands.add(new TeamCommand());
+        fallbackCommands.add(new TriggerCommand());
         fallbackCommands.add(new GameModeCommand());
         fallbackCommands.add(new DifficultyCommand());
         fallbackCommands.add(new ServerStatsCommand());
@@ -64,6 +68,7 @@ public class SimpleCommandMap implements CommandMap {
         register("uberbukkit", new UuidLookupCommand());
         register("uberbukkit", new CrackedAllowlistCommand());
         register("minecraft", new uk.betacraft.uberbukkit.command.SetWorldSpawnCommand());
+        register("minecraft", new org.bukkit.command.defaults.SpectateCommand());
         register("uberbukkit", new uk.betacraft.uberbukkit.command.VanishCommand("vanish"));
         register("uberbukkit", new uk.betacraft.uberbukkit.command.OpenInvSwapCommand("openinvswap"));
         register("uberbukkit", new uk.betacraft.uberbukkit.command.OpenInvMoveCommand("openinvmove"));
@@ -214,9 +219,11 @@ public class SimpleCommandMap implements CommandMap {
     }
 
     public Command getCommand(String name) {
-        return knownCommands.get(name.toLowerCase());
+        String lowerName = name.toLowerCase();
+        Command command = knownCommands.get(lowerName);
+        return command == null ? getFallback(lowerName) : command;
     }
-    
+
     /**
      * Gets a collection of all registered commands.
      * @return Collection of all commands

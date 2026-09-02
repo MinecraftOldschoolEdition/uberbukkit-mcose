@@ -19,11 +19,20 @@ public final class RegistryDebugAsserts {
         checkRegistryPresent("minecraft:recipe_type", Registries.RECIPE_TYPE.keys());
         checkRegistryPresent("minecraft:spawn_group", Registries.SPAWN_GROUP.keys());
         checkRegistryPresent("minecraft:world_type", Registries.WORLD_TYPE.keys());
+        checkRegistryPresent("minecraft:damage_type", Registries.DAMAGE_TYPE.keys());
+        checkRegistryPresent("minecraft:dimension_type", Registries.DIMENSION_TYPE.keys());
+        checkRegistryPresent("minecraft:worldgen/world_preset", Registries.WORLD_PRESET.keys());
+        checkRegistryPresent("minecraft:worldgen/feature", Registries.CONFIGURED_FEATURE.keys());
+        checkRegistryPresent("minecraft:worldgen/placed_feature", Registries.PLACED_FEATURE.keys());
+        checkRegistryPresent("minecraft:worldgen/carver_type", Registries.CARVER_TYPE.keys());
+        checkRegistryPresent("minecraft:worldgen/carver", Registries.CONFIGURED_CARVER.keys());
         checkRegistryPresent("minecraft:sound_event", Registries.SOUND_EVENT.keys());
         checkRegistryPresent("minecraft:particle_type", Registries.PARTICLE_TYPE.keys());
         checkRegistryPresent("minecraft:item_capability", ItemCapabilityRegistryApi.keys());
         checkRegistryPresent("minecraft:block_capability", BlockCapabilityRegistryApi.keys());
         checkRegistryPresent("minecraft:block_mining", BlockMiningRegistryApi.keys());
+        checkRegistryPresent("minecraft:structure_type", StructureTypeRegistryApi.keys());
+        checkRegistryPresent("minecraft:worldgen/structure_set", StructureSetRegistryApi.keys());
 
         if (!BlockRegistry.runSanityChecks()) {
             throw new IllegalStateException("[RegistryDebugAsserts] Block sanity checks failed");
@@ -36,9 +45,37 @@ public final class RegistryDebugAsserts {
         checkVanillaItemCoverage();
         checkBlockCapabilityCoverage();
         checkBlockMiningCoverage();
+        checkConfiguredCarverCoverage();
         checkRenderRegistryCoverage();
 
         LegacyIdBridge.refresh();
+    }
+
+    private static void checkConfiguredCarverCoverage() {
+        ResourceLocation cave = new ResourceLocation("minecraft", "cave");
+        ResourceLocation netherCave =
+                new ResourceLocation("minecraft", "nether_cave");
+        ResourceLocation skyCave =
+                new ResourceLocation("minecraft", "sky_cave");
+        if (Registries.CARVER_TYPE.get(cave) == null
+                || Registries.CARVER_TYPE.get(netherCave) == null
+                || Registries.CONFIGURED_CARVER.get(cave) == null
+                || Registries.CONFIGURED_CARVER.get(netherCave) == null
+                || Registries.CONFIGURED_CARVER.get(skyCave) == null) {
+            throw new IllegalStateException(
+                    "[RegistryDebugAsserts] Missing built-in configured carver data");
+        }
+        for (ResourceLocation key : Registries.CONFIGURED_CARVER.keys()) {
+            ConfiguredCarverDefinition definition =
+                    Registries.CONFIGURED_CARVER.get(key);
+            if (definition == null || !key.equals(definition.getId())
+                    || definition.getType() == null
+                    || Registries.CARVER_TYPE.get(definition.getType()) == null) {
+                throw new IllegalStateException(
+                        "[RegistryDebugAsserts] Configured carver has no registered type: "
+                                + key);
+            }
+        }
     }
 
     private static void checkVanillaBlockCoverage() {

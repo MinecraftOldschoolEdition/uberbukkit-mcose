@@ -10,6 +10,8 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.logging.Logger;
 import net.minecraft.server.registry.AchievementRegistryApi;
+import net.minecraft.server.registry.LegacyAdvancementCodec;
+import net.minecraft.server.registry.LegacyAdvancementDefinition;
 import net.minecraft.server.util.ResourceLocation;
 
 /**
@@ -84,7 +86,7 @@ public final class AchievementManager {
             return false;
         }
 
-        return grantCriterion(achievement, LEGACY_CRITERION);
+        return grantLegacyCriteria(achievement, false);
     }
 
     public boolean unlock(String namespacedKey) {
@@ -100,7 +102,7 @@ public final class AchievementManager {
             return false;
         }
 
-        return forceGrantCriterion(achievement, LEGACY_CRITERION);
+        return grantLegacyCriteria(achievement, true);
     }
 
     public boolean forceUnlock(String namespacedKey) {
@@ -127,6 +129,9 @@ public final class AchievementManager {
         if (achievement == null || criterion == null || criterion.length() == 0) {
             return false;
         }
+        if (!isDefinedCriterion(achievement, criterion)) {
+            return false;
+        }
 
         AchievementProgressState progress = progressByStatId.get(Integer.valueOf(achievement.e));
         if (progress == null) {
@@ -149,6 +154,9 @@ public final class AchievementManager {
 
     private boolean grantCriterion(Achievement achievement, String criterion, boolean forced) {
         if (achievement == null || criterion == null || criterion.length() == 0) {
+            return false;
+        }
+        if (!isDefinedCriterion(achievement, criterion)) {
             return false;
         }
 
@@ -207,6 +215,9 @@ public final class AchievementManager {
     }
 
     private void broadcastAchievement(Achievement achievement) {
+        if (!achievement.shouldAnnounceToChat()) {
+            return;
+        }
         MinecraftServer server = player.b;
         if (server == null && player.world instanceof WorldServer) {
             server = ((WorldServer) player.world).server;
@@ -260,8 +271,9 @@ public final class AchievementManager {
             return "Unknown Achievement";
         }
 
-        if (achievement.f != null && !achievement.f.startsWith("achievement.")) {
-            return achievement.f;
+        String translated = achievement.getName();
+        if (translated != null && !translated.startsWith("achievement.")) {
+            return translated;
         }
 
         ResourceLocation key = AchievementRegistryApi.getKey(achievement);
@@ -615,7 +627,21 @@ public final class AchievementManager {
         if (achievement == null) {
             return RequirementSet.EMPTY;
         }
-        return RequirementSet.single(LEGACY_CRITERION);
+        LegacyAdvancementDefinition definition =
+                AchievementRegistryApi.getDefinition(achievement);
+        return definition == null
+                ? RequirementSet.single(LEGACY_CRITERION)
+                : new RequirementSet(definition.getRequirements());
+    }
+
+    private static boolean isDefinedCriterion(
+            Achievement achievement,
+            String criterion) {
+        LegacyAdvancementDefinition definition =
+                AchievementRegistryApi.getDefinition(achievement);
+        return definition == null
+                ? LEGACY_CRITERION.equals(criterion)
+                : definition.getCriteria().containsKey(criterion);
     }
 
     private AchievementProgressState getOrCreateProgress(Achievement achievement) {
@@ -636,12 +662,37 @@ public final class AchievementManager {
 
         AchievementProgressState progress = getOrCreateProgress(achievement);
         boolean wasDone = progress.isDone();
-        progress.grant(LEGACY_CRITERION, obtainedAtMillis);
+        LegacyAdvancementDefinition definition =
+                AchievementRegistryApi.getDefinition(achievement);
+        if (definition == null) {
+            progress.grant(LEGACY_CRITERION, obtainedAtMillis);
+        } else {
+            for (String criterion : definition.getCriterionNames()) {
+                progress.grant(criterion, obtainedAtMillis);
+            }
+        }
         boolean doneNow = progress.isDone();
         if (doneNow) {
             unresolvedLegacyAchievementIds.remove(Integer.valueOf(achievement.e));
         }
         return !wasDone && doneNow;
+    }
+
+    private boolean grantLegacyCriteria(Achievement achievement, boolean forced) {
+        LegacyAdvancementDefinition definition =
+                AchievementRegistryApi.getDefinition(achievement);
+        if (definition == null) {
+            return grantCriterion(achievement, LEGACY_CRITERION, forced);
+        }
+        boolean granted = false;
+        for (Map.Entry<String, ResourceLocation> criterion
+                : definition.getCriteria().entrySet()) {
+            if (LegacyAdvancementCodec.LEGACY_TRIGGER.equals(criterion.getValue())) {
+                granted = grantCriterion(
+                        achievement, criterion.getKey(), forced) || granted;
+            }
+        }
+        return granted;
     }
 
     private static final class AchievementProgressState {

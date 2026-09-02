@@ -191,11 +191,41 @@ settings:
         always-on:
             enabled: true
             info: Collect low-overhead telemetry continuously so intermittent lag spikes are captured.
+    region-file-flush-on-save:
+        enabled: true
+        info: Paper-style save flush for open region files. When enabled, explicit save-level operations sync pending region writes without closing the region file cache.
+    book-size:
+        page-max: 2560
+        page-max-info: Paper-style maximum UTF-8 byte budget for the first page of an edited book.
+        total-multiplier: 0.98
+        total-multiplier-info: Paper-style decay multiplier for the additional byte budget granted by each following book page.
+    per-player-mob-spawns:
+        enabled: true
+        info: Paper-style local mob caps for natural spawning. When enabled, chunks near players already at their local cap are skipped before expensive spawn-position probing.
+    entity-activation:
+        info: Optional Paper-style throttling for far-away idle creature AI. Disabled by default to preserve legacy gameplay; projectiles, items, vehicles, players, TNT, and active combat/leash states remain fully ticked when enabled.
+        enabled: false
+        monster-range: 32
+        animal-range: 32
+        water-range: 16
+        misc-creature-range: 16
+        inactive-check-interval: 20
+        new-entity-immunity-ticks: 200
+    entity-load-save-limit-per-chunk:
+        info: Optional Paper-style cap for how many entities of each type are loaded from or saved into one chunk. Disabled by default because enabling it can intentionally drop excess entities.
+        enabled: false
+        limits: Item=256,Arrow=128,Snowball=128,Egg=128,FallingSand=64,PrimedTnt=64,Minecart=64,Boat=64
     delete-duplicate-uuids: false
     save-playerdata-by-uuid: true
     remove-join-leave-debug: true
     enable-tpc-nodelay: true
     enable-tcp-nodelay: true
+    region-file-cache-size: 256
+    region-file-cache-size-info: Paper-style limit for open region files. Higher values can reduce region file churn on large worlds at the cost of more open file handles.
+    max-joins-per-tick: 5
+    max-joins-per-tick-info: Paper-style join buffering. Limits expensive player join finalization work per server tick. Set to 0 or lower to disable the cap.
+    max-pending-logins: 128
+    max-pending-logins-info: Hard cap on sockets in the login phase. New sockets are closed before allocating network/authentication workers when the cap is full.
 world:
     settings:
         speed-hack-check:
@@ -213,9 +243,6 @@ world:
             other-fixes:
                 enabled: true
                 info: This setting fixes various other piston exploits like creating illegal pistons, breaking bedrock and duplicating redstone torches.
-            sand-gravel-duping-fix:
-                enabled: true
-                info: This setting fixes sand/gravel duplication exploits.
         block-tree-growth:
             enabled: true
             list: 54,63,68
@@ -228,6 +255,30 @@ world:
             limit: 150
             chunk-radius: 8
             info: This setting controls the maximum number of entities of a mob spawner type that can exist within the defined chunk radius around a mob spawner. If the number of entities exceeds this limit, the spawner will stop spawning additional entities of that type. This is useful to stop the extreme lag that can be caused by mob spawners.
+        natural-spawn-tick-rate:
+            info: Paper-style natural spawn interval per creature type. 1 keeps current timing, higher values skip spawn checks on intervening ticks, and 0 disables that category.
+            monster: 1
+            creature: 1
+            water-creature: 1
+        farmland-tick-rate:
+            info: Paper-style random tick intervals for farmland. 1 keeps vanilla timing, higher values stagger moisture checks over more ticks, and 0 disables that moisture-state check.
+            wet: 1
+            dry: 1
+        disable-ice-and-snow:
+            info: Paper-style option to skip weather-driven snow and ice formation. Melting and player-placed snow/ice behavior are unchanged.
+            enabled: false
+        mob-despawn-range:
+            info: 'Paper-style mob despawn distances. Defaults preserve vanilla: hard
+                despawn above 128 blocks, random soft despawn above 32 blocks after
+                idle time.'
+            hard: 128
+            soft: 32
+        max-entity-collisions: 8
+        max-entity-collisions-info: Paper-style per-entity collision cap. Limits crowd-pushing work in dense farms and pens; 0 disables entity pushing.
+        mob-spawner-tick-rate: 1
+        mob-spawner-tick-rate-info: Paper-style mob spawner tick interval. 1 keeps vanilla timing, higher values reduce spawner CPU by ticking spawn logic less often, and -1 disables spawner ticking.
+        grass-spread-tick-rate: 1
+        grass-spread-tick-rate-info: Paper-style random tick interval for grass spread and fade updates. 1 keeps vanilla timing, higher values stagger grass updates over more ticks, and 0 disables random grass updates.
 world-settings:
     hardcore:
         enabled: false

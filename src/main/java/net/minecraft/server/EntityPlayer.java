@@ -54,6 +54,9 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
     private ItemStack[] bN = new ItemStack[] { null, null, null, null, null };
     private boolean lastSentBowPose = false;
     private int bowPoseTicks = 0;
+    private boolean bowCharging = false;
+    private int bowChargeTicks = 0;
+    private int lastSentBowPullStage = -1;
     private int bO = 0;
     public boolean h;
     // uberbukkit
@@ -296,6 +299,7 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
     }
 
     public void m_() {
+		this.updateBowCharge();
         this.updateSpectatorState();
         this.itemInWorldManager.a();
         --this.bM;
@@ -319,6 +323,15 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
                 this.world.a(this, (byte) (bowPose ? 16 : 17)); // Custom statuses: player bow pose on/off
                 this.lastSentBowPose = bowPose;
             }
+            if (this.bowCharging) {
+                int stage = this.getBowPullStage();
+				if (stage != this.lastSentBowPullStage || this.ticksLived % 10 == 0) {
+                    this.world.a(this, (byte) (stage >= 2 ? 20 : stage == 1 ? 19 : 16));
+                    this.lastSentBowPullStage = stage;
+                }
+            } else {
+                this.lastSentBowPullStage = -1;
+            }
         }
     }
 
@@ -327,14 +340,81 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
     }
 
     public boolean isBowPoseActive() {
-        return this.bowPoseTicks > 0;
+        return this.bowCharging || this.bowPoseTicks > 0;
     }
 
     public void triggerBowPose() {
         this.bowPoseTicks = BOW_POSE_DURATION_TICKS;
     }
 
+    public boolean startBowCharge() {
+        WorldData data = this.world == null ? null : this.world.worldData;
+        ItemStack held = this.inventory.getItemInHand();
+        boolean creative = this.gameMode == 1;
+        if (data == null || !data.getAdventureCombat() || held == null || held.id != Item.BOW.id
+                || (!creative && !this.inventory.hasItem(Item.ARROW.id))) {
+            return false;
+        }
+        if (!this.bowCharging) {
+            this.bowCharging = true;
+            this.bowChargeTicks = 0;
+			this.lastSentBowPullStage = 0;
+        }
+        return true;
+    }
+
+    public boolean releaseBowCharge() {
+        if (!this.bowCharging) {
+            return false;
+        }
+        int chargeTicks = this.bowChargeTicks;
+        this.cancelBowCharge();
+        ItemStack held = this.inventory.getItemInHand();
+        if (held == null || !(held.getItem() instanceof ItemBow)) {
+            return false;
+        }
+        return ((ItemBow) held.getItem()).releaseChargedBow(held, this.world, this, chargeTicks);
+    }
+
+    public void cancelBowCharge() {
+        this.bowCharging = false;
+        this.bowChargeTicks = 0;
+    }
+
+    public boolean isBowCharging() {
+        return this.bowCharging;
+    }
+
+    public int getBowPullStage() {
+        if (!this.bowCharging) {
+            return -1;
+        }
+        if (this.bowChargeTicks >= 18) {
+            return 2;
+        }
+        return this.bowChargeTicks >= 13 ? 1 : 0;
+    }
+
+    private void updateBowCharge() {
+        if (!this.bowCharging) {
+            return;
+        }
+        WorldData data = this.world == null ? null : this.world.worldData;
+        ItemStack held = this.inventory.getItemInHand();
+        if (data == null || !data.getAdventureCombat() || this.dead || this.health <= 0
+                || held == null || held.id != Item.BOW.id) {
+            this.cancelBowCharge();
+            return;
+        }
+        if (this.bowChargeTicks < 20) {
+            ++this.bowChargeTicks;
+        }
+    }
+
     public void die(Entity entity) {
+        if (!this.world.isStatic && this.b != null) {
+            this.b.modernScoreboardManager.recordDeath(this, entity);
+        }
         // Send death status to trigger tilt on all clients before any other side effects
         if (!this.world.isStatic) {
             this.world.a(this, (byte) 3);
@@ -383,7 +463,7 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
         this.world.getServer().getPluginManager().callEvent(event);
 
         if (event.getDeathMessage() != null && !event.getDeathMessage().trim().isEmpty()) {
-            this.b.serverConfigurationManager.sendAll(new Packet3Chat(event.getDeathMessage()));
+            this.b.modernScoreboardManager.sendDeathMessage(this, event.getDeathMessage());
         }
 
         // CraftBukkit - we clean the player's inventory after the EntityDeathEvent is called so plugins can get the exact state of the inventory.
@@ -444,6 +524,16 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
         if (this.bM > 0) {
             return false;
         } else {
+            EntityPlayer attackingPlayer = entity instanceof EntityPlayer ? (EntityPlayer) entity : null;
+            if (attackingPlayer == null && entity instanceof EntityArrow
+                    && ((EntityArrow) entity).shooter instanceof EntityPlayer) {
+                attackingPlayer = (EntityPlayer) ((EntityArrow) entity).shooter;
+            }
+            if (attackingPlayer != null && this.b != null
+                    && !this.b.modernScoreboardManager.getScoreboard()
+                        .allowsFriendlyFire(attackingPlayer.name, this.name)) {
+                return false;
+            }
             // CraftBukkit - this.b.pvpMode -> this.world.pvpMode
             if (!this.world.pvpMode) {
                 if (entity instanceof EntityHuman) {
@@ -982,8 +1072,13 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
     }
 
     public void A() {
-        this.activeContainer.a((EntityHuman) this);
+        if (this.activeContainer != null) {
+            this.activeContainer.a((EntityHuman) this);
+        }
         this.activeContainer = this.defaultContainer;
+        if (this.defaultContainer != null) {
+            this.updateInventory(this.defaultContainer);
+        }
     }
 
     public void a(float f, float f1, boolean flag, boolean flag1, float f2, float f3) {
@@ -1012,6 +1107,9 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
 
         if (this.playerStatistics != null) {
             this.playerStatistics.recordIncrement(statistic, i);
+        }
+        if (this.b != null) {
+            this.b.modernScoreboardManager.recordStatistic(this, statistic, i);
         }
     }
 

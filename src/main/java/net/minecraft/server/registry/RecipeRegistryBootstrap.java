@@ -26,7 +26,7 @@ import net.minecraft.server.util.ResourceLocation;
  * the same ordering they always did. Classpath data identifies those built-ins;
  * the layered provider supplies their authoritative values. Plugins appended
  * after the sorted built-in prefix, or overriding a furnace input, are retained
- * by identity. The five legacy additions remain the final unsorted tail.
+ * by identity. The six legacy additions remain the final unsorted tail.
  * As with the legacy startup lifecycle, asynchronous plugin access while this
  * main-thread cutover is actively committing is unsupported; engine/world
  * readers begin only after central registry bootstrap completes.</p>
@@ -82,11 +82,11 @@ public final class RecipeRegistryBootstrap {
         List<ResourceLocation> oracleKeys = RegistryDataLoader.loadRequiredTag(
                 "recipe", LEGACY_BASELINE, classpath);
         Map<ResourceLocation, CraftingRecipe> oracleBaseline = loadRecipes(
-                oracleKeys, classpath, false, false);
+                oracleKeys, classpath, false);
         List<ResourceLocation> oracleVariantKeys = RegistryDataLoader.loadRequiredTag(
                 "recipe", SERVER_LEGACY_VARIANTS, classpath);
         Map<ResourceLocation, CraftingRecipe> oracleVariants = loadRecipes(
-                oracleVariantKeys, classpath, false, false);
+                oracleVariantKeys, classpath, false);
         List<ResourceLocation> matchingOracleKeys =
                 new ArrayList<ResourceLocation>(oracleKeys);
         matchingOracleKeys.addAll(oracleVariantKeys);
@@ -97,11 +97,11 @@ public final class RecipeRegistryBootstrap {
         List<ResourceLocation> baselineKeys = RegistryDataLoader.loadRequiredTag(
                 "recipe", LEGACY_BASELINE);
         Map<ResourceLocation, CraftingRecipe> baseline = loadRecipes(
-                baselineKeys, null, false, false);
+                baselineKeys, null, false);
         List<ResourceLocation> variantKeys = RegistryDataLoader.loadRequiredTag(
                 "recipe", SERVER_LEGACY_VARIANTS);
         Map<ResourceLocation, CraftingRecipe> variants = loadRecipes(
-                variantKeys, null, false, false);
+                variantKeys, null, false);
         Map<ResourceLocation, CraftingRecipe> configuredCrafting =
                 new LinkedHashMap<ResourceLocation, CraftingRecipe>(baseline);
         configuredCrafting.putAll(variants);
@@ -109,12 +109,12 @@ public final class RecipeRegistryBootstrap {
         List<ResourceLocation> smeltingKeys = RegistryDataLoader.loadRequiredTag(
                 "recipe", LEGACY_SMELTING);
         Map<ResourceLocation, CraftingRecipe> smelting = loadRecipes(
-                smeltingKeys, null, true, false);
+                smeltingKeys, null, true);
 
         List<ResourceLocation> additionKeys = RegistryDataLoader.loadRequiredTag(
                 "recipe", LEGACY_ADDITIONS);
         Map<ResourceLocation, CraftingRecipe> additions = loadRecipes(
-                additionKeys, null, false, true);
+                additionKeys, null, false);
 
         LinkedHashMap<ResourceLocation, CraftingRecipe> allData =
                 combineData(baselineKeys, baseline, smeltingKeys, smelting,
@@ -282,8 +282,7 @@ public final class RecipeRegistryBootstrap {
     private static Map<ResourceLocation, CraftingRecipe> loadRecipes(
             List<ResourceLocation> keys,
             RegistryDataLoader.ResourceProvider provider,
-            final boolean requireSmelting,
-            final boolean requireShaped) {
+            final boolean requireSmelting) {
         RegistryDataLoader.Decoder<CraftingRecipe> decoder =
                 new RegistryDataLoader.Decoder<CraftingRecipe>() {
                     public CraftingRecipe decode(ResourceLocation key, JsonObject json) {
@@ -292,13 +291,11 @@ public final class RecipeRegistryBootstrap {
                             throw new IllegalArgumentException(
                                     "smelting tag contains a non-smelting recipe");
                         }
-                        if (!requireSmelting && recipe instanceof SmeltingRecipe) {
+                        if (!requireSmelting
+                                && !(recipe instanceof ShapedRecipes)
+                                && !(recipe instanceof ShapelessRecipes)) {
                             throw new IllegalArgumentException(
-                                    "crafting tag contains a smelting recipe");
-                        }
-                        if (requireShaped && !(recipe instanceof ShapedRecipes)) {
-                            throw new IllegalArgumentException(
-                                    "legacy addition must remain shaped");
+                                    "crafting tag contains a non-crafting recipe");
                         }
                         return recipe;
                     }

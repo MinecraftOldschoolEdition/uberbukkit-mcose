@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
+import net.minecraft.server.registry.BiomeSpawnSettingsBootstrap;
 import uk.betacraft.uberbukkit.UberbukkitConfig;
 
 public class BiomeBase {
@@ -110,6 +111,10 @@ public class BiomeBase {
     }
 
     public List a(EnumCreatureType enumcreaturetype) {
+        List bound = BiomeSpawnSettingsBootstrap.getEffectiveSpawns(this, enumcreaturetype);
+        if (bound != null) {
+            return bound;
+        }
         return enumcreaturetype == EnumCreatureType.MONSTER ? this.s : (enumcreaturetype == EnumCreatureType.CREATURE ? this.t : (enumcreaturetype == EnumCreatureType.WATER_CREATURE ? this.u : null));
     }
 

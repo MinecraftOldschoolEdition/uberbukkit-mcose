@@ -6,6 +6,8 @@ import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.weather.LightningStrikeEvent;
 import org.bukkit.generator.ChunkGenerator;
 import net.minecraft.server.Alpha.AlphaChunkProvider;
+import net.minecraft.server.registry.WorldPresetGeneratorRouting;
+import net.minecraft.server.util.ResourceLocation;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -58,38 +60,51 @@ public class WorldServer extends World implements BlockChangeDelegate {
 
         if (this.generator != null) {
             provider = new CustomChunkGenerator(this, this.getSeed(), this.generator);
-        } else if (this.worldProvider instanceof WorldProviderHell) {
-            // Generation and Nether-only weather must use the same originating-world classifier.
-            int netherTerrainType = ((WorldProviderHell) this.worldProvider).getNetherVariantTerrainType();
-            boolean classic = netherTerrainType == 6;
-            boolean netherSky = WorldProviderHell.isNetherSkyTerrainType(netherTerrainType);
-
-            if (classic) {
-                provider = new net.minecraft.server.Classic.ChunkProviderHellClassic(this, this.getSeed());
-                MinecraftServer.log.info("[WorldServer] Nether provider: ClassicHellLevelSource for world '" + this.worldData.name + "'");
-            } else if (netherSky) {
-                provider = new ChunkProviderNetherSky(this, this.getSeed());
-                MinecraftServer.log.info("[WorldServer] Nether provider: NetherSkyLevelSource for world '" + (this.worldData != null ? this.worldData.name : "<unknown>") + "'");
-            } else {
-                provider = new NetherChunkGenerator(this, this.getSeed());
-                MinecraftServer.log.info("[WorldServer] Nether provider: Default for world '" + (this.worldData != null ? this.worldData.name : "<unknown>") + "'");
-            }
-        } else if (this.worldProvider instanceof WorldProviderSky) {
-            provider = new SkyLandsChunkGenerator(this, this.getSeed());
         } else {
-            int terrainType = this.worldData.getTerrainType();
-            if (terrainType == 1 || terrainType == 5) {
+            // This lookup must remain after the Bukkit generator branch above.
+            int terrainType = WorldPresetGeneratorRouting.terrainType(this);
+            ResourceLocation generatorKey = WorldPresetGeneratorRouting.generatorKey(
+                    terrainType,
+                    WorldPresetGeneratorRouting.dimensionKey(this.worldProvider));
+
+            if (this.worldProvider instanceof WorldProviderHell) {
+                if (WorldPresetGeneratorRouting.CLASSIC_NETHER.equals(generatorKey)) {
+                    provider = new net.minecraft.server.Classic.ChunkProviderHellClassic(this, this.getSeed());
+                    MinecraftServer.log.info("[WorldServer] Nether provider: ClassicHellLevelSource for world '" + this.worldData.name + "'");
+                } else if (WorldPresetGeneratorRouting.NETHER_SKY.equals(generatorKey)) {
+                    provider = new ChunkProviderNetherSky(this, this.getSeed());
+                    MinecraftServer.log.info("[WorldServer] Nether provider: NetherSkyLevelSource for world '" + (this.worldData != null ? this.worldData.name : "<unknown>") + "'");
+                } else if (WorldPresetGeneratorRouting.NETHER.equals(generatorKey)) {
+                    provider = new NetherChunkGenerator(this, this.getSeed());
+                    MinecraftServer.log.info("[WorldServer] Nether provider: Default for world '" + (this.worldData != null ? this.worldData.name : "<unknown>") + "'");
+                } else {
+                    throw new IllegalStateException(
+                            "Unsupported Nether generator " + generatorKey
+                                    + " for terrain type " + terrainType);
+                }
+            } else if (this.worldProvider instanceof WorldProviderSky) {
+                if (!WorldPresetGeneratorRouting.SKY_GENERATOR.equals(generatorKey)) {
+                    throw new IllegalStateException(
+                            "Unsupported Sky generator " + generatorKey
+                                    + " for terrain type " + terrainType);
+                }
+                provider = new SkyLandsChunkGenerator(this, this.getSeed());
+            } else if (WorldPresetGeneratorRouting.ALPHA.equals(generatorKey)) {
                 provider = new AlphaChunkProvider(this, this.getSeed());
-            } else if (terrainType == 7) {
+            } else if (WorldPresetGeneratorRouting.INFDEV.equals(generatorKey)) {
                 provider = new net.minecraft.server.Infdev.InfdevChunkProvider(this, this.getSeed());
-            } else if (terrainType == 2) {
+            } else if (WorldPresetGeneratorRouting.FLAT.equals(generatorKey)) {
                 provider = new ChunkProviderFlat(this, this.getSeed(), false);
-            } else if (terrainType == 3) {
+            } else if (WorldPresetGeneratorRouting.SKY_GENERATOR.equals(generatorKey)) {
                 provider = new ChunkProviderSky(this, this.getSeed());
-            } else if (terrainType == 6) {
+            } else if (WorldPresetGeneratorRouting.CLASSIC.equals(generatorKey)) {
                 provider = new net.minecraft.server.Classic.ChunkProviderClassic(this, this.getSeed());
-            } else {
+            } else if (WorldPresetGeneratorRouting.DEFAULT.equals(generatorKey)) {
                 provider = new ChunkProviderGenerate(this, this.getSeed());
+            } else {
+                throw new IllegalStateException(
+                        "Unsupported overworld generator " + generatorKey
+                                + " for terrain type " + terrainType);
             }
         }
 

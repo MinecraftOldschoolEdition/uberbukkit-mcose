@@ -63,8 +63,11 @@ public final class PacketLimits {
 
     public static byte[] readNullableShortByteArray(DataInputStream input, int maxBytes, String fieldName) throws IOException {
         short rawLength = input.readShort();
-        if (rawLength < 0) {
+        if (rawLength == -1) {
             return null;
+        }
+        if (rawLength < -1) {
+            throw new IOException("Invalid " + fieldName + " length: " + rawLength);
         }
 
         int length = rawLength;
@@ -90,6 +93,14 @@ public final class PacketLimits {
     }
 
     public static NBTTagCompound readCompressedNBT(DataInputStream input, int maxCompressedBytes, String fieldName) throws IOException {
+        return readCompressedNBT(input, maxCompressedBytes, fieldName, NBTReadLimiter.packet());
+    }
+
+    public static NBTTagCompound readCompressedNBT(
+            DataInputStream input,
+            int maxCompressedBytes,
+            String fieldName,
+            NBTReadLimiter limiter) throws IOException {
         byte[] nbtBytes = readNullableShortByteArray(input, maxCompressedBytes, fieldName);
         if (nbtBytes == null || nbtBytes.length == 0) {
             return null;
@@ -97,7 +108,7 @@ public final class PacketLimits {
 
         DataInputStream nbtInput = new DataInputStream(new GZIPInputStream(new ByteArrayInputStream(nbtBytes)));
         try {
-            NBTBase nbtBase = NBTBase.b(nbtInput, NBTReadLimiter.packet());
+            NBTBase nbtBase = NBTBase.b(nbtInput, limiter == null ? NBTReadLimiter.packet() : limiter);
             return nbtBase instanceof NBTTagCompound ? (NBTTagCompound) nbtBase : null;
         } finally {
             nbtInput.close();

@@ -1,0 +1,24 @@
+{
+  "parent": "minecraft:build_pickaxe",
+  "display": {
+    "icon": {
+      "id": "minecraft:lit_furnace"
+    },
+    "title": { "translate": "achievement.buildFurnace" },
+    "description": { "translate": "achievement.buildFurnace.desc" },
+    "frame": "task",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": false
+  },
+  "criteria": {
+    "legacy_trigger": {
+      "trigger": "minecraft:legacy_trigger"
+    }
+  },
+  "requirements": [["legacy_trigger"]],
+  "legacy_layout": {
+    "column": 4,
+    "row": 4
+  }
+}

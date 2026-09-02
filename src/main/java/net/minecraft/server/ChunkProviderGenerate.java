@@ -3,6 +3,13 @@ package net.minecraft.server;
 import java.util.Random;
 
 import uk.betacraft.uberbukkit.UberbukkitConfig;
+import net.minecraft.server.registry.ConfiguredCarverDataBootstrap;
+import net.minecraft.server.registry.ConfiguredCarvers;
+import net.minecraft.server.registry.ConfiguredFeatureDataBootstrap;
+import net.minecraft.server.registry.LegacyRandomChanceStructurePlacement;
+import net.minecraft.server.registry.LegacyPlacedFeatureExecutor;
+import net.minecraft.server.registry.PlacedFeatureDataBootstrap;
+import net.minecraft.server.registry.StructureSetDataBootstrap;
 
 public class ChunkProviderGenerate implements IChunkProvider {
 
@@ -20,7 +27,8 @@ public class ChunkProviderGenerate implements IChunkProvider {
     private double[] r = new double[256];
     private double[] s = new double[256];
     private double[] t = new double[256];
-    private MapGenBase u = net.minecraft.server.registry.Carvers.create(new net.minecraft.server.util.ResourceLocation("minecraft","cave"));
+    private MapGenBase u = ConfiguredCarvers.create(
+            ConfiguredCarverDataBootstrap.CAVE);
     private BiomeBase[] v;
     double[] d;
     double[] e;
@@ -340,96 +348,38 @@ public class ChunkProviderGenerate implements IChunkProvider {
         int l1;
         int i2;
 
-        if (this.j.nextInt(4) == 0) {
-            k1 = k + this.j.nextInt(16) + 8;
-            l1 = this.j.nextInt(128);
-            i2 = l + this.j.nextInt(16) + 8;
-            (new WorldGenLakes("minecraft:water")).a(this.p, this.j, k1, l1, i2);
-        }
-
-        if (this.j.nextInt(8) == 0) {
-            k1 = k + this.j.nextInt(16) + 8;
-            l1 = this.j.nextInt(this.j.nextInt(120) + 8);
-            i2 = l + this.j.nextInt(16) + 8;
-            if (l1 < 64 || this.j.nextInt(10) == 0) {
-                (new WorldGenLakes("minecraft:lava")).a(this.p, this.j, k1, l1, i2);
-            }
-        }
+        LegacyPlacedFeatureExecutor.generate(this.p, this.j,
+                k + 8, l + 8, PlacedFeatureDataBootstrap.LAKE_WATER);
+        LegacyPlacedFeatureExecutor.generate(this.p, this.j,
+                k + 8, l + 8, PlacedFeatureDataBootstrap.LAKE_LAVA);
 
         int j2;
 
-        net.minecraft.server.WorldGenerator dungeonGen = net.minecraft.server.registry.Features.create("minecraft:dungeon");
-        for (k1 = 0; k1 < 8; ++k1) {
-            l1 = k + this.j.nextInt(16) + 8;
-            i2 = this.j.nextInt(128);
-            j2 = l + this.j.nextInt(16) + 8;
-            if (dungeonGen != null) dungeonGen.a(this.p, this.j, l1, i2, j2);
-        }
+        LegacyPlacedFeatureExecutor.generate(this.p, this.j,
+                k + 8, l + 8, ConfiguredFeatureDataBootstrap.MONSTER_ROOM);
 
-        for (k1 = 0; k1 < 10; ++k1) {
-            l1 = k + this.j.nextInt(16);
-            i2 = this.j.nextInt(128);
-            j2 = l + this.j.nextInt(16);
-            (new WorldGenClay(32)).a(this.p, this.j, l1, i2, j2);
-        }
+        LegacyPlacedFeatureExecutor.generate(this.p, this.j, k, l,
+                PlacedFeatureDataBootstrap.CLAY);
 
-        for (k1 = 0; k1 < 20; ++k1) {
-            l1 = k + this.j.nextInt(16);
-            i2 = this.j.nextInt(128);
-            j2 = l + this.j.nextInt(16);
-            (new WorldGenMinable("minecraft:dirt", 32)).a(this.p, this.j, l1, i2, j2);
-        }
-
-        for (k1 = 0; k1 < 10; ++k1) {
-            l1 = k + this.j.nextInt(16);
-            i2 = this.j.nextInt(128);
-            j2 = l + this.j.nextInt(16);
-            (new WorldGenMinable("minecraft:gravel", 32)).a(this.p, this.j, l1, i2, j2);
-        }
-
-        for (k1 = 0; k1 < 20; ++k1) {
-            l1 = k + this.j.nextInt(16);
-            i2 = this.j.nextInt(128);
-            j2 = l + this.j.nextInt(16);
-            (new WorldGenMinable("minecraft:coal_ore", 16)).a(this.p, this.j, l1, i2, j2);
-        }
-
-        for (k1 = 0; k1 < 20; ++k1) {
-            l1 = k + this.j.nextInt(16);
-            i2 = this.j.nextInt(64);
-            j2 = l + this.j.nextInt(16);
-            (new WorldGenMinable("minecraft:iron_ore", 8)).a(this.p, this.j, l1, i2, j2);
-        }
-
-        for (k1 = 0; k1 < 2; ++k1) {
-            l1 = k + this.j.nextInt(16);
-            i2 = this.j.nextInt(32);
-            j2 = l + this.j.nextInt(16);
-            (new WorldGenMinable("minecraft:gold_ore", 8)).a(this.p, this.j, l1, i2, j2);
-        }
-
-        for (k1 = 0; k1 < 8; ++k1) {
-            l1 = k + this.j.nextInt(16);
-            i2 = this.j.nextInt(16);
-            j2 = l + this.j.nextInt(16);
-            (new WorldGenMinable("minecraft:redstone_ore", 7)).a(this.p, this.j, l1, i2, j2);
-        }
-
-        for (k1 = 0; k1 < 1; ++k1) {
-            l1 = k + this.j.nextInt(16);
-            i2 = this.j.nextInt(16);
-            j2 = l + this.j.nextInt(16);
-            (new WorldGenMinable("minecraft:diamond_ore", 7)).a(this.p, this.j, l1, i2, j2);
-        }
+        LegacyPlacedFeatureExecutor.generate(this.p, this.j, k, l,
+                ConfiguredFeatureDataBootstrap.ORE_DIRT);
+        LegacyPlacedFeatureExecutor.generate(this.p, this.j, k, l,
+                ConfiguredFeatureDataBootstrap.ORE_GRAVEL);
+        LegacyPlacedFeatureExecutor.generate(this.p, this.j, k, l,
+                ConfiguredFeatureDataBootstrap.ORE_COAL);
+        LegacyPlacedFeatureExecutor.generate(this.p, this.j, k, l,
+                ConfiguredFeatureDataBootstrap.ORE_IRON);
+        LegacyPlacedFeatureExecutor.generate(this.p, this.j, k, l,
+                ConfiguredFeatureDataBootstrap.ORE_GOLD);
+        LegacyPlacedFeatureExecutor.generate(this.p, this.j, k, l,
+                ConfiguredFeatureDataBootstrap.ORE_REDSTONE);
+        LegacyPlacedFeatureExecutor.generate(this.p, this.j, k, l,
+                ConfiguredFeatureDataBootstrap.ORE_DIAMOND);
 
         // uberbukkit
         if (UberbukkitConfig.getInstance().getBoolean("worldgen.generate_lapis_ores", true)) {
-            for (k1 = 0; k1 < 1; ++k1) {
-                l1 = k + this.j.nextInt(16);
-                i2 = this.j.nextInt(16) + this.j.nextInt(16);
-                j2 = l + this.j.nextInt(16);
-                (new WorldGenMinable("minecraft:lapis_ore", 6)).a(this.p, this.j, l1, i2, j2);
-            }
+            LegacyPlacedFeatureExecutor.generate(this.p, this.j, k, l,
+                    ConfiguredFeatureDataBootstrap.ORE_LAPIS);
         }
 
         d0 = 0.5D;
@@ -623,47 +573,34 @@ public class ChunkProviderGenerate implements IChunkProvider {
             (new WorldGenCactus()).a(this.p, this.j, l2, k3, j3);
         }
         
-        // Herobrine Shrine generation in deserts (1/750000 chance per chunk)
-        // Uses a separate random to avoid affecting other world generation
-        if (biomebase == BiomeBase.DESERT) {
-            long shrineSeed = (long)i * 341873128712L + (long)j * 132897987541L + this.p.getSeed() + 777777777L;
-            Random shrineRand = new Random(shrineSeed);
-            if (shrineRand.nextInt(750000) == 0) {
-                int shrineX = k + shrineRand.nextInt(16) + 8;
-                int shrineZ = l + shrineRand.nextInt(16) + 8;
-                int shrineY = this.p.getHighestBlockYAt(shrineX, shrineZ);
-                (new WorldGenHerobrineShrine()).a(this.p, shrineRand, shrineX, shrineY, shrineZ);
+        // Structure validity remains desert-only. Placement data owns the
+        // dedicated deterministic random and candidate sampling used by
+        // /locate as well.
+        if (StructureSetDataBootstrap.isHerobrineShrineAllowed(
+                this.p.worldData == null
+                        ? 0 : this.p.worldData.getTerrainType(),
+                biomebase)) {
+            LegacyRandomChanceStructurePlacement.Candidate shrine =
+                    StructureSetDataBootstrap.herobrineShrine()
+                            .getPlacement().sample(this.p.getSeed(), i, j);
+            if (shrine != null) {
+                (new WorldGenHerobrineShrine()).a(
+                        this.p,
+                        shrine.getRandom(),
+                        shrine.getBlockX(),
+                        shrine.getGenerationY(),
+                        shrine.getBlockZ());
             }
         }
 
-        for (i3 = 0; i3 < 50; ++i3) {
-            l2 = k + this.j.nextInt(16) + 8;
-            k3 = this.j.nextInt(this.j.nextInt(120) + 8);
-            j3 = l + this.j.nextInt(16) + 8;
-            (new WorldGenLiquids("minecraft:water")).a(this.p, this.j, l2, k3, j3);
-        }
+        LegacyPlacedFeatureExecutor.generate(this.p, this.j,
+                k + 8, l + 8, PlacedFeatureDataBootstrap.SPRING_WATER);
+        LegacyPlacedFeatureExecutor.generate(this.p, this.j,
+                k + 8, l + 8, PlacedFeatureDataBootstrap.SPRING_LAVA);
 
-        for (i3 = 0; i3 < 20; ++i3) {
-            l2 = k + this.j.nextInt(16) + 8;
-            k3 = this.j.nextInt(this.j.nextInt(this.j.nextInt(112) + 8) + 8);
-            j3 = l + this.j.nextInt(16) + 8;
-            (new WorldGenLiquids("minecraft:lava")).a(this.p, this.j, l2, k3, j3);
-        }
-
-        this.w = this.p.getWorldChunkManager().a(this.w, k + 8, l + 8, 16, 16);
-
-        for (i3 = k + 8; i3 < k + 8 + 16; ++i3) {
-            for (l2 = l + 8; l2 < l + 8 + 16; ++l2) {
-                k3 = i3 - (k + 8);
-                j3 = l2 - (l + 8);
-                int l3 = this.p.e(i3, l2);
-                double d1 = this.w[k3 * 16 + j3] - (double) (l3 - 64) / 64.0D * 0.3D;
-
-                if (d1 < 0.5D && l3 > 0 && l3 < 128 && this.p.isEmpty(i3, l3, l2) && this.p.getMaterial(i3, l3 - 1, l2).isSolid() && this.p.getMaterial(i3, l3 - 1, l2) != Material.ICE) {
-                    this.p.setBlockStateAndData(i3, l3, l2, "minecraft:snow");
-                }
-            }
-        }
+        this.w = LegacyPlacedFeatureExecutor.generateFreezeTopLayer(
+                this.p, k + 8, l + 8, this.w,
+                PlacedFeatureDataBootstrap.FREEZE_TOP_LAYER);
 
         // uberbukkit
         if (UberbukkitConfig.getInstance().getBoolean("worldgen.generate_steveco_chests", false)) {

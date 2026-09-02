@@ -1,6 +1,10 @@
 package net.minecraft.server;
 
 import java.util.Random;
+import net.minecraft.server.registry.ConfiguredCarverDataBootstrap;
+import net.minecraft.server.registry.ConfiguredCarvers;
+import net.minecraft.server.registry.LegacyPlacedFeatureExecutor;
+import net.minecraft.server.registry.PlacedFeatureDataBootstrap;
 
 public class ChunkProviderHell implements IChunkProvider {
 
@@ -17,7 +21,8 @@ public class ChunkProviderHell implements IChunkProvider {
     private double[] p = new double[256];
     private double[] q = new double[256];
     private double[] r = new double[256];
-    private MapGenBase s = net.minecraft.server.registry.Carvers.create(new net.minecraft.server.util.ResourceLocation("minecraft","nether_cave"));
+    private MapGenBase s = ConfiguredCarvers.create(
+            ConfiguredCarverDataBootstrap.NETHER_CAVE);
     double[] c;
     double[] d;
     double[] e;
@@ -322,12 +327,9 @@ public class ChunkProviderHell implements IChunkProvider {
         int k1;
         int l1;
 
-        for (i1 = 0; i1 < 8; ++i1) {
-            j1 = k + this.h.nextInt(16) + 8;
-            k1 = this.h.nextInt(120) + 4;
-            l1 = l + this.h.nextInt(16) + 8;
-            (new WorldGenHellLava("minecraft:lava")).a(this.n, this.h, j1, k1, l1);
-        }
+        LegacyPlacedFeatureExecutor.generate(
+                this.n, this.h, k + 8, l + 8,
+                PlacedFeatureDataBootstrap.SPRING_OPEN);
 
         i1 = this.h.nextInt(this.h.nextInt(10) + 1) + 1;
 

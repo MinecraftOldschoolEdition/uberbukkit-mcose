@@ -1,0 +1,6 @@
+{
+  "default_key": "death.attack.generic",
+  "actor_key": "death.attack.mob",
+  "item_key": "death.attack.mob.item",
+  "item_policy": "custom_named"
+}

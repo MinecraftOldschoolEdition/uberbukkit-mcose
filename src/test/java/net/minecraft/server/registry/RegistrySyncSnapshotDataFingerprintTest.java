@@ -14,6 +14,9 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 public class RegistrySyncSnapshotDataFingerprintTest {
+    private static final String SUPPORTED_CLIENT_RUNTIME_FINGERPRINT =
+            "1d7052e3f45a0e42f843412dc97d2b3fa84f4b60f0b4b1820cfcad334222231d";
+
     @BeforeClass
     public static void initializeLegacyStaticsInProductionOrder() {
         assertTrue(Block.STONE != null);
@@ -104,6 +107,31 @@ public class RegistrySyncSnapshotDataFingerprintTest {
                 negotiated, ModProtocol.PROTOCOL_VERSION, false, fingerprint));
         assertFalse(ModProtocol.registryRequestMatches(
                 legacy, ModProtocol.PROTOCOL_VERSION, false, mismatch));
+    }
+
+    @Test
+    public void supportedClientRuntimeRequestIsAcceptedAndEchoedByServerSnapshot() {
+        String serverFingerprint =
+                RegistryDataFingerprint.captureSynchronizedData();
+        ModProtocol.RegistryRequestInfo request =
+                ModProtocol.readRegistryRequestInfo(
+                        ModProtocol.createRegistryRequestPayload(
+                                ModProtocol.PROTOCOL_VERSION,
+                                SUPPORTED_CLIENT_RUNTIME_FINGERPRINT));
+
+        assertTrue("server=" + serverFingerprint
+                        + " client=" + SUPPORTED_CLIENT_RUNTIME_FINGERPRINT,
+                ModProtocol.registryRequestMatches(
+                        request,
+                        ModProtocol.PROTOCOL_VERSION,
+                        true,
+                        serverFingerprint));
+
+        RegistrySyncSnapshot snapshot = RegistrySyncSnapshot.fromBytes(
+                RegistrySyncSnapshot.captureLocal().toBytes());
+        assertTrue(snapshot.isValid());
+        assertEquals(SUPPORTED_CLIENT_RUNTIME_FINGERPRINT,
+                snapshot.getSynchronizedDataFingerprint());
     }
 
     @Test

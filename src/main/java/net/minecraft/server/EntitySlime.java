@@ -1,5 +1,9 @@
 package net.minecraft.server;
 
+import java.util.Collections;
+import java.util.List;
+import net.minecraft.server.registry.EntityLootTable;
+
 public class EntitySlime extends EntityLiving implements IMonster {
     private static final EntityDataAccessor<Byte> DATA_SLIME_SIZE_ID = new EntityDataAccessor<Byte>(16, EntityDataSerializers.BYTE);
 
@@ -155,6 +159,16 @@ public class EntitySlime extends EntityLiving implements IMonster {
 
     protected int j() {
         return this.getSize() == 1 ? Item.SLIME_BALL.id : 0;
+    }
+
+    protected List<ItemStack> generateEntityDeathLoot(EntityLootTable table) {
+        if (this.getSize() > 1) {
+            // The pre-cutover server inherited EntityLiving.q(), which always
+            // consumed this roll even though large slimes returned no item.
+            this.random.nextInt(3);
+            return Collections.emptyList();
+        }
+        return super.generateEntityDeathLoot(table);
     }
 
     public boolean d() {

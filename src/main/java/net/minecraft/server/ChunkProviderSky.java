@@ -2,6 +2,12 @@ package net.minecraft.server;
 
 import java.util.Random;
 
+import net.minecraft.server.registry.ConfiguredCarverDataBootstrap;
+import net.minecraft.server.registry.ConfiguredCarvers;
+import net.minecraft.server.registry.ConfiguredFeatureDataBootstrap;
+import net.minecraft.server.registry.LegacyPlacedFeatureExecutor;
+import net.minecraft.server.registry.PlacedFeatureDataBootstrap;
+
 public class ChunkProviderSky implements IChunkProvider {
     private static final int SKY_EXTRA_TREE_ATTEMPTS = 6;
     private static final int SKY_COLD_EXTRA_TREE_ATTEMPTS = 2;
@@ -59,7 +65,8 @@ public class ChunkProviderSky implements IChunkProvider {
     private double[] r = new double[256];
     private double[] s = new double[256];
     private double[] t = new double[256];
-    private MapGenBase u = net.minecraft.server.registry.Carvers.create(new net.minecraft.server.util.ResourceLocation("minecraft","sky_cave"));
+    private MapGenBase u = ConfiguredCarvers.create(
+            ConfiguredCarverDataBootstrap.SKY_CAVE);
     private BiomeBase[] v;
     double[] d;
     double[] e;
@@ -433,8 +440,12 @@ public class ChunkProviderSky implements IChunkProvider {
             return false;
         }
 
-        (new WorldGenLakes("minecraft:water")).a(this.p, this.j, k, j2, l);
-        (new WorldGenLakes("minecraft:water")).a(this.p, this.j, k1, k2, l1);
+        LegacyPlacedFeatureExecutor.generateLakeAt(
+                this.p, this.j, k, j2, l,
+                ConfiguredFeatureDataBootstrap.LAKE_WATER);
+        LegacyPlacedFeatureExecutor.generateLakeAt(
+                this.p, this.j, k1, k2, l1,
+                ConfiguredFeatureDataBootstrap.LAKE_WATER);
 
         int l2 = Integer.compare(k1, k);
         int i3 = Integer.compare(l1, l);
@@ -465,7 +476,9 @@ public class ChunkProviderSky implements IChunkProvider {
             j1 = j + this.j.nextInt(16) + 8;
             k1 = this.p.getHighestBlockYAt(i1, j1) - this.j.nextInt(SKY_FOREST_POND_SURFACE_OFFSET) - 1;
             if (k1 > SKY_FOREST_MIN_WATER_FEATURE_Y && k1 < 124) {
-                (new WorldGenLakes("minecraft:water")).a(this.p, this.j, i1, k1, j1);
+                LegacyPlacedFeatureExecutor.generateLakeAt(
+                        this.p, this.j, i1, k1, j1,
+                        ConfiguredFeatureDataBootstrap.LAKE_WATER);
             }
         }
 
@@ -474,7 +487,9 @@ public class ChunkProviderSky implements IChunkProvider {
             j1 = j + this.j.nextInt(16) + 8;
             k1 = this.p.getHighestBlockYAt(i1, j1) - this.j.nextInt(SKY_FOREST_WATERFALL_DEPTH_RANGE);
             if (k1 > SKY_FOREST_MIN_WATER_FEATURE_Y) {
-                (new WorldGenLiquids("minecraft:water")).a(this.p, this.j, i1, k1, j1);
+                LegacyPlacedFeatureExecutor.generateSpringAt(
+                        this.p, this.j, i1, k1, j1,
+                        ConfiguredFeatureDataBootstrap.SPRING_WATER);
             }
         }
 
@@ -566,21 +581,10 @@ public class ChunkProviderSky implements IChunkProvider {
         int l1;
         int i2;
 
-        if (this.j.nextInt(4) == 0) {
-            k1 = k + this.j.nextInt(16) + 8;
-            l1 = this.j.nextInt(128);
-            i2 = l + this.j.nextInt(16) + 8;
-            (new WorldGenLakes("minecraft:water")).a(this.p, this.j, k1, l1, i2);
-        }
-
-        if (this.j.nextInt(8) == 0) {
-            k1 = k + this.j.nextInt(16) + 8;
-            l1 = this.j.nextInt(this.j.nextInt(120) + 8);
-            i2 = l + this.j.nextInt(16) + 8;
-            if (l1 < 64 || this.j.nextInt(10) == 0) {
-                (new WorldGenLakes("minecraft:lava")).a(this.p, this.j, k1, l1, i2);
-            }
-        }
+        LegacyPlacedFeatureExecutor.generate(this.p, this.j,
+                k + 8, l + 8, PlacedFeatureDataBootstrap.LAKE_WATER);
+        LegacyPlacedFeatureExecutor.generate(this.p, this.j,
+                k + 8, l + 8, PlacedFeatureDataBootstrap.LAKE_LAVA);
 
         if (this.isForestySkyBiome(biomebase)) {
             this.generateForestySkyWaterFeatures(k, l);
@@ -590,75 +594,74 @@ public class ChunkProviderSky implements IChunkProvider {
 
         int j2;
 
-        net.minecraft.server.WorldGenerator dungeonGen = net.minecraft.server.registry.Features.create("minecraft:dungeon");
-        for (k1 = 0; k1 < 8; ++k1) {
-            l1 = k + this.j.nextInt(16) + 8;
-            i2 = this.j.nextInt(128);
-            j2 = l + this.j.nextInt(16) + 8;
-            if (dungeonGen != null) dungeonGen.a(this.p, this.j, l1, i2, j2);
-        }
+        LegacyPlacedFeatureExecutor.generate(this.p, this.j,
+                k + 8, l + 8, ConfiguredFeatureDataBootstrap.MONSTER_ROOM);
 
-        for (k1 = 0; k1 < 10; ++k1) {
-            l1 = k + this.j.nextInt(16);
-            i2 = this.j.nextInt(128);
-            j2 = l + this.j.nextInt(16);
-            (new WorldGenClay(32)).a(this.p, this.j, l1, i2, j2);
-        }
+        LegacyPlacedFeatureExecutor.generate(this.p, this.j, k, l,
+                PlacedFeatureDataBootstrap.CLAY);
 
         for (k1 = 0; k1 < 20; ++k1) {
             l1 = k + this.j.nextInt(16);
             i2 = this.j.nextInt(128);
             j2 = l + this.j.nextInt(16);
-            (new WorldGenMinable("minecraft:dirt", 32)).a(this.p, this.j, l1, i2, j2);
+            LegacyPlacedFeatureExecutor.generateOreAt(this.p, this.j,
+                    l1, i2, j2, ConfiguredFeatureDataBootstrap.ORE_DIRT);
         }
 
         for (k1 = 0; k1 < 10; ++k1) {
             l1 = k + this.j.nextInt(16);
             i2 = this.j.nextInt(128);
             j2 = l + this.j.nextInt(16);
-            (new WorldGenMinable("minecraft:gravel", 32)).a(this.p, this.j, l1, i2, j2);
+            LegacyPlacedFeatureExecutor.generateOreAt(this.p, this.j,
+                    l1, i2, j2, ConfiguredFeatureDataBootstrap.ORE_GRAVEL);
         }
 
         for (k1 = 0; k1 < this.getSkyScaledOreAttempts(20, skyStoneDensity); ++k1) {
             l1 = k + this.j.nextInt(16);
             i2 = this.j.nextInt(128);
             j2 = l + this.j.nextInt(16);
-            (new WorldGenMinable("minecraft:coal_ore", 16)).a(this.p, this.j, l1, i2, j2);
+            LegacyPlacedFeatureExecutor.generateOreAt(this.p, this.j,
+                    l1, i2, j2, ConfiguredFeatureDataBootstrap.ORE_COAL);
         }
 
         for (k1 = 0; k1 < this.getSkyScaledOreAttempts(20, skyStoneDensity); ++k1) {
             l1 = k + this.j.nextInt(16);
             i2 = this.j.nextInt(64);
             j2 = l + this.j.nextInt(16);
-            (new WorldGenMinable("minecraft:iron_ore", 8)).a(this.p, this.j, l1, i2, j2);
+            LegacyPlacedFeatureExecutor.generateOreAt(this.p, this.j,
+                    l1, i2, j2, ConfiguredFeatureDataBootstrap.ORE_IRON);
         }
 
         for (k1 = 0; k1 < this.getSkyScaledRareOreAttempts(2, skyStoneDensity); ++k1) {
             l1 = k + this.j.nextInt(16);
             i2 = SKY_GOLD_MIN_Y + this.j.nextInt(SKY_GOLD_Y_SPAN);
             j2 = l + this.j.nextInt(16);
-            (new WorldGenMinable("minecraft:gold_ore", 8)).a(this.p, this.j, l1, i2, j2);
+            LegacyPlacedFeatureExecutor.generateOreAt(this.p, this.j,
+                    l1, i2, j2, ConfiguredFeatureDataBootstrap.ORE_GOLD);
         }
 
         for (k1 = 0; k1 < this.getSkyScaledOreAttempts(8, skyStoneDensity); ++k1) {
             l1 = k + this.j.nextInt(16);
             i2 = SKY_REDSTONE_MIN_Y + this.j.nextInt(SKY_REDSTONE_Y_SPAN);
             j2 = l + this.j.nextInt(16);
-            (new WorldGenMinable("minecraft:redstone_ore", 7)).a(this.p, this.j, l1, i2, j2);
+            LegacyPlacedFeatureExecutor.generateOreAt(this.p, this.j,
+                    l1, i2, j2, ConfiguredFeatureDataBootstrap.ORE_REDSTONE);
         }
 
         for (k1 = 0; k1 < this.getSkyScaledRareOreAttempts(1, skyStoneDensity); ++k1) {
             l1 = k + this.j.nextInt(16);
             i2 = SKY_DIAMOND_MIN_Y + this.j.nextInt(SKY_DIAMOND_Y_SPAN);
             j2 = l + this.j.nextInt(16);
-            (new WorldGenMinable("minecraft:diamond_ore", 7)).a(this.p, this.j, l1, i2, j2);
+            LegacyPlacedFeatureExecutor.generateOreAt(this.p, this.j,
+                    l1, i2, j2, ConfiguredFeatureDataBootstrap.ORE_DIAMOND);
         }
 
         for (k1 = 0; k1 < this.getSkyScaledRareOreAttempts(1, skyStoneDensity); ++k1) {
             l1 = k + this.j.nextInt(16);
             i2 = SKY_LAPIS_MIN_Y + this.j.nextInt(SKY_LAPIS_Y_SPAN) + this.j.nextInt(SKY_LAPIS_Y_SPAN);
             j2 = l + this.j.nextInt(16);
-            (new WorldGenMinable("minecraft:lapis_ore", 6)).a(this.p, this.j, l1, i2, j2);
+            LegacyPlacedFeatureExecutor.generateOreAt(this.p, this.j,
+                    l1, i2, j2, ConfiguredFeatureDataBootstrap.ORE_LAPIS);
         }
 
         d0 = 0.5D;
@@ -829,34 +832,14 @@ public class ChunkProviderSky implements IChunkProvider {
             (new WorldGenCactus()).a(this.p, this.j, k2, l2, i3);
         }
 
-        for (j2 = 0; j2 < 50; ++j2) {
-            k2 = k + this.j.nextInt(16) + 8;
-            l2 = this.j.nextInt(this.j.nextInt(120) + 8);
-            i3 = l + this.j.nextInt(16) + 8;
-            (new WorldGenLiquids("minecraft:water")).a(this.p, this.j, k2, l2, i3);
-        }
+        LegacyPlacedFeatureExecutor.generate(this.p, this.j,
+                k + 8, l + 8, PlacedFeatureDataBootstrap.SPRING_WATER);
+        LegacyPlacedFeatureExecutor.generate(this.p, this.j,
+                k + 8, l + 8, PlacedFeatureDataBootstrap.SPRING_LAVA);
 
-        for (j2 = 0; j2 < 20; ++j2) {
-            k2 = k + this.j.nextInt(16) + 8;
-            l2 = this.j.nextInt(this.j.nextInt(this.j.nextInt(112) + 8) + 8);
-            i3 = l + this.j.nextInt(16) + 8;
-            (new WorldGenLiquids("minecraft:lava")).a(this.p, this.j, k2, l2, i3);
-        }
-
-        this.w = this.p.getWorldChunkManager().a(this.w, k + 8, l + 8, 16, 16);
-
-        for (j2 = k + 8; j2 < k + 8 + 16; ++j2) {
-            for (k2 = l + 8; k2 < l + 8 + 16; ++k2) {
-                l2 = j2 - (k + 8);
-                i3 = k2 - (l + 8);
-                int j3 = this.p.e(j2, k2);
-                double d1 = this.w[l2 * 16 + i3] - (double) (j3 - 64) / 64.0D * 0.3D;
-
-                if (d1 < 0.5D && j3 > 0 && j3 < 128 && this.p.isEmpty(j2, j3, k2) && this.p.getMaterial(j2, j3 - 1, k2).isSolid() && this.p.getMaterial(j2, j3 - 1, k2) != Material.ICE) {
-                    this.p.setBlockStateAndData(j2, j3, k2, "minecraft:snow");
-                }
-            }
-        }
+        this.w = LegacyPlacedFeatureExecutor.generateFreezeTopLayer(
+                this.p, k + 8, l + 8, this.w,
+                PlacedFeatureDataBootstrap.FREEZE_TOP_LAYER);
 
         BlockSand.instaFall = false;
     }

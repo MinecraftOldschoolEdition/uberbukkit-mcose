@@ -42,12 +42,8 @@ public class Packet103SetSlot extends Packet {
                 short2 = datainputstream.readByte();
             }
 
-            this.c = new ItemStack(short1, b0, short2);
-            
-            // Read NBT data if present (MCOSE protocol extension)
-            if (this.pvn >= 14) {
-                this.c.tag = PacketLimits.readCompressedNBT(datainputstream, PacketLimits.MAX_ITEM_NBT_BYTES, "item NBT");
-            }
+            NBTTagCompound wireTag = PacketItemStackCodec.readTag(datainputstream, this.pvn);
+            this.c = PacketItemStackCodec.decode(short1, b0, short2, wireTag);
         } else {
             this.c = null;
         }
@@ -68,18 +64,7 @@ public class Packet103SetSlot extends Packet {
                 dataoutputstream.writeByte(this.c.getData());
             }
             
-            // Write NBT data if present (MCOSE protocol extension)
-            if (this.pvn >= 14) {
-                if (this.c.tag != null) {
-                    try {
-                        PacketLimits.writeCompressedNBT(dataoutputstream, this.c.tag, PacketLimits.MAX_ITEM_NBT_BYTES, "item NBT");
-                    } catch (Exception e) {
-                        dataoutputstream.writeShort(-1);
-                    }
-                } else {
-                    dataoutputstream.writeShort(-1);
-                }
-            }
+            PacketItemStackCodec.writeTag(dataoutputstream, this.c, this.pvn);
         }
     }
 

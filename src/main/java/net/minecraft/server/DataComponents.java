@@ -1,5 +1,6 @@
 package net.minecraft.server;
 
+import net.minecraft.server.item.component.CookingFuel;
 import net.minecraft.server.util.ResourceLocation;
 
 import java.util.HashMap;
@@ -105,6 +106,37 @@ public final class DataComponents {
 
         public NBTTagCompound read(NBTBase value) {
             return value instanceof NBTTagCompound ? (NBTTagCompound)value : null;
+        }
+    });
+
+    public static final DataComponentType<CookingFuel> COOKING_FUEL = register("cooking_fuel", new DataComponentSerializer<CookingFuel>() {
+        public NBTBase write(CookingFuel value) {
+            if (value == null) {
+                return null;
+            }
+            NBTTagCompound out = new NBTTagCompound();
+            out.setString("burn_time", value.getBurnTimeKey().toString());
+            out.setString("speed_multiplier", value.getSpeedMultiplierKey().toString());
+            return out;
+        }
+
+        public CookingFuel read(NBTBase value) {
+            if (!(value instanceof NBTTagCompound)) {
+                return null;
+            }
+            NBTTagCompound in = (NBTTagCompound)value;
+            String burnTime = in.getString("burn_time");
+            String speed = in.getString("speed_multiplier");
+            if (burnTime.length() == 0 || speed.length() == 0) {
+                return null;
+            }
+            try {
+                return new CookingFuel(
+                        new ResourceLocation(burnTime),
+                        new ResourceLocation(speed));
+            } catch (Throwable ignored) {
+                return null;
+            }
         }
     });
 

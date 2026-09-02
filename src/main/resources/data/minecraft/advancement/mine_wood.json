@@ -1,0 +1,24 @@
+{
+  "parent": "minecraft:open_inventory",
+  "display": {
+    "icon": {
+      "id": "minecraft:oak_log"
+    },
+    "title": { "translate": "achievement.mineWood" },
+    "description": { "translate": "achievement.mineWood.desc" },
+    "frame": "task",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": false
+  },
+  "criteria": {
+    "legacy_trigger": {
+      "trigger": "minecraft:legacy_trigger"
+    }
+  },
+  "requirements": [["legacy_trigger"]],
+  "legacy_layout": {
+    "column": 2,
+    "row": 0
+  }
+}

@@ -2,8 +2,11 @@ package net.minecraft.server.resource;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
+import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
+import com.google.gson.JsonPrimitive;
+import com.google.gson.stream.JsonReader;
+import com.google.gson.stream.JsonToken;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.Closeable;
@@ -13,6 +16,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
+import java.math.BigDecimal;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -38,6 +42,11 @@ import net.minecraft.server.util.ResourceLocation;
 public final class RegistryDataLoader {
     public interface Decoder<T> {
         T decode(ResourceLocation key, JsonObject json) throws Exception;
+    }
+
+    /** Decoder for registries whose root JSON value is not necessarily an object. */
+    public interface ValueDecoder<T> {
+        T decode(ResourceLocation key, JsonElement json) throws Exception;
     }
 
     /** Optional registry lookup used to honor required/optional direct tag values. */
@@ -161,6 +170,84 @@ public final class RegistryDataLoader {
         return Collections.unmodifiableMap(loaded);
     }
 
+    public static <T> Map<ResourceLocation, T> loadRequiredValues(
+            String registryDirectory,
+            Iterable<ResourceLocation> keys,
+            ValueDecoder<T> decoder) {
+        return loadRequiredValues(registryDirectory, keys, BUILT_IN_PROVIDER, decoder);
+    }
+
+    /**
+     * Scalar-capable counterpart to {@link #loadRequired}. The object-only
+     * loader deliberately remains strict for its existing registry codecs.
+     */
+    public static <T> Map<ResourceLocation, T> loadRequiredValues(
+            String registryDirectory,
+            Iterable<ResourceLocation> keys,
+            ResourceProvider provider,
+            ValueDecoder<T> decoder) {
+        validateDirectory(registryDirectory);
+        if (keys == null || provider == null || decoder == null) {
+            throw new IllegalArgumentException("Registry data loader arguments cannot be null");
+        }
+
+        LinkedHashMap<ResourceLocation, T> loaded = new LinkedHashMap<ResourceLocation, T>();
+        StringBuilder failures = new StringBuilder();
+        for (ResourceLocation key : keys) {
+            if (key == null) {
+                appendFailure(failures, "<null>", "registry key cannot be null");
+                continue;
+            }
+            try {
+                validateResourceLocation(key, "registry key");
+            } catch (Throwable failure) {
+                appendFailure(failures, key.toString(), message(failure));
+                continue;
+            }
+            if (loaded.containsKey(key)) {
+                appendFailure(failures, key.toString(), "duplicate registry key");
+                continue;
+            }
+
+            String resourcePath = toResourcePath(registryDirectory, key);
+            InputStream stream = null;
+            Reader reader = null;
+            String sourceId = null;
+            try {
+                RegistryResource resource = getResource(provider, resourcePath);
+                if (resource == null) {
+                    throw new IOException("missing " + resourcePath);
+                }
+                sourceId = resource.sourceId();
+                stream = resource.open();
+                if (stream == null) {
+                    throw new IOException("resource returned no stream");
+                }
+                reader = new InputStreamReader(stream, "UTF-8");
+                T value = decoder.decode(key, parseValueStrict(reader));
+                if (value == null) {
+                    throw new IllegalArgumentException("decoder returned null");
+                }
+                loaded.put(key, value);
+            } catch (Throwable failure) {
+                String source = sourceId == null ? "unresolved" : sourceId;
+                appendFailure(failures, key.toString(), "[" + source + "] " + message(failure));
+            } finally {
+                closeQuietly(reader);
+                if (reader == null) closeQuietly(stream);
+            }
+        }
+
+        if (failures.length() > 0) {
+            throw new IllegalStateException(
+                    "Failed to load data registry '" + registryDirectory + "':\n" + failures);
+        }
+        if (loaded.isEmpty()) {
+            throw new IllegalStateException("Data registry '" + registryDirectory + "' cannot be empty");
+        }
+        return Collections.unmodifiableMap(loaded);
+    }
+
     /** Discovers all JSON entries in a registry, ordered by namespaced key. */
     public static List<ResourceLocation> discoverKeys(String registryDirectory) {
         return discoverKeys(registryDirectory, BUILT_IN_PROVIDER);
@@ -187,6 +274,22 @@ public final class RegistryDataLoader {
         ResourceProvider stagedProvider = snapshotRegistryResources(
                 registryDirectory, keys, provider);
         return loadRequired(registryDirectory, keys, stagedProvider, decoder);
+    }
+
+    public static <T> Map<ResourceLocation, T> loadAllValues(
+            String registryDirectory,
+            ValueDecoder<T> decoder) {
+        return loadAllValues(registryDirectory, BUILT_IN_PROVIDER, decoder);
+    }
+
+    public static <T> Map<ResourceLocation, T> loadAllValues(
+            String registryDirectory,
+            ResourceProvider provider,
+            ValueDecoder<T> decoder) {
+        List<ResourceLocation> keys = discoverKeys(registryDirectory, provider);
+        ResourceProvider stagedProvider = snapshotRegistryResources(
+                registryDirectory, keys, provider);
+        return loadRequiredValues(registryDirectory, keys, stagedProvider, decoder);
     }
 
     /** Discovers every tag JSON for a registry, ordered by namespaced tag key. */
@@ -463,6 +566,14 @@ public final class RegistryDataLoader {
     public static List<ResourceLocation> loadRequiredTag(
             String registryDirectory,
             ResourceLocation tagKey,
+            TagValueResolver valueResolver) {
+        return loadRequiredTag(
+                registryDirectory, tagKey, BUILT_IN_PROVIDER, valueResolver);
+    }
+
+    public static List<ResourceLocation> loadRequiredTag(
+            String registryDirectory,
+            ResourceLocation tagKey,
             ResourceProvider provider) {
         return loadRequiredTag(registryDirectory, tagKey, provider, null);
     }
@@ -700,6 +811,13 @@ public final class RegistryDataLoader {
         }
     }
 
+    /** Parses a modern identifier without legacy ResourceLocation normalization. */
+    public static ResourceLocation parseIdentifierStrict(
+            String identifier,
+            String description) {
+        return parseStrictResourceLocation(identifier, description);
+    }
+
     private static ResourceLocation parseStrictResourceLocation(
             String identifier,
             String description) {
@@ -764,13 +882,65 @@ public final class RegistryDataLoader {
                 key.getNamespace(), key.getPath(), description);
     }
 
-    /** Gson's Reader entry point rejects non-whitespace trailing content. */
     private static JsonObject parseObjectStrict(Reader reader) {
-        JsonElement parsed = JsonParser.parseReader(reader);
+        JsonElement parsed = parseValueStrict(reader);
         if (parsed == null || !parsed.isJsonObject()) {
             throw new IllegalArgumentException("root must be a JSON object");
         }
         return parsed.getAsJsonObject();
+    }
+
+    private static JsonElement parseValueStrict(Reader reader) {
+        JsonReader json = new JsonReader(reader);
+        json.setLenient(false);
+        try {
+            JsonElement parsed = readValueStrict(json);
+            if (json.peek() != JsonToken.END_DOCUMENT) {
+                throw new IllegalArgumentException("trailing content after JSON value");
+            }
+            return parsed;
+        } catch (IOException failure) {
+            throw new IllegalArgumentException("invalid JSON: " + message(failure), failure);
+        }
+    }
+
+    private static JsonElement readValueStrict(JsonReader reader) throws IOException {
+        JsonToken token = reader.peek();
+        switch (token) {
+            case BEGIN_OBJECT:
+                JsonObject object = new JsonObject();
+                reader.beginObject();
+                while (reader.hasNext()) {
+                    String name = reader.nextName();
+                    if (object.has(name)) {
+                        throw new IllegalArgumentException("Duplicate key \"" + name + "\"");
+                    }
+                    object.add(name, readValueStrict(reader));
+                }
+                reader.endObject();
+                return object;
+            case BEGIN_ARRAY:
+                JsonArray array = new JsonArray();
+                reader.beginArray();
+                while (reader.hasNext()) {
+                    array.add(readValueStrict(reader));
+                }
+                reader.endArray();
+                return array;
+            case STRING:
+                return new JsonPrimitive(reader.nextString());
+            case NUMBER:
+                return new JsonPrimitive(new BigDecimal(reader.nextString()));
+            case BOOLEAN:
+                return new JsonPrimitive(Boolean.valueOf(reader.nextBoolean()));
+            case NULL:
+                reader.nextNull();
+                return JsonNull.INSTANCE;
+            case END_DOCUMENT:
+                throw new IllegalArgumentException("root JSON value cannot be missing");
+            default:
+                throw new IllegalArgumentException("unexpected JSON token " + token);
+        }
     }
 
     private static void requireOnlyFields(

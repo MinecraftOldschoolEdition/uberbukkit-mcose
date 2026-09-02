@@ -146,7 +146,6 @@ public class EntityTypes {
         try { net.minecraft.server.registry.RecipeTypeRegistryBootstrap.initialize(); } catch (Throwable ignored) {}
         try { net.minecraft.server.registry.LootTables.initialize(); } catch (Throwable ignored) {}
         try { net.minecraft.server.registry.StructureTypes.initialize(); } catch (Throwable ignored) {}
-        try { net.minecraft.server.registry.AchievementRegistryBootstrap.initialize(); } catch (Throwable ignored) {}
         try { net.minecraft.server.registry.WorldFeatureRegistryBootstrap.initialize(); } catch (Throwable ignored) {}
     }
 }

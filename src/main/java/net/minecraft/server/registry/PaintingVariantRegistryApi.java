@@ -3,6 +3,7 @@ package net.minecraft.server.registry;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import net.minecraft.server.EnumArt;
@@ -56,6 +57,16 @@ public final class PaintingVariantRegistryApi {
         return RegistryApiSupport.values(Registries.PAINTING_VARIANT);
     }
 
+    /** Exact legacy placement order; immutable and intentionally excludes data-only variants. */
+    public static List<PaintingVariant> placeableValues() {
+        return PaintingVariantRegistryBootstrap.placeableValues();
+    }
+
+    /** Deterministically ordered modern definitions without a Beta EnumArt bridge. */
+    public static List<PaintingVariant> optionalValues() {
+        return PaintingVariantRegistryBootstrap.optionalValues();
+    }
+
     public static int size() {
         PaintingVariantRegistryBootstrap.initialize();
         return RegistryApiSupport.size(Registries.PAINTING_VARIANT);
@@ -66,7 +77,7 @@ public final class PaintingVariantRegistryApi {
         return Registries.PAINTING_VARIANT.isFrozen();
     }
 
-    /** Fingerprint includes order because it controls legacy seeded selection. */
+    /** Fingerprint includes registry order and the legacy-placeable compatibility boundary. */
     public static String fingerprint() {
         PaintingVariantRegistryBootstrap.initialize();
         try {
@@ -74,7 +85,11 @@ public final class PaintingVariantRegistryApi {
             for (PaintingVariant variant : Registries.PAINTING_VARIANT.values()) {
                 ResourceLocation key = Registries.PAINTING_VARIANT.getKey(variant);
                 String line = key + "|" + variant.getWidth() + "|" + variant.getHeight()
-                        + "|" + variant.getAssetId() + "|" + variant.getLegacyTitle() + "\n";
+                        + "|" + variant.getAssetId() + "|"
+                        + (variant.hasLegacyBridge()
+                                ? "legacy|" + variant.getLegacyTitle()
+                                : "optional|")
+                        + "\n";
                 digest.update(line.getBytes(StandardCharsets.UTF_8));
             }
             byte[] hash = digest.digest();

@@ -4,17 +4,18 @@ import java.util.Random;
 import net.minecraft.server.Block;
 import net.minecraft.server.BlockSand;
 import net.minecraft.server.Chunk;
-import net.minecraft.server.registry.Features;
 import net.minecraft.server.IChunkProvider;
 import net.minecraft.server.IProgressUpdate;
 import net.minecraft.server.World;
 import net.minecraft.server.WorldGenCactus;
-import net.minecraft.server.WorldGenClay;
 import net.minecraft.server.WorldGenFlowers;
-import net.minecraft.server.WorldGenLiquids;
 import net.minecraft.server.WorldGenPumpkin;
 import net.minecraft.server.WorldGenReed;
-import net.minecraft.server.WorldGenerator;
+import net.minecraft.server.registry.ConfiguredFeatureDataBootstrap;
+import net.minecraft.server.registry.LegacyRandomChanceStructurePlacement;
+import net.minecraft.server.registry.LegacyPlacedFeatureExecutor;
+import net.minecraft.server.registry.PlacedFeatureDataBootstrap;
+import net.minecraft.server.registry.StructureSetDataBootstrap;
 
 public final class InfdevChunkProvider implements IChunkProvider {
     private final Random rand;
@@ -35,8 +36,6 @@ public final class InfdevChunkProvider implements IChunkProvider {
     private final InfdevWorldGenMinable dirtGen = new InfdevWorldGenMinable("minecraft:dirt");
     private final InfdevWorldGenMinable gravelGen = new InfdevWorldGenMinable("minecraft:gravel");
     private final InfdevWorldGenBigTree bigTreeGen = new InfdevWorldGenBigTree();
-    private final WorldGenerator dungeonGen = Features.create("minecraft:dungeon");
-    private final WorldGenClay clayGen = new WorldGenClay(32);
     private final WorldGenFlowers yellowFlowerGen = new WorldGenFlowers("minecraft:dandelion");
     private final WorldGenFlowers redFlowerGen = new WorldGenFlowers("minecraft:poppy");
     private final WorldGenFlowers brownMushroomGen = new WorldGenFlowers("minecraft:brown_mushroom");
@@ -44,8 +43,6 @@ public final class InfdevChunkProvider implements IChunkProvider {
     private final WorldGenReed reedGen = new WorldGenReed();
     private final WorldGenCactus cactusGen = new WorldGenCactus();
     private final WorldGenPumpkin pumpkinGen = new WorldGenPumpkin();
-    private final WorldGenLiquids waterSpringGen = new WorldGenLiquids("minecraft:water");
-    private final WorldGenLiquids lavaSpringGen = new WorldGenLiquids("minecraft:lava");
 
     public InfdevChunkProvider(World world, long seed) {
         this.worldObj = world;
@@ -260,28 +257,29 @@ public final class InfdevChunkProvider implements IChunkProvider {
             long oddZ = this.rand.nextLong() / 2L * 2L + 1L;
             this.rand.setSeed((long)chunkX * oddX + (long)chunkZ * oddZ ^ this.worldObj.getSeed());
 
-            for (int i = 0; i < 8; ++i) {
-                int xx = x + this.rand.nextInt(16) + 8;
-                int yy = this.rand.nextInt(128);
-                int zz = z + this.rand.nextInt(16) + 8;
-                this.dungeonGen.a(this.worldObj, this.rand, xx, yy, zz);
+            LegacyPlacedFeatureExecutor.generate(this.worldObj, this.rand,
+                x + 8, z + 8, ConfiguredFeatureDataBootstrap.MONSTER_ROOM);
+
+            // INFDEV deliberately bypasses the Overworld desert validity
+            // gate, but consumes the exact same data-backed placement attempt.
+            LegacyRandomChanceStructurePlacement.Candidate shrine = null;
+            if (StructureSetDataBootstrap.isHerobrineShrineAllowed(7, null)) {
+                shrine = StructureSetDataBootstrap.herobrineShrine()
+                        .getPlacement().sample(
+                                this.worldObj.getSeed(), chunkX, chunkZ);
+            }
+            if (shrine != null) {
+                new net.minecraft.server.WorldGenHerobrineShrine().a(
+                        this.worldObj,
+                        shrine.getRandom(),
+                        shrine.getBlockX(),
+                        shrine.getGenerationY(),
+                        shrine.getBlockZ());
             }
 
-            // Keep shrine determinism identical to the overworld formula, but allow INFDEV terrain.
-            long shrineSeed = (long)chunkX * 341873128712L + (long)chunkZ * 132897987541L + this.worldObj.getSeed() + 777777777L;
-            Random shrineRand = new Random(shrineSeed);
-            if (shrineRand.nextInt(750000) == 0) {
-                int xx = x + shrineRand.nextInt(16) + 8;
-                int zz = z + shrineRand.nextInt(16) + 8;
-                new net.minecraft.server.WorldGenHerobrineShrine().a(this.worldObj, shrineRand, xx, 64, zz);
-            }
-
-            for (int i = 0; i < 10; ++i) {
-                int xx = x + this.rand.nextInt(16);
-                int yy = this.rand.nextInt(128);
-                int zz = z + this.rand.nextInt(16);
-                this.clayGen.a(this.worldObj, this.rand, xx, yy, zz);
-            }
+            LegacyPlacedFeatureExecutor.generate(
+                    this.worldObj, this.rand, x, z,
+                    PlacedFeatureDataBootstrap.CLAY);
 
             for (int i = 0; i < 20; ++i) {
                 int xx = x + this.rand.nextInt(16);
@@ -392,19 +390,10 @@ public final class InfdevChunkProvider implements IChunkProvider {
                 this.pumpkinGen.a(this.worldObj, this.rand, xx, yy, zz);
             }
 
-            for (int i = 0; i < 50; ++i) {
-                int xx = x + this.rand.nextInt(16) + 8;
-                int yy = this.rand.nextInt(this.rand.nextInt(120) + 8);
-                int zz = z + this.rand.nextInt(16) + 8;
-                this.waterSpringGen.a(this.worldObj, this.rand, xx, yy, zz);
-            }
-
-            for (int i = 0; i < 20; ++i) {
-                int xx = x + this.rand.nextInt(16) + 8;
-                int yy = this.rand.nextInt(this.rand.nextInt(this.rand.nextInt(112) + 8) + 8);
-                int zz = z + this.rand.nextInt(16) + 8;
-                this.lavaSpringGen.a(this.worldObj, this.rand, xx, yy, zz);
-            }
+            LegacyPlacedFeatureExecutor.generate(this.worldObj, this.rand,
+                    x + 8, z + 8, PlacedFeatureDataBootstrap.SPRING_WATER);
+            LegacyPlacedFeatureExecutor.generate(this.worldObj, this.rand,
+                    x + 8, z + 8, PlacedFeatureDataBootstrap.SPRING_LAVA);
         } finally {
             BlockSand.instaFall = false;
         }

@@ -1,0 +1,25 @@
+{
+  "parent": "minecraft:shear_sheep",
+  "display": {
+    "icon": {
+      "id": "minecraft:white_wool",
+      "legacy_damage": 14
+    },
+    "title": { "translate": "achievement.rainbowWool" },
+    "description": { "translate": "achievement.rainbowWool.desc" },
+    "frame": "challenge",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": false
+  },
+  "criteria": {
+    "legacy_trigger": {
+      "trigger": "minecraft:legacy_trigger"
+    }
+  },
+  "requirements": [["legacy_trigger"]],
+  "legacy_layout": {
+    "column": 7,
+    "row": 8
+  }
+}

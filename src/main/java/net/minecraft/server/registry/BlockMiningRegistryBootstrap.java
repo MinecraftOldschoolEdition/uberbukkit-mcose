@@ -130,6 +130,10 @@ public final class BlockMiningRegistryBootstrap {
         requirePresent(bindings, BlockTags.LEGACY_AXE_1_5);
         requirePresent(bindings, BlockTags.LEGACY_SHOVEL_1_4);
         requirePresent(bindings, BlockTags.LEGACY_SHOVEL_1_5);
+        requirePresent(bindings, BlockTags.MAINTAINS_FARMLAND);
+        requirePresent(bindings, BlockTags.PREVENTS_NEARBY_LEAF_DECAY);
+        requirePresent(bindings, BlockTags.CLIMBABLE);
+        requirePresent(bindings, BlockTags.ANIMALS_SPAWNABLE_ON);
 
         requireAggregate(bindings, BlockTags.MINEABLE_WITH_PICKAXE,
                 BlockTags.LEGACY_PICKAXE_6,

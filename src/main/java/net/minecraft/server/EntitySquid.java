@@ -3,7 +3,6 @@ package net.minecraft.server;
 import org.bukkit.Location;
 import org.bukkit.craftbukkit.event.CraftEventFactory;
 import org.bukkit.craftbukkit.inventory.CraftItemStack;
-import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.player.PlayerBucketFillEvent;
 
 import uk.betacraft.uberbukkit.UberbukkitConfig;
@@ -58,27 +57,6 @@ public class EntitySquid extends EntityWaterAnimal {
 
     protected int j() {
         return 0;
-    }
-
-    protected void q() {
-        // CraftBukkit start - whole method
-        java.util.List<org.bukkit.inventory.ItemStack> loot = new java.util.ArrayList<org.bukkit.inventory.ItemStack>();
-
-        int count = this.random.nextInt(3) + 1;
-        if (count > 0) {
-            loot.add(new org.bukkit.inventory.ItemStack(org.bukkit.Material.INK_SACK, count));
-        }
-
-        org.bukkit.World bworld = this.world.getWorld();
-        org.bukkit.entity.Entity entity = this.getBukkitEntity();
-
-        EntityDeathEvent event = new EntityDeathEvent(entity, loot);
-        this.world.getServer().getPluginManager().callEvent(event);
-
-        for (org.bukkit.inventory.ItemStack stack : event.getDrops()) {
-            bworld.dropItemNaturally(entity.getLocation(), stack);
-        }
-        // CraftBukkit end
     }
 
     public boolean a(EntityHuman entityhuman) {

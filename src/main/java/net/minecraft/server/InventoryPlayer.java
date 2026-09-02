@@ -53,7 +53,10 @@ public class InventoryPlayer implements IInventory {
 
     private int firstPartial(ItemStack itemstack) {
         for (int i = 0; i < this.items.length; ++i) {
-            if (this.items[i] != null && this.items[i].id == itemstack.id && this.items[i].isStackable(this.d.world) && this.items[i].count < this.items[i].getMaxStackSize(this.d.world) && this.items[i].count < this.getMaxStackSize() && (!this.items[i].usesData() || this.items[i].getData() == itemstack.getData())) {
+            if (this.items[i] != null && this.items[i].canStackWith(itemstack)
+                    && this.items[i].isStackable(this.d.world)
+                    && this.items[i].count < this.items[i].getMaxStackSize(this.d.world)
+                    && this.items[i].count < this.getMaxStackSize()) {
                 return i;
             }
         }
@@ -68,7 +71,10 @@ public class InventoryPlayer implements IInventory {
             if (this.items[i] == null) return itemstack.count;
 
             // Taken from firstPartial(ItemStack)
-            if (this.items[i] != null && this.items[i].id == itemstack.id && this.items[i].isStackable(this.d.world) && this.items[i].count < this.items[i].getMaxStackSize(this.d.world) && this.items[i].count < this.getMaxStackSize() && (!this.items[i].usesData() || this.items[i].getData() == itemstack.getData())) {
+            if (this.items[i] != null && this.items[i].canStackWith(itemstack)
+                    && this.items[i].isStackable(this.d.world)
+                    && this.items[i].count < this.items[i].getMaxStackSize(this.d.world)
+                    && this.items[i].count < this.getMaxStackSize()) {
                 remains -= (this.items[i].getMaxStackSize(this.d.world) < this.getMaxStackSize() ? this.items[i].getMaxStackSize(this.d.world) : this.getMaxStackSize()) - this.items[i].count;
             }
             if (remains <= 0) return itemstack.count;
@@ -88,7 +94,6 @@ public class InventoryPlayer implements IInventory {
     }
 
     private int e(ItemStack itemstack) {
-        int i = itemstack.id;
         int j = itemstack.count;
         int k = this.firstPartial(itemstack);
 
@@ -100,11 +105,8 @@ public class InventoryPlayer implements IInventory {
             return j;
         } else {
             if (this.items[k] == null) {
-                this.items[k] = new ItemStack(i, 0, itemstack.getData());
-                // Preserve NBT tag (e.g. written book pages, map data, enchantments)
-                if (itemstack.tag != null) {
-                    this.items[k].tag = itemstack.tag;
-                }
+                this.items[k] = itemstack.cloneItemStack();
+                this.items[k].count = 0;
             }
 
             int l = j;
@@ -302,7 +304,7 @@ public class InventoryPlayer implements IInventory {
     }
 
     public int getMaxStackSize() {
-        return 64;
+        return IInventory.DEFAULT_MAX_STACK_SIZE;
     }
 
     public int a(Entity entity) {

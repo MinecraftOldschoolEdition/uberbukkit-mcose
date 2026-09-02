@@ -4,6 +4,7 @@ import net.minecraft.server.*;
 import net.minecraft.server.util.ResourceLocation;
 
 import java.util.Collection;
+import java.util.Locale;
 import java.util.Set;
 
 public final class Carvers {
@@ -45,19 +46,39 @@ public final class Carvers {
         return CarverRegistryApi.canonicalizeIdentifier(any);
     }
 
+    /**
+     * Legacy type-key factory retained for source compatibility.
+     * New world generation must use {@link ConfiguredCarvers#create(ResourceLocation)}.
+     */
+    @Deprecated
     public static MapGenBase create(ResourceLocation key) {
         if (key == null) return new MapGenCaves();
         String path = key.getPath();
-        if ("nether_cave".equals(path)) return new MapGenCavesHell();
+        if (path == null) return new MapGenCaves();
+        if ("nether_cave".equals(path.toLowerCase(Locale.ROOT))) {
+            return new MapGenCavesHell();
+        }
         return new MapGenCaves();
     }
 
+    /**
+     * Legacy forgiving factory retained for binary/source compatibility.
+     * New world generation must use {@link ConfiguredCarvers#create(String)}.
+     */
+    @Deprecated
     public static MapGenBase create(String namespaced) {
-        ResourceLocation key = namespaced.indexOf(':') >= 0 ? new ResourceLocation(namespaced) : new ResourceLocation("minecraft", namespaced);
-        CarverType t = CarverRegistryApi.get(key);
-        if (t == null) return create(key);
-        return create(key);
+        try {
+            ResourceLocation key = namespaced.indexOf(':') >= 0
+                    ? new ResourceLocation(namespaced)
+                    : new ResourceLocation("minecraft", namespaced);
+            CarverType type = CarverRegistryApi.get(key);
+            if (type == null) {
+                return create(new ResourceLocation("minecraft", "cave"));
+            }
+            return create(key);
+        } catch (Throwable ignored) {
+            return new MapGenCaves();
+        }
     }
 }
-
 

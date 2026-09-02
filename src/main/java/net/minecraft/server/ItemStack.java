@@ -68,11 +68,14 @@ public final class ItemStack {
     public ItemStack a(int i) {
         this.count -= i;
         ItemStack newStack = new ItemStack(this.id, i, this.damage);
-        if (this.tag != null) {
-            newStack.tag = this.tag;
-        }
-        newStack.setItemHolder(this.getItemHolder());
-        newStack.applyComponents(this.getComponents());
+        newStack.itemHolder = this.getItemHolder();
+        newStack.componentPatch = this.getComponents().copy();
+        Item item = newStack.getItem();
+        DataComponentMap defaults = item == null ? DataComponentMap.EMPTY : ItemComponentDefaults.defaultsFor(item);
+        newStack.patchedComponents = new PatchedDataComponentMap(defaults, newStack.componentPatch);
+        newStack.projectLegacyStateFromComponents();
+        newStack.normalizeLegacyInventoryItemStates();
+        newStack.markModernStateFresh();
         return newStack;
     }
 
@@ -206,7 +209,8 @@ public final class ItemStack {
     }
 
     public int getMaxStackSize() {
-        return this.getItem().getMaxStackSize();
+        Integer componentLimit = this.getPatchedComponents().get(DataComponents.MAX_STACK_SIZE);
+        return componentLimit == null ? 1 : componentLimit.intValue();
     }
 
     /** Returns the stack limit that applies under the target world's gamerules. */
@@ -217,12 +221,24 @@ public final class ItemStack {
     }
 
     public int getMaxStackSize(boolean foodStacking) {
+        if (this.hasExplicitMaxStackSizeComponent()) {
+            return this.getMaxStackSize();
+        }
         return foodStacking && this.getItem() instanceof ItemFood ? 4 : this.getMaxStackSize();
     }
 
     /** Packet decoding must accept food stacks that are valid in enabled worlds. */
     public int getNetworkMaxStackSize() {
+        if (this.hasExplicitMaxStackSizeComponent()) {
+            return this.getMaxStackSize();
+        }
         return this.getItem() instanceof ItemFood ? Math.max(4, this.getMaxStackSize()) : this.getMaxStackSize();
+    }
+
+    private boolean hasExplicitMaxStackSizeComponent() {
+        DataComponentPatch patch = this.getComponents();
+        return patch.getSetValues().containsKey(DataComponents.MAX_STACK_SIZE)
+                || patch.getRemovedTypes().contains(DataComponents.MAX_STACK_SIZE);
     }
 
     public boolean isStackable() {
@@ -234,7 +250,9 @@ public final class ItemStack {
     }
 
     public boolean d() {
-        return Item.byId[this.id].e() > 0;
+        PatchedDataComponentMap components = this.getPatchedComponents();
+        return components.get(DataComponents.MAX_DAMAGE) != null
+                && components.get(DataComponents.DAMAGE) != null;
     }
 
     public boolean usesData() {
@@ -242,24 +260,34 @@ public final class ItemStack {
     }
 
     public boolean f() {
-        return this.d() && this.damage > 0;
+        return this.d() && this.g() > 0;
     }
 
     public int g() {
-        return this.damage;
+        if (!this.usesDurabilityComponents()) {
+            return this.damage;
+        }
+        Integer componentDamage = this.getPatchedComponents().get(DataComponents.DAMAGE);
+        int value = componentDamage == null ? 0 : componentDamage.intValue();
+        return Math.max(0, Math.min(value, this.i()));
     }
 
     public int getData() {
-        return this.damage;
+        return this.g();
     }
 
     public int getItemDamage() {
-        return this.damage;
+        return this.g();
     }
 
     public void b(int i) {
-        this.damage = i;
-        invalidateModernState();
+        ensureModernState();
+        int value = this.usesDurabilityComponents()
+                ? Math.max(0, Math.min(i, this.i()))
+                : i;
+        this.applyComponents(DataComponentPatch.builder()
+                .set(DataComponents.DAMAGE, Integer.valueOf(value))
+                .build());
     }
 
     public void setItemDamage(int i) {
@@ -267,12 +295,23 @@ public final class ItemStack {
     }
 
     public int i() {
-        return Item.byId[this.id].e();
+        Integer maximumDamage = this.getPatchedComponents().get(DataComponents.MAX_DAMAGE);
+        return maximumDamage == null ? 0 : maximumDamage.intValue();
+    }
+
+    private boolean usesDurabilityComponents() {
+        Item item = this.getItem();
+        return item != null && item.e() > 0
+                || this.getPatchedComponents().get(DataComponents.MAX_DAMAGE) != null
+                || this.getComponents().getRemovedTypes().contains(DataComponents.MAX_DAMAGE);
     }
 
     @SuppressWarnings("deprecation")
     public void damage(int i, Entity entity) {
         if (this.d()) {
+            if (entity instanceof EntityPlayer && ((EntityPlayer) entity).gameMode == 1) {
+                return;
+            }
             if (entity instanceof EntityPlayer) {
                 PlayerItemDamageEvent event = new PlayerItemDamageEvent((Player) entity.getBukkitEntity(), new CraftItemStack(this), i);
                 event.getPlayer().getServer().getPluginManager().callEvent(event);
@@ -280,8 +319,8 @@ public final class ItemStack {
                 if (event.isCancelled()) return;
                 i = event.getDamage();
             }
-            this.damage += i;
-            if (this.damage > this.i()) {
+            this.b(this.g() + i);
+            if (this.g() >= this.i()) {
                 if (entity instanceof EntityHuman) {
                     ((EntityHuman) entity).a(StatisticList.F[this.id], 1);
                 }
@@ -290,10 +329,7 @@ public final class ItemStack {
                 if (this.count < 0) {
                     this.count = 0;
                 }
-
-                this.damage = 0;
             }
-            invalidateModernState();
         }
     }
 
@@ -335,9 +371,14 @@ public final class ItemStack {
 
     public ItemStack cloneItemStack() {
         ItemStack clone = new ItemStack(this.id, this.count, this.damage);
-        clone.tag = this.tag;
-        clone.setItemHolder(this.getItemHolder());
-        clone.applyComponents(this.getComponents());
+        clone.itemHolder = this.getItemHolder();
+        clone.componentPatch = this.getComponents().copy();
+        Item item = clone.getItem();
+        DataComponentMap defaults = item == null ? DataComponentMap.EMPTY : ItemComponentDefaults.defaultsFor(item);
+        clone.patchedComponents = new PatchedDataComponentMap(defaults, clone.componentPatch);
+        clone.projectLegacyStateFromComponents();
+        clone.normalizeLegacyInventoryItemStates();
+        clone.markModernStateFresh();
         return clone;
     }
 
@@ -346,12 +387,55 @@ public final class ItemStack {
     }
 
     private boolean d(ItemStack itemstack) {
-        if (this.count != itemstack.count) return false;
-        if (this.id != itemstack.id) return false;
-        if (this.damage != itemstack.damage) return false;
-        if (this.tag == null && itemstack.tag == null) return true;
-        if (this.tag == null || itemstack.tag == null) return false;
-        return this.tag.equals(itemstack.tag);
+        return itemstack != null && this.count == itemstack.count
+                && isSameItemSameComponents(this, itemstack);
+    }
+
+    /** 26.3 stack identity: logical item holder plus the complete resolved component set. */
+    public static boolean isSameItemSameComponents(ItemStack first, ItemStack second) {
+        return first == second || first != null && second != null
+                && first.isSameItem(second)
+                && (first.tag == null ? second.tag == null : first.tag.equals(second.tag))
+                && first.getPatchedComponents().equals(second.getPatchedComponents());
+    }
+
+    /** Same logical item identity, independent of count and component patch. */
+    public boolean isSameItem(ItemStack other) {
+        if (other == null) {
+            return false;
+        }
+        if (this == other) {
+            return true;
+        }
+
+        Holder<Item> thisHolder = this.getItemHolder();
+        Holder<Item> otherHolder = other.getItemHolder();
+        if (thisHolder != null && otherHolder != null) {
+            Item thisHeldItem = thisHolder.value();
+            Item otherHeldItem = otherHolder.value();
+            if (thisHeldItem != null && otherHeldItem != null) {
+                return thisHeldItem == otherHeldItem;
+            }
+            ResourceLocation thisKey = thisHolder.key();
+            ResourceLocation otherKey = otherHolder.key();
+            if (thisKey != null && otherKey != null) {
+                return thisKey.equals(otherKey);
+            }
+            int thisRuntimeId = thisHolder.runtimeId();
+            int otherRuntimeId = otherHolder.runtimeId();
+            if (thisRuntimeId >= 0 && otherRuntimeId >= 0) {
+                return thisRuntimeId == otherRuntimeId;
+            }
+        }
+
+        Item thisItem = this.getItem();
+        Item otherItem = other.getItem();
+        return thisItem != null && otherItem != null ? thisItem == otherItem : this.id == other.id;
+    }
+
+    /** Merge compatibility matching current container rules. */
+    public boolean canStackWith(ItemStack other) {
+        return isSameItemSameComponents(this, other);
     }
 
     public boolean doMaterialsMatch(ItemStack itemstack) {

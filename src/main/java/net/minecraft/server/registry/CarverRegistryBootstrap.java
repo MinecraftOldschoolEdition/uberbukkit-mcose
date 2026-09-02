@@ -11,14 +11,12 @@ public final class CarverRegistryBootstrap {
         if (initialized) return;
         initialized = true;
 
-        reg("cave", new CarverType("Overworld caves"));
-        reg("nether_cave", new CarverType("Nether caves"));
-        reg("sky_cave", new CarverType("Sky dimension caves"));
-    }
-
-    private static void reg(String path, CarverType t) {
-        try { CarverRegistryApi.register(new ResourceLocation("minecraft", path), t); } catch (Throwable ignored) {}
+        CarverRegistryApi.register(
+                new ResourceLocation("minecraft", "cave"),
+                ConfiguredCarverCodec.caveType());
+        CarverRegistryApi.register(
+                new ResourceLocation("minecraft", "nether_cave"),
+                ConfiguredCarverCodec.netherCaveType());
     }
 }
-
 

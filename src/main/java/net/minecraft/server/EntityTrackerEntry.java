@@ -405,12 +405,8 @@ public class EntityTrackerEntry {
                 return;
             }
 
-            double d0 = entityplayer.locX - (double) this.d / 32.0D;
-            double d1 = entityplayer.locZ - (double) this.f / 32.0D;
-
             int effectiveTrackingRange = this.getEffectiveTrackingRange();
-            if (d0 >= (double) (-effectiveTrackingRange) && d0 <= (double) effectiveTrackingRange
-                    && d1 >= (double) (-effectiveTrackingRange) && d1 <= (double) effectiveTrackingRange) {
+            if (this.isWithinTrackingRange(entityplayer, effectiveTrackingRange)) {
                 if (!this.trackedPlayers.contains(entityplayer) && this.d(entityplayer)) {
                     // CraftBukkit start
                     if (tracker instanceof EntityPlayer) {
@@ -481,6 +477,9 @@ public class EntityTrackerEntry {
                         EntityPlayer trackedPlayer = (EntityPlayer) this.tracker;
                         entityplayer.netServerHandler.sendPacket(new Packet38EntityStatus(this.tracker.id, (byte) (trackedPlayer.isBowPoseActive() ? 16 : 17)));
                     }
+                    if (this.tracker instanceof EntityArrow && ((EntityArrow) this.tracker).isCritical()) {
+                        entityplayer.netServerHandler.sendPacket(new Packet38EntityStatus(this.tracker.id, (byte) 18));
+                    }
 
                     if (this.tracker instanceof EntityHuman) {
                         EntityHuman entityhuman = (EntityHuman) this.tracker;
@@ -527,6 +526,18 @@ public class EntityTrackerEntry {
 
     private boolean d(EntityPlayer entityplayer) {
         return entityplayer.getWorldServer().getPlayerManager().a(entityplayer, this.tracker.bH, this.tracker.bJ);
+    }
+
+    boolean isWithinTrackingRange(EntityPlayer observer, int trackingRange) {
+        // Visibility is a world-state decision, not a packet-delta decision.
+        // The encoded d/f coordinates intentionally lag until a movement packet
+        // is emitted; using them here can strand teleported players outside each
+        // other's tracking sets. Modern ChunkMap tracking likewise compares the
+        // observer with the entity's current position.
+        double deltaX = observer.locX - this.tracker.locX;
+        double deltaZ = observer.locZ - this.tracker.locZ;
+        return deltaX >= (double) (-trackingRange) && deltaX <= (double) trackingRange
+                && deltaZ >= (double) (-trackingRange) && deltaZ <= (double) trackingRange;
     }
 
     static boolean spectatorVisibilityAllowsTracking(boolean trackedPlayerSpectator, boolean observerSpectator) {

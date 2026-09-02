@@ -33,6 +33,12 @@ public class BlockTrapdoorPlacementTest {
     }
 
     @Test
+    public void modernPlacementSkipsTheLegacyClickedFaceFacingCallback() {
+        assertTrue(ItemBlock.shouldPreservePrecomputedFacing(true));
+        assertFalse(ItemBlock.shouldPreservePrecomputedFacing(false));
+    }
+
+    @Test
     public void topHalfUsesCeilingBoundsWhileOpenShapeIgnoresHalf() {
         BlockTrapdoor trapdoor = (BlockTrapdoor) Block.TRAP_DOOR;
         trapdoor.c(8);

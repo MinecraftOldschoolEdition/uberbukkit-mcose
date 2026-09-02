@@ -14,11 +14,15 @@ public final class FeatureRegistryBootstrap {
         reg("dungeon", new FeatureType("Mob dungeon structure"));
         reg("lake_water", new FeatureType("Water lake"));
         reg("lake_lava", new FeatureType("Lava lake"));
+        reg("ore", new FeatureType("Ore vein"));
+        reg("legacy_clay", new FeatureType("Legacy clay deposit"));
+        reg("monster_room", new FeatureType("Monster room"));
+        reg("spring_feature", new FeatureType("Spring"));
+        reg("lake", new FeatureType("Lake"));
+        reg("freeze_top_layer", new FeatureType("Freeze top layer"));
     }
 
     private static void reg(String path, FeatureType t) {
         try { FeatureRegistryApi.register(new ResourceLocation("minecraft", path), t); } catch (Throwable ignored) {}
     }
 }
-
-

@@ -63,6 +63,15 @@ public final class AchievementRegistryApi {
         return keys().size();
     }
 
+    public static LegacyAdvancementDefinition getDefinition(Achievement achievement) {
+        ResourceLocation key = getKey(achievement);
+        return key == null ? null : LegacyAdvancementDataBootstrap.get(key);
+    }
+
+    public static LegacyAdvancementDefinition getDefinition(ResourceLocation key) {
+        return key == null ? null : LegacyAdvancementDataBootstrap.get(key);
+    }
+
     public static String canonicalizeIdentifier(String any) {
         if (any == null) {
             return null;

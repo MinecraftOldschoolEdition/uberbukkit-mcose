@@ -1,0 +1,49 @@
+{
+  "type": "minecraft:block",
+  "pools": [
+    {
+      "rolls": {
+        "type": "minecraft:legacy_one_in",
+        "chance": 20
+      },
+      "apply_drop_chance": true,
+      "placement": "minecraft:block",
+      "entries": [
+        {
+          "type": "minecraft:item",
+          "name": "minecraft:oak_sapling",
+          "legacy_metadata": {
+            "type": "minecraft:block_state",
+            "mask": 3
+          }
+        }
+      ]
+    },
+    {
+      "rolls": 1,
+      "conditions": [
+        {
+          "condition": "minecraft:legacy_metadata",
+          "mask": 3,
+          "equals": 0
+        }
+      ],
+      "apply_drop_chance": true,
+      "placement": "minecraft:block",
+      "entries": [
+        {
+          "type": "minecraft:item",
+          "name": "minecraft:apple",
+          "conditions": [
+            {
+              "condition": "minecraft:legacy_random_integer",
+              "bound": 200,
+              "equals": 0
+            }
+          ],
+          "legacy_metadata": 0
+        }
+      ]
+    }
+  ]
+}

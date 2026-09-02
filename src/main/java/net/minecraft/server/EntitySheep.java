@@ -53,26 +53,6 @@ public class EntitySheep extends EntityAnimal {
         return super.damageEntity(entity, i);
     }
 
-    protected void q() {
-        // CraftBukkit start - whole method
-        java.util.List<org.bukkit.inventory.ItemStack> loot = new java.util.ArrayList<org.bukkit.inventory.ItemStack>();
-
-        if (!this.isSheared()) {
-            loot.add(new org.bukkit.inventory.ItemStack(org.bukkit.Material.WOOL, 1, (short) 0, (byte) this.getColor()));
-        }
-
-        org.bukkit.World bworld = this.world.getWorld();
-        org.bukkit.entity.Entity entity = this.getBukkitEntity();
-
-        org.bukkit.event.entity.EntityDeathEvent event = new org.bukkit.event.entity.EntityDeathEvent(entity, loot);
-        this.world.getServer().getPluginManager().callEvent(event);
-
-        for (org.bukkit.inventory.ItemStack stack : event.getDrops()) {
-            bworld.dropItemNaturally(entity.getLocation(), stack);
-        }
-        // CraftBukkit end
-    }
-
     protected int j() {
         return Block.WOOL.id;
     }

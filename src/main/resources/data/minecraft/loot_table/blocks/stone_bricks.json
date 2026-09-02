@@ -1,0 +1,19 @@
+{
+  "type": "minecraft:block",
+  "pools": [
+    {
+      "rolls": 1,
+      "apply_drop_chance": true,
+      "placement": "minecraft:block",
+      "entries": [
+        {
+          "type": "minecraft:item",
+          "name": "minecraft:stone_bricks",
+          "legacy_metadata": {
+            "type": "minecraft:block_state"
+          }
+        }
+      ]
+    }
+  ]
+}

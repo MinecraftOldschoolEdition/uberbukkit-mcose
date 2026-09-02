@@ -6,10 +6,13 @@ import net.minecraft.server.Chunk;
 import net.minecraft.server.IChunkProvider;
 import net.minecraft.server.IProgressUpdate;
 import net.minecraft.server.MapGenBase;
-import net.minecraft.server.MapGenCaves;
 import net.minecraft.server.Material;
 import net.minecraft.server.World;
 import net.minecraft.server.WorldGenerator;
+import net.minecraft.server.registry.ConfiguredCarverDataBootstrap;
+import net.minecraft.server.registry.ConfiguredCarvers;
+import net.minecraft.server.registry.LegacyPlacedFeatureExecutor;
+import net.minecraft.server.registry.PlacedFeatureDataBootstrap;
 
 import java.util.Random;
 
@@ -28,7 +31,8 @@ public class AlphaChunkProvider implements IChunkProvider {
     private double[] sandNoise = new double[256];
     private double[] gravelNoise = new double[256];
     private double[] stoneNoise = new double[256];
-    private final MapGenBase caveGenerator = new MapGenCaves();
+    private final MapGenBase caveGenerator = ConfiguredCarvers.create(
+            ConfiguredCarverDataBootstrap.CAVE);
     private double[] noise3;
     private double[] noise1;
     private double[] noise2;
@@ -438,19 +442,10 @@ public class AlphaChunkProvider implements IChunkProvider {
             (new AlphaWorldGenCactus()).a(this.worldObj, this.rand, xx, yy, zz);
         }
 
-        for (int i = 0; i < 50; ++i) {
-            int xx = x + this.rand.nextInt(16) + 8;
-            int yy = this.rand.nextInt(this.rand.nextInt(120) + 8);
-            int zz = z + this.rand.nextInt(16) + 8;
-            (new AlphaWorldGenLiquids("minecraft:water")).a(this.worldObj, this.rand, xx, yy, zz);
-        }
-
-        for (int i = 0; i < 20; ++i) {
-            int xx = x + this.rand.nextInt(16) + 8;
-            int yy = this.rand.nextInt(this.rand.nextInt(this.rand.nextInt(112) + 8) + 8);
-            int zz = z + this.rand.nextInt(16) + 8;
-            (new AlphaWorldGenLiquids("minecraft:lava")).a(this.worldObj, this.rand, xx, yy, zz);
-        }
+        LegacyPlacedFeatureExecutor.generateAlphaSpring(this.worldObj, this.rand,
+                x + 8, z + 8, PlacedFeatureDataBootstrap.SPRING_WATER);
+        LegacyPlacedFeatureExecutor.generateAlphaSpring(this.worldObj, this.rand,
+                x + 8, z + 8, PlacedFeatureDataBootstrap.SPRING_LAVA);
 
         for (int snowX = x + 8; snowX < x + 8 + 16; ++snowX) {
             for (int snowZ = z + 8; snowZ < z + 8 + 16; ++snowZ) {

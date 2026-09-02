@@ -2,6 +2,8 @@ package net.minecraft.server.Classic;
 
 import net.minecraft.server.*;
 import java.util.Random;
+import net.minecraft.server.registry.LegacyPlacedFeatureExecutor;
+import net.minecraft.server.registry.PlacedFeatureDataBootstrap;
 
 /**
  * Nether chunk provider for Classic worlds.
@@ -311,12 +313,9 @@ public class ChunkProviderHellClassic implements IChunkProvider {
         this.rand.setSeed((long)chunkX * l1 + (long)chunkZ * l2 ^ this.worldObj.getSeed());
 
         // Lava pools
-        for (int i = 0; i < 5; ++i) {
-            int x = baseX + this.rand.nextInt(16) + 8;
-            int y = this.rand.nextInt(this.rand.nextInt(48) + 8);
-            int z = baseZ + this.rand.nextInt(16) + 8;
-            (new WorldGenLiquids("minecraft:lava")).a(this.worldObj, this.rand, x, y, z);
-        }
+        LegacyPlacedFeatureExecutor.generate(
+                this.worldObj, this.rand, baseX + 8, baseZ + 8,
+                PlacedFeatureDataBootstrap.SPRING_LAVA_CLASSIC_HELL);
     }
 
     public boolean isChunkLoaded(int x, int z) { return true; }
@@ -495,4 +494,3 @@ public class ChunkProviderHellClassic implements IChunkProvider {
         }
     }
 }
-

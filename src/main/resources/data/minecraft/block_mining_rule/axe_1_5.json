@@ -1,0 +1,9 @@
+{
+  "blocks": [
+    "#minecraft:legacy_mining/axe_1_5",
+    "#minecraft:legacy_mining/client_axe_1_5_supplement"
+  ],
+  "unsynchronized_blocks": "#minecraft:legacy_mining/client_axe_1_5_supplement",
+  "preferred_tool": "axe",
+  "speed_multiplier": 1.5
+}

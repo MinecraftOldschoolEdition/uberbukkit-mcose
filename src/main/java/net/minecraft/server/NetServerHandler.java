@@ -130,6 +130,11 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     private int remoteModProtocolVersion = 0;
     private int negotiatedModFeatures = 0;
     private boolean registryFingerprintVerified = false;
+    // The consent GUI must not race the normal login/spawn packet sequence.  It
+    // is sent only after ServerConfigurationManager has added the player and a
+    // complete spawn chunk has reached this connection's outbound queue.
+    private boolean serverRulesSpawned = false;
+    private boolean serverRulesPromptSent = false;
     private RegistrySyncSnapshot syncedRegistrySnapshot = null;
     private final OneShotGate modHelloGate = new OneShotGate();
     private final OneShotGate registrySyncRequestGate = new OneShotGate();
@@ -251,6 +256,11 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             && (this.negotiatedModFeatures & ModProtocol.FEATURE_SERVER_RULES) != 0;
     }
 
+    public boolean supportsHudScoreboard() {
+        return this.modProtocolNegotiated
+            && (this.negotiatedModFeatures & ModProtocol.FEATURE_HUD_SCOREBOARD) != 0;
+    }
+
     public boolean isServerRulesConsentPending() {
         return this.player != null && !this.player.hasAcceptedServerRules();
     }
@@ -263,6 +273,39 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         if (payload.length > 0 && payload.length <= PacketLimits.MAX_CUSTOM_PAYLOAD_BYTES) {
             this.sendPacket(new Packet250CustomPayload(ServerRulesProtocol.CHANNEL_SHOW, payload));
         }
+    }
+
+    /** Marks the end of the normal player-spawn path; called after addEntity/addPlayer. */
+    public void markServerRulesSpawned() {
+        this.serverRulesSpawned = true;
+    }
+
+    private void sendPendingServerRulesAfterSpawn() {
+        if (!this.serverRulesSpawned || this.serverRulesPromptSent || !this.isServerRulesConsentPending()) {
+            return;
+        }
+        if (!this.registryFingerprintVerified || !this.modProtocolNegotiated) {
+            return;
+        }
+        if (!this.supportsServerRules()) {
+            this.disconnect("This server requires a client that supports the Server Rules screen.");
+            return;
+        }
+
+        ChunkCoordIntPair spawnChunk = new ChunkCoordIntPair((int) this.player.locX >> 4, (int) this.player.locZ >> 4);
+        if (!this.player.hasChunkDelivered(spawnChunk)) {
+            return;
+        }
+
+        // Queue this after the complete spawn chunk.  The client can therefore
+        // build terrain before the mandatory overlay takes focus.
+        this.serverRulesPromptSent = true;
+        this.sendServerRulesScreen(ServerRulesProtocol.SCREEN_CONSENT,
+                ServerRules.getRules(this.minecraftServer));
+        this.player.motX = 0.0D;
+        this.player.motY = 0.0D;
+        this.player.motZ = 0.0D;
+        this.player.fallDistance = 0.0F;
     }
 
     public void sendCloudTimeSync() {
@@ -540,6 +583,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     public void a() {
         this.i = false;
         this.networkManager.b();
+        this.sendPendingServerRulesAfterSpawn();
 
         if (this.f - this.g > 20) {
             this.sendPacket(new Packet0KeepAlive());
@@ -595,7 +639,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
                 if (progress > 1.0F) progress = 1.0F;
                 if (progress < 0.0F) progress = 0.0F;
 
-                this.minecraftServer.serverConfigurationManager.sendPacketNearby(player, lastDigX, lastDigY, lastDigZ, 64D, player.dimension, new Packet63Digging(lastDigX, lastDigY, lastDigZ, lastDigFace, (float) elapsedTicks));
+                this.minecraftServer.serverConfigurationManager.sendPacketNearby(player, lastDigX, lastDigY, lastDigZ, 64D, player.dimension, new Packet63Digging(lastDigX, lastDigY, lastDigZ, lastDigFace, progress));
 
                 if (progress >= 1.0F) {
                     // Clear overlay immediately at completion
@@ -709,6 +753,11 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             return;
         }
         if (this.isServerRulesConsentPending()) {
+            // Chunk delivery in the Beta server is pumped from EntityPlayer.a(true),
+            // which normally runs while processing movement.  We still reject the
+            // movement itself while consent is pending, but must let the chunk pump
+            // advance or the rules screen's full-spawn-chunk prerequisite deadlocks.
+            this.player.a(true);
             return;
         }
 
@@ -2585,6 +2634,11 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
 
         if (packet19entityaction.animation == 1) {
             this.player.setSneak(true);
+            // 26.3 parity: pressing sneak while attached to another entity
+            // immediately returns the spectator camera to the player.
+            if (this.player.isSpectator() && this.player.getSpectatorTarget() != null) {
+                this.player.setSpectatorTarget(null);
+            }
         } else if (packet19entityaction.animation == 2) {
             this.player.setSneak(false);
         } else if (packet19entityaction.animation == 3) {
@@ -2595,6 +2649,13 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             if (this.player.vehicle != null) {
                 this.player.mount(null);
             }
+        } else if (packet19entityaction.animation == Packet19EntityAction.START_SPRINTING) {
+            WorldData worldData = this.player.world == null ? null : this.player.world.worldData;
+            this.player.setSprinting(worldData != null && worldData.getAdventureMovement());
+        } else if (packet19entityaction.animation == Packet19EntityAction.STOP_SPRINTING) {
+            this.player.setSprinting(false);
+        } else if (packet19entityaction.animation == Packet19EntityAction.RELEASE_CHARGED_BOW) {
+            this.player.releaseBowCharge();
         } else if (packet19entityaction.animation == 5) {
             // MCOSE: Player opened inventory - grant "Taking Inventory" achievement
             if (this.player.achievementManager != null && !this.player.achievementManager.hasAchievement(AchievementList.openInventory)) {
@@ -2611,9 +2672,9 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         if (this.player.gameMode != 1) return;
         ItemStack stack = sanitizeCreativeStack(packet.itemStack);
         if (packet.itemStack != null && stack == null) return;
-        if (packet.slot == -1) {
+        if (packet.slot < 0) {
             if (stack != null) {
-                int max = Math.min(64, stack.getMaxStackSize(this.player.world));
+                int max = stack.getMaxStackSize(this.player.world);
                 if (stack.count < 1) stack.count = 1;
                 if (stack.count > max) stack.count = max;
                 this.player.a(stack, true);
@@ -2621,24 +2682,25 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             return;
         }
         int slot = packet.slot;
-        if (stack != null) {
-            int max = Math.min(64, stack.getMaxStackSize(this.player.world));
-            if (stack.count < 1) stack.count = 1;
-            if (stack.count > max) stack.count = max;
-        }
-        if (slot >= 5 && slot < 9) {
-            this.player.inventory.armor[8 - slot] = stack;
-        } else if (slot >= 0 && slot < 36) {
-            this.player.inventory.items[slot] = stack;
-        } else if (slot >= 36 && slot < 45) {
-            this.player.inventory.items[slot - 36] = stack;
-        } else {
+        if (!setCreativeInventorySlot(this.player, slot, stack)) {
             return;
         }
-        ItemStack confirm = (slot >= 5 && slot < 9)
-                ? this.player.inventory.armor[8 - slot]
-                : ((slot >= 36 && slot < 45) ? this.player.inventory.items[slot - 36] : this.player.inventory.items[slot]);
+        ItemStack confirm = ((Slot) this.player.defaultContainer.e.get(slot)).getItem();
         this.player.netServerHandler.sendPacket(new Packet103SetSlot(0, slot, confirm));
+    }
+
+    /** Applies Packet107 to the authoritative window-0 slot map (result slot 0 is never writable). */
+    static boolean setCreativeInventorySlot(EntityHuman player, int slot, ItemStack stack) {
+        if (player == null || player.defaultContainer == null || slot < 1 || slot > 44
+                || slot >= player.defaultContainer.e.size()) {
+            return false;
+        }
+        Slot target = (Slot) player.defaultContainer.e.get(slot);
+        if (target == null) {
+            return false;
+        }
+        target.c(stack == null ? null : stack.cloneItemStack());
+        return true;
     }
 
     private ItemStack sanitizeCreativeStack(ItemStack stack) {
@@ -2647,7 +2709,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         }
 
         if (stack.getItem() != null) {
-            int max = Math.min(64, stack.getMaxStackSize(this.player.world));
+            int max = stack.getMaxStackSize(this.player.world);
             return stack.count >= 1 && stack.count <= max ? stack : null;
         }
 
@@ -2655,7 +2717,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         if (stack.id == 150 && Block.FENCE_GATE != null && Item.byId[Block.FENCE_GATE.id] != null) {
             stack.id = Block.FENCE_GATE.id;
             if (stack.getItem() != null) {
-                int max = Math.min(64, stack.getMaxStackSize(this.player.world));
+                int max = stack.getMaxStackSize(this.player.world);
                 return stack.count >= 1 && stack.count <= max ? stack : null;
             }
         }
@@ -2835,14 +2897,21 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         if (this.isServerRulesConsentPending()) {
             return;
         }
+        if (this.player.dead) return; // CraftBukkit
+        Container closingContainer = this.player.activeContainer;
+        if (closingContainer == null || closingContainer.windowId != packet101closewindow.a) {
+            return;
+        }
         PacketReceivedEvent event = new PacketReceivedEvent(server.getPlayer(player), packet101closewindow);
         server.getPluginManager().callEvent(event);
         if (event.isCancelled()) return;
 
-
-        if (this.player.dead) return; // CraftBukkit
-
-        this.player.A();
+        // A plugin may open a different menu while handling the event. Never let
+        // this delayed close packet tear down that newer authoritative menu.
+        if (this.player.activeContainer == closingContainer
+                && closingContainer.windowId == packet101closewindow.a) {
+            this.player.A();
+        }
     }
 
     public void a(Packet102WindowClick packet102windowclick) {
@@ -2871,7 +2940,10 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         // poseidon
         PacketReceivedEvent event = new PacketReceivedEvent(server.getPlayer(player), packet102windowclick);
         server.getPluginManager().callEvent(event);
-        if (event.isCancelled()) return;
+        if (event.isCancelled()) {
+            this.rejectInventoryClick(packet102windowclick, validatedContainer);
+            return;
+        }
 
         if (this.player.activeContainer != validatedContainer
                 || validatedContainer.windowId != packet102windowclick.a
@@ -2893,9 +2965,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             if (shortcutEvent != null) {
                 EventBus.global().publish(shortcutEvent);
                 if (shortcutEvent.isCancelled()) {
-                    this.clearInventoryShortcutPrime();
-                    this.player.activeContainer.a();
-                    this.player.z();
+                    this.rejectInventoryClick(packet102windowclick, validatedContainer);
                     return;
                 }
             }
@@ -2914,21 +2984,33 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
                 this.player.z();
                 this.player.h = false;
             } else {
-                this.n.put(this.player.activeContainer.windowId, packet102windowclick.d);
-                this.player.netServerHandler.sendPacket(new Packet106Transaction(packet102windowclick.a, packet102windowclick.d, false));
-                this.player.activeContainer.a(this.player, false);
-                ArrayList arraylist = new ArrayList();
-
-                for (int i = 0; i < this.player.activeContainer.e.size(); ++i) {
-                    arraylist.add(((Slot) this.player.activeContainer.e.get(i)).getItem());
-                }
-
-                this.player.a(this.player.activeContainer, arraylist);
+                this.rejectInventoryClick(packet102windowclick, validatedContainer);
             }
         }
     }
 
-    private boolean isValidInventoryClick(Packet102WindowClick packet, int slotCount) {
+    /**
+     * Rejects a client-predicted click and restores the complete authoritative
+     * state. A slot-delta broadcast cannot repair a cancellation because the
+     * server's listener cache still contains the unchanged pre-click stacks.
+     */
+    void rejectInventoryClick(Packet102WindowClick packet, Container container) {
+        if (packet == null || container == null || this.player == null) {
+            return;
+        }
+        this.clearInventoryShortcutPrime();
+        this.n.put(container.windowId, packet.d);
+        this.sendPacket(new Packet106Transaction(packet.a, packet.d, false));
+        container.a(this.player, false);
+
+        ArrayList authoritative = new ArrayList();
+        for (int slotIndex = 0; slotIndex < container.e.size(); ++slotIndex) {
+            authoritative.add(((Slot) container.e.get(slotIndex)).getItem());
+        }
+        this.player.a(container, authoritative);
+    }
+
+    boolean isValidInventoryClick(Packet102WindowClick packet, int slotCount) {
         if (packet == null || (packet.b != -999 && (packet.b < 0 || packet.b >= slotCount))) {
             return false;
         }
@@ -2953,7 +3035,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             case ContainerInput.SWAP:
                 return packet.b >= 0 && button >= 0 && button < 9;
             case ContainerInput.CLONE:
-                return packet.b >= 0 && button >= 0 && button <= 2;
+                return packet.b >= 0 && button == 2;
             case ContainerInput.QUICK_CRAFT:
                 int header = ContainerInput.getQuickCraftHeader(button);
                 int type = ContainerInput.getQuickCraftType(button);
@@ -3289,6 +3371,9 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
 
                 int serverFeatures = ModProtocol.resolveServerSupportedFeatures();
                 this.negotiatedModFeatures = helloInfo.featureBits & serverFeatures;
+                if (this.networkManager.pvn < 14) {
+                    this.negotiatedModFeatures &= ~ModProtocol.FEATURE_ITEM_COMPONENT_ENVELOPE_V1;
+                }
                 if (!this.supportsRegistryDataFingerprint()
                         && !RegistryDataFingerprint.isBuiltInSynchronizedData(
                                 RegistryDataFingerprint.captureSynchronizedData())) {
@@ -3371,6 +3456,27 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
                 return;
             }
             this.player.setSpectatorTarget((EntityLiving) target);
+            return;
+        }
+
+        if (ModProtocol.CHANNEL_SPECTATOR_TELEPORT.equals(packet250custompayload.channel)) {
+            if (!this.registryFingerprintVerified || !this.supportsSpectatorMode()
+                    || this.player == null || !this.player.isSpectator()
+                    || !this.spectatorActionLimiter.tryAcquire(System.currentTimeMillis())) {
+                return;
+            }
+            String targetName = ModProtocol.readSpectatorTeleportPayload(packet250custompayload.data);
+            EntityPlayer target = targetName == null
+                    ? null
+                    : this.minecraftServer.serverConfigurationManager.getPlayerByExactName(targetName);
+            if (target == null || target == this.player || target.dead || target.isSpectator()) {
+                return;
+            }
+
+            Location destination = new Location(
+                    target.world.getWorld(), target.locX, target.locY, target.locZ, target.yaw, target.pitch);
+            this.player.setSpectatorTarget(null);
+            ((Player) this.player.getBukkitEntity()).teleport(destination);
             return;
         }
 
@@ -3461,14 +3567,9 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         }
         this.sendCloudTimeSync();
         this.sendSkinPartSnapshotToClient();
-        if (this.isServerRulesConsentPending()) {
-            if (!this.supportsServerRules()) {
-                this.disconnect("This server requires a client that supports the Server Rules screen.");
-                return;
-            }
-            this.sendServerRulesScreen(
-                    ServerRulesProtocol.SCREEN_CONSENT,
-                    ServerRules.getRules(this.minecraftServer));
+        this.sendPendingServerRulesAfterSpawn();
+        if (this.player != null) {
+            this.minecraftServer.modernScoreboardManager.sendSnapshot(this.player);
         }
         if (this.player != null && this.player.isSpectator()) {
             this.player.setSpectatorTarget(this.player.getSpectatorTarget());

@@ -16,8 +16,6 @@ public final class AchievementRegistryBootstrap {
         if (initialized) {
             return;
         }
-        initialized = true;
-
         AchievementRegistryApi.register(AchievementKeys.OPEN_INVENTORY, AchievementList.openInventory);
         AchievementRegistryApi.register(AchievementKeys.MINE_WOOD, AchievementList.mineWood);
         AchievementRegistryApi.register(AchievementKeys.BUILD_WORKBENCH, AchievementList.buildWorkBench);
@@ -61,9 +59,12 @@ public final class AchievementRegistryBootstrap {
 
         int count = AchievementRegistryApi.size();
         if (count != AchievementKeys.EXPECTED_COUNT) {
-            System.err.println("[AchievementRegistryBootstrap] Expected " + AchievementKeys.EXPECTED_COUNT + " achievements, got " + count);
+            throw new IllegalStateException("Expected " + AchievementKeys.EXPECTED_COUNT
+                    + " achievements, got " + count);
         } else {
             System.out.println("[AchievementRegistryBootstrap] Registered " + count + " achievements");
         }
+        LegacyAdvancementDataBootstrap.initialize();
+        initialized = true;
     }
 }

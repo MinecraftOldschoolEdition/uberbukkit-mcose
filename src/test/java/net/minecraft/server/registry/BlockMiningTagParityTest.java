@@ -48,7 +48,11 @@ public class BlockMiningTagParityTest {
                 BlockTags.LEGACY_PICKAXE_1_75,
                 BlockTags.LEGACY_AXE_1_5,
                 BlockTags.LEGACY_SHOVEL_1_4,
-                BlockTags.LEGACY_SHOVEL_1_5);
+                BlockTags.LEGACY_SHOVEL_1_5,
+                BlockTags.MAINTAINS_FARMLAND,
+                BlockTags.PREVENTS_NEARBY_LEAF_DECAY,
+                BlockTags.CLIMBABLE,
+                BlockTags.ANIMALS_SPAWNABLE_ON);
         assertEquals(expectedOrder, BlockMiningRegistryApi.synchronizedTagKeys());
         assertFalse(BlockMiningRegistryApi.synchronizedTagKeys().contains(
                 BlockTags.CLIENT_AXE_1_5_SUPPLEMENT));

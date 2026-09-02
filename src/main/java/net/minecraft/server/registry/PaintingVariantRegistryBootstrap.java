@@ -1,8 +1,11 @@
 package net.minecraft.server.registry;
 
 import com.google.gson.JsonObject;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import net.minecraft.server.EnumArt;
@@ -17,6 +20,10 @@ public final class PaintingVariantRegistryBootstrap {
             new IdentityHashMap<EnumArt, PaintingVariant>();
     private static final Map<String, PaintingVariant> BY_LEGACY_TITLE =
             new LinkedHashMap<String, PaintingVariant>();
+    private static List<PaintingVariant> PLACEABLE_VARIANTS =
+            Collections.emptyList();
+    private static List<PaintingVariant> OPTIONAL_VARIANTS =
+            Collections.emptyList();
 
     private PaintingVariantRegistryBootstrap() {}
 
@@ -26,7 +33,7 @@ public final class PaintingVariantRegistryBootstrap {
         final LinkedHashMap<ResourceLocation, EnumArt> bridges =
                 new LinkedHashMap<ResourceLocation, EnumArt>();
         EnumArt[] arts = EnumArt.values();
-        List<ResourceLocation> keys = RegistryDataLoader.loadRequiredTag(
+        List<ResourceLocation> placeableKeys = RegistryDataLoader.loadRequiredTag(
                 "painting_variant", new ResourceLocation("minecraft", "placeable"));
         for (int i = 0; i < arts.length; i++) {
             ResourceLocation key = keyFor(arts[i]);
@@ -35,25 +42,37 @@ public final class PaintingVariantRegistryBootstrap {
             }
         }
 
-        if (keys.size() != arts.length) {
-            throw new IllegalStateException("Painting placeable tag has " + keys.size()
+        if (placeableKeys.size() != arts.length) {
+            throw new IllegalStateException("Painting placeable tag has "
+                    + placeableKeys.size()
                     + " entries, expected " + arts.length);
         }
-        for (int i = 0; i < keys.size(); i++) {
+        for (int i = 0; i < placeableKeys.size(); i++) {
             ResourceLocation expected = keyFor(arts[i]);
-            if (!expected.equals(keys.get(i))) {
+            if (!expected.equals(placeableKeys.get(i))) {
                 throw new IllegalStateException("Painting placeable order changed at " + i
-                        + ": expected " + expected + ", found " + keys.get(i));
+                        + ": expected " + expected + ", found "
+                        + placeableKeys.get(i));
             }
-            if (!bridges.containsKey(keys.get(i))) {
+            if (!bridges.containsKey(placeableKeys.get(i))) {
                 throw new IllegalStateException(
-                        "Painting placeable tag has no legacy bridge for " + keys.get(i));
+                        "Painting placeable tag has no legacy bridge for "
+                                + placeableKeys.get(i));
             }
         }
 
+        List<ResourceLocation> discovered = RegistryDataLoader.discoverKeys(
+                "painting_variant");
+        LinkedHashSet<ResourceLocation> remaining =
+                new LinkedHashSet<ResourceLocation>(discovered);
+        remaining.removeAll(placeableKeys);
+        ArrayList<ResourceLocation> orderedKeys =
+                new ArrayList<ResourceLocation>(placeableKeys);
+        orderedKeys.addAll(remaining);
+
         Map<ResourceLocation, PaintingVariant> decoded = RegistryDataLoader.loadRequired(
                 "painting_variant",
-                keys,
+                orderedKeys,
                 new RegistryDataLoader.Decoder<PaintingVariant>() {
                     public PaintingVariant decode(ResourceLocation key, JsonObject json) {
                         return PaintingVariant.decode(key, json, bridges.get(key));
@@ -69,7 +88,8 @@ public final class PaintingVariantRegistryBootstrap {
                 new LinkedHashMap<String, PaintingVariant>();
         for (Map.Entry<ResourceLocation, PaintingVariant> entry : decoded.entrySet()) {
             PaintingVariant variant = entry.getValue();
-            if (titles.put(variant.getLegacyTitle(), variant) != null) {
+            if (variant.hasLegacyBridge()
+                    && titles.put(variant.getLegacyTitle(), variant) != null) {
                 throw new IllegalStateException(
                         "Duplicate painting legacy title " + variant.getLegacyTitle());
             }
@@ -85,12 +105,33 @@ public final class PaintingVariantRegistryBootstrap {
         }
         PaintingVariantRegistryApi.freeze();
 
+        ArrayList<PaintingVariant> placeable =
+                new ArrayList<PaintingVariant>(placeableKeys.size());
+        ArrayList<PaintingVariant> optional =
+                new ArrayList<PaintingVariant>(remaining.size());
         for (Map.Entry<ResourceLocation, PaintingVariant> entry : decoded.entrySet()) {
             PaintingVariant variant = entry.getValue();
-            BY_LEGACY_ART.put(variant.getLegacyArt(), variant);
-            BY_LEGACY_TITLE.put(variant.getLegacyTitle(), variant);
+            if (variant.hasLegacyBridge()) {
+                BY_LEGACY_ART.put(variant.getLegacyArt(), variant);
+                BY_LEGACY_TITLE.put(variant.getLegacyTitle(), variant);
+                placeable.add(variant);
+            } else {
+                optional.add(variant);
+            }
         }
+        PLACEABLE_VARIANTS = Collections.unmodifiableList(placeable);
+        OPTIONAL_VARIANTS = Collections.unmodifiableList(optional);
         initialized = true;
+    }
+
+    public static synchronized List<PaintingVariant> placeableValues() {
+        initialize();
+        return PLACEABLE_VARIANTS;
+    }
+
+    public static synchronized List<PaintingVariant> optionalValues() {
+        initialize();
+        return OPTIONAL_VARIANTS;
     }
 
     public static synchronized PaintingVariant getByLegacyArt(EnumArt art) {

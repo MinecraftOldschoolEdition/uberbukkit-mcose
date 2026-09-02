@@ -1,0 +1,22 @@
+{
+  "type": "minecraft:block",
+  "pools": [
+    {
+      "rolls": {
+        "type": "minecraft:legacy_shifted_clamped",
+        "bound": 10,
+        "add": -7,
+        "minimum": 0
+      },
+      "apply_drop_chance": true,
+      "placement": "minecraft:block",
+      "entries": [
+        {
+          "type": "minecraft:item",
+          "name": "minecraft:brown_mushroom",
+          "legacy_metadata": 0
+        }
+      ]
+    }
+  ]
+}

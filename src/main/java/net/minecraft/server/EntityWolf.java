@@ -1,6 +1,7 @@
 package net.minecraft.server;
 
 import net.minecraft.server.registry.ItemRegistry;
+import net.minecraft.server.registry.ItemTags;
 import net.minecraft.server.util.ResourceLocation;
 import org.bukkit.craftbukkit.entity.CraftEntity;
 import org.bukkit.craftbukkit.event.CraftEventFactory;
@@ -306,8 +307,8 @@ public class EntityWolf extends EntityAnimal {
                 if (itemstack != null) {
                     if (!this.isTamed() && itemstack.id == Item.BONE.id) {
                         this.a = true;
-                    } else if (this.isTamed() && Item.byId[itemstack.id] instanceof ItemFood) {
-                        this.a = ((ItemFood) Item.byId[itemstack.id]).l();
+                    } else if (this.isTamed() && isWolfFoodStack(itemstack)) {
+                        this.a = true;
                     }
                 }
             }
@@ -816,10 +817,8 @@ public class EntityWolf extends EntityAnimal {
                 return true;
             }
         } else {
-            if (itemstack != null && Item.byId[itemstack.id] instanceof ItemFood) {
-                ItemFood itemfood = (ItemFood) Item.byId[itemstack.id];
-
-                if (itemfood.l() && this.getSyncedWolfHealth() < 20) {
+            if (isWolfFoodStack(itemstack)) {
+                if (this.getSyncedWolfHealth() < 20) {
                     --itemstack.count;
                     if (itemstack.count <= 0) {
                         entityhuman.inventory.setItem(entityhuman.inventory.itemInHandIndex, (ItemStack) null);
@@ -863,6 +862,15 @@ public class EntityWolf extends EntityAnimal {
         }
 
         return false;
+    }
+
+    static boolean isWolfFoodStack(ItemStack stack) {
+        if (stack == null) {
+            return false;
+        }
+        Item item = stack.getItem();
+        return item instanceof ItemFood
+                && ItemTags.is(item, ItemTags.WOLF_FOOD);
     }
 
     private static int getCollarColorFromDye(ItemStack stack) {

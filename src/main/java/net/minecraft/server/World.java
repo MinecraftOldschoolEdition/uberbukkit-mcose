@@ -19,6 +19,7 @@ import org.bukkit.event.weather.WeatherChangeEvent;
 import org.bukkit.generator.ChunkGenerator;
 
 import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import net.minecraft.server.event.EventBus;
 import net.minecraft.server.event.events.EntitySpawnEvent;
@@ -37,6 +38,7 @@ public class World implements IBlockAccess {
     private List C = new ArrayList();
     public List entityList = new ArrayList();
     private List D = new ArrayList();
+    private static final AtomicInteger ENTITY_COUNTER = new AtomicInteger();
     private TreeSet E = new TreeSet();
     private Set F = new HashSet();
     private Map scheduledTickChunkIndex = new HashMap();
@@ -135,6 +137,11 @@ public class World implements IBlockAccess {
         return (CraftServer) Bukkit.getServer();
     }
 
+    /** 26.3-named scoreboard entry point shared by every loaded dimension. */
+    public net.minecraft.world.scores.Scoreboard getScoreboard() {
+        return this.getServer().getServer().getScoreboard();
+    }
+
     public void markForRemoval(TileEntity tileentity) {
         tileEntitiesToUnload.add(tileentity);
     }
@@ -204,6 +211,38 @@ public class World implements IBlockAccess {
     }
 
     // CraftBukkit - changed signature
+    public int getNextEntityId() {
+        int entityId;
+        do {
+            entityId = nextEntityIdCandidate();
+        } while (this.hasEntityWithId(entityId));
+        return entityId;
+    }
+
+    public static int getNextDetachedEntityId() {
+        return nextEntityIdCandidate();
+    }
+
+    private static int nextEntityIdCandidate() {
+        while (true) {
+            int current = ENTITY_COUNTER.get();
+            int next = current == Integer.MAX_VALUE ? 1 : current + 1;
+            if (ENTITY_COUNTER.compareAndSet(current, next)) {
+                return next;
+            }
+        }
+    }
+
+    private boolean hasEntityWithId(int entityId) {
+        for (int index = 0; index < this.entityList.size(); ++index) {
+            Entity entity = (Entity) this.entityList.get(index);
+            if (entity != null && entity.id == entityId) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public World(IDataManager idatamanager, String s, long i, WorldProvider worldprovider, ChunkGenerator gen, org.bukkit.World.Environment env) {
         this.generator = gen;
         this.world = new CraftWorld((WorldServer) this, gen, env);
@@ -1914,6 +1953,7 @@ public class World implements IBlockAccess {
     }
 
     protected void d(Entity entity) {
+        this.getScoreboard().entityRemoved(entity);
         for (int i = 0; i < this.u.size(); ++i) {
             ((IWorldAccess) this.u.get(i)).b(entity);
         }
@@ -2661,8 +2701,20 @@ public class World implements IBlockAccess {
         int i = MathHelper.floor(entity.locX);
         int j = MathHelper.floor(entity.locZ);
         byte b0 = 32;
+        int currentChunkX = MathHelper.floor(entity.locX / 16.0D);
+        int currentChunkZ = MathHelper.floor(entity.locZ / 16.0D);
+        // Beta's full 32-block halo gate can indefinitely freeze an entity
+        // while modern chunk work catches up. Once the entity is attached to
+        // its loaded owner, keep its one-update-per-tick contract; relocation
+        // below still refuses admission to an unloaded destination chunk.
+        boolean attachedToLoadedOwner = flag
+                && entity.bG
+                && entity.bH == currentChunkX
+                && entity.bJ == currentChunkZ
+                && this.isChunkLoaded(entity.bH, entity.bJ);
 
-        if (!flag || this.a(i - b0, 0, j - b0, i + b0, 128, j + b0)) {
+        if (!flag || attachedToLoadedOwner
+                || this.a(i - b0, 0, j - b0, i + b0, 128, j + b0)) {
             entity.bo = entity.locX;
             entity.bp = entity.locY;
             entity.bq = entity.locZ;

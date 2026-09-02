@@ -49,6 +49,8 @@ public class WorldData {
         if (gameRules.hasKey("punchSheepForWool")) this.punchSheepForWool = gameRules.m("punchSheepForWool");
         if (gameRules.hasKey("toggleFoodStacking")) this.toggleFoodStacking = gameRules.m("toggleFoodStacking");
         if (gameRules.hasKey("hoeGrassForSeeds")) this.hoeGrassForSeeds = gameRules.m("hoeGrassForSeeds");
+        if (gameRules.hasKey("adventureMovement")) this.adventureMovement = gameRules.m("adventureMovement");
+        if (gameRules.hasKey("adventureCombat")) this.adventureCombat = gameRules.m("adventureCombat");
         if (gameRules.hasKey("spawnRadius")) this.spawnRadius = Math.max(0, gameRules.e("spawnRadius"));
     }
 
@@ -130,6 +132,8 @@ public class WorldData {
             this.hoeGrassForSeeds = nbttagcompound.m("HoeGrassForSeeds");
             hasHoeGrassForSeeds = true;
         }
+        if (nbttagcompound.hasKey("AdventureMovement")) this.adventureMovement = nbttagcompound.m("AdventureMovement");
+        if (nbttagcompound.hasKey("AdventureCombat")) this.adventureCombat = nbttagcompound.m("AdventureCombat");
         // Migrate the old server-wide compatibility settings into worlds that predate these rules.
         if (!hasPunchToPrimeTNT) {
             this.punchToPrimeTNT = !UberbukkitConfig.getInstance().getBoolean("mechanics.tnt_require_lighter", true);
@@ -185,6 +189,8 @@ public class WorldData {
         this.punchSheepForWool = worlddata.punchSheepForWool;
         this.toggleFoodStacking = worlddata.toggleFoodStacking;
         this.hoeGrassForSeeds = worlddata.hoeGrassForSeeds;
+        this.adventureMovement = worlddata.adventureMovement;
+        this.adventureCombat = worlddata.adventureCombat;
         this.spawnRadius = worlddata.spawnRadius;
     }
 
@@ -252,6 +258,8 @@ public class WorldData {
         nbttagcompound.a("PunchSheepForWool", this.punchSheepForWool);
         nbttagcompound.a("ToggleFoodStacking", this.toggleFoodStacking);
         nbttagcompound.a("HoeGrassForSeeds", this.hoeGrassForSeeds);
+        nbttagcompound.a("AdventureMovement", this.adventureMovement);
+        nbttagcompound.a("AdventureCombat", this.adventureCombat);
         // Integer gamerules
         nbttagcompound.a("SpawnRadius", this.spawnRadius);
 
@@ -270,6 +278,8 @@ public class WorldData {
         gameRules.a("punchSheepForWool", this.punchSheepForWool);
         gameRules.a("toggleFoodStacking", this.toggleFoodStacking);
         gameRules.a("hoeGrassForSeeds", this.hoeGrassForSeeds);
+        gameRules.a("adventureMovement", this.adventureMovement);
+        gameRules.a("adventureCombat", this.adventureCombat);
         gameRules.a("spawnRadius", this.spawnRadius);
         nbttagcompound.a("GameRules", gameRules);
     }
@@ -407,6 +417,8 @@ public class WorldData {
     private boolean punchSheepForWool = false;
     private boolean toggleFoodStacking = false;
     private boolean hoeGrassForSeeds = false;
+    private boolean adventureMovement = false;
+    private boolean adventureCombat = false;
     
     // Gamerules (integer)
     private int spawnRadius = 10; // Vanilla default spawn randomization radius
@@ -438,6 +450,10 @@ public class WorldData {
     public void setToggleFoodStacking(boolean v) { this.toggleFoodStacking = v; }
     public boolean getHoeGrassForSeeds() { return this.hoeGrassForSeeds; }
     public void setHoeGrassForSeeds(boolean v) { this.hoeGrassForSeeds = v; }
+    public boolean getAdventureMovement() { return this.adventureMovement; }
+    public void setAdventureMovement(boolean v) { this.adventureMovement = v; }
+    public boolean getAdventureCombat() { return this.adventureCombat; }
+    public void setAdventureCombat(boolean v) { this.adventureCombat = v; }
     
     // Integer gamerules
     public int getSpawnRadius() { return this.spawnRadius; }

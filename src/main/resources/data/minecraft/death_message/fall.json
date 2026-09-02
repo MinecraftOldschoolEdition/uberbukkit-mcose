@@ -1,0 +1,23 @@
+{
+  "default_key": "death.attack.fall",
+  "actor_key": "death.attack.fall.player",
+  "fall_variant": {
+    "default_key": "death.fell.accident.generic",
+    "actor_key": "death.fell.assist",
+    "item_key": "death.fell.assist.item",
+    "item_policy": "any"
+  },
+  "provenance": [
+    {
+      "action": "block_break",
+      "max_age_ticks": 300,
+      "horizontal_radius": 2.5,
+      "vertical_radius": 256.0,
+      "vertical_relation": "source_above",
+      "default_key": "death.attack.fall",
+      "actor_key": "death.attack.spleef.pvp",
+      "item_key": "death.attack.spleef.pvp.item",
+      "item_policy": "any"
+    }
+  ]
+}

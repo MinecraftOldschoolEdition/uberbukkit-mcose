@@ -150,7 +150,7 @@ public final class RecipeCodec {
         if (key == null || json == null) {
             throw new IllegalArgumentException("Recipe key and data are required");
         }
-        requireOnly(json, "recipe", "type", "ingredient", "result");
+        requireOnly(json, "recipe", "type", "ingredient", "result", "cookingtime");
         if (!"minecraft:smelting".equals(requiredString(json, "type"))) {
             throw new IllegalArgumentException("recipe type must be minecraft:smelting");
         }
@@ -163,7 +163,13 @@ public final class RecipeCodec {
         return new SmeltingRecipe(
                 ingredient.id,
                 metadata,
-                decodeStack(requiredObject(json, "result"), true));
+                decodeStack(requiredObject(json, "result"), true),
+                optionalInteger(
+                        json,
+                        "cookingtime",
+                        SmeltingRecipe.DEFAULT_COOKING_TIME,
+                        1,
+                        SmeltingRecipe.MAX_COOKING_TIME));
     }
 
     private static ItemStack decodeStack(JsonObject json, boolean result) {
@@ -226,6 +232,17 @@ public final class RecipeCodec {
                     + minimum + " and " + maximum + " (was " + value + ")");
         }
         return value;
+    }
+
+    private static int optionalInteger(
+            JsonObject json,
+            String field,
+            int fallback,
+            int minimum,
+            int maximum) {
+        return json.has(field)
+                ? requiredInteger(json, field, minimum, maximum)
+                : fallback;
     }
 
     private static JsonArray requiredArray(JsonObject json, String field) {

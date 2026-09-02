@@ -3,7 +3,6 @@ package net.minecraft.server;
 import com.legacyminecraft.poseidon.PoseidonConfig;
 // CraftBukkit start
 import org.bukkit.event.entity.EntityCombustEvent;
-import org.bukkit.event.entity.EntityDeathEvent;
 // CraftBukkit end
 
 public class EntitySkeleton extends EntityMonster {
@@ -82,7 +81,7 @@ public class EntitySkeleton extends EntityMonster {
             if (this.attackTicks == 0) {
                 EntityArrow entityarrow = new EntityArrow(this.world, this);
 
-                ++entityarrow.locY;
+                entityarrow.locY += (double) 1.4F;
                 double d2 = entity.locY + (double) entity.t() - 0.20000000298023224D - entityarrow.locY;
                 float f1 = MathHelper.a(d0 * d0 + d1 * d1) * 0.2F;
 
@@ -94,8 +93,8 @@ public class EntitySkeleton extends EntityMonster {
                     this.world.makeSound(this, "random.bow", 1.0F, 1.0F / (this.random.nextFloat() * 0.4F + 0.8F));
                 }
 
-                entityarrow.a(d0, d2 + (double) f1, d1, 0.6F, 12.0F);
                 this.world.addEntity(entityarrow);
+                entityarrow.a(d0, d2 + (double) f1, d1, 0.6F, 12.0F);
                 this.world.a(this, (byte) 11); // Custom status: skeleton fired bow (client firing pose)
                 this.attackTicks = 30;
             }
@@ -115,32 +114,6 @@ public class EntitySkeleton extends EntityMonster {
 
     protected int j() {
         return Item.ARROW.id;
-    }
-
-    protected void q() {
-        // CraftBukkit start - whole method
-        java.util.List<org.bukkit.inventory.ItemStack> loot = new java.util.ArrayList<org.bukkit.inventory.ItemStack>();
-
-        int count = this.random.nextInt(3);
-        if (count > 0) {
-            loot.add(new org.bukkit.inventory.ItemStack(org.bukkit.Material.ARROW, count));
-        }
-
-        count = this.random.nextInt(3);
-        if (count > 0) {
-            loot.add(new org.bukkit.inventory.ItemStack(org.bukkit.Material.BONE, count));
-        }
-
-        org.bukkit.World bworld = this.world.getWorld();
-        org.bukkit.entity.Entity entity = this.getBukkitEntity();
-
-        EntityDeathEvent event = new EntityDeathEvent(entity, loot);
-        this.world.getServer().getPluginManager().callEvent(event);
-
-        for (org.bukkit.inventory.ItemStack stack : event.getDrops()) {
-            bworld.dropItemNaturally(entity.getLocation(), stack);
-        }
-        // CraftBukkit end
     }
 
     private ItemStack getSyncedHeldItem() {

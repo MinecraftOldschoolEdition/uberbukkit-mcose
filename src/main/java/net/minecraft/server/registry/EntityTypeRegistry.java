@@ -1,6 +1,8 @@
 package net.minecraft.server.registry;
 
 import net.minecraft.server.Entity;
+import net.minecraft.server.EntityLiving;
+import net.minecraft.server.EntityMonster;
 import net.minecraft.server.EntityTypes;
 import net.minecraft.server.EntityTypeDef;
 import net.minecraft.server.Holder;
@@ -199,7 +201,12 @@ public final class EntityTypeRegistry {
 
     private static void registerCanonicalFor(String raw, Class clazz) {
         if (clazz == null || raw == null) return;
-        if (clazz == Entity.class) return;
+        // These abstract/base legacy ids are serialization sentinels, not
+        // summonable canonical entity types. Mirror the client registry so
+        // synchronized primary-key views never expose mob/monster aliases.
+        if (clazz == Entity.class
+                || clazz == EntityLiving.class
+                || clazz == EntityMonster.class) return;
         String snake = toSnakeCase(raw);
         ResourceLocation primary = VanillaRegistryKeys.entityKey(raw);
         if (primary == null) {

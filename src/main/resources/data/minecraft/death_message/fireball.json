@@ -1,0 +1,6 @@
+{
+  "default_key": "death.attack.onFire",
+  "actor_key": "death.attack.fireball",
+  "item_key": "death.attack.fireball.item",
+  "item_policy": "custom_named"
+}

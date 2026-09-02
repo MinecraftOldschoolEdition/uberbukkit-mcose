@@ -67,12 +67,8 @@ public class Packet102WindowClick extends Packet {
                 throw new IOException("Invalid item count " + b0 + " in window click packet");
             }
 
-            this.e = new ItemStack(short1, b0, short2);
-            
-            // Read NBT data if present (MCOSE protocol extension, pvn >= 14)
-            if (this.pvn >= 14) {
-                this.e.tag = PacketLimits.readCompressedNBT(datainputstream, PacketLimits.MAX_ITEM_NBT_BYTES, "item NBT");
-            }
+            NBTTagCompound wireTag = PacketItemStackCodec.readTag(datainputstream, this.pvn);
+            this.e = PacketItemStackCodec.decode(short1, b0, short2, wireTag);
         } else if (short1 == -1) {
             this.e = null;
         } else {
@@ -102,18 +98,7 @@ public class Packet102WindowClick extends Packet {
                 dataoutputstream.writeByte(this.e.getData());
             }
             
-            // Write NBT data if present (MCOSE protocol extension, pvn >= 14)
-            if (this.pvn >= 14) {
-                if (this.e.tag != null) {
-                    try {
-                        PacketLimits.writeCompressedNBT(dataoutputstream, this.e.tag, PacketLimits.MAX_ITEM_NBT_BYTES, "item NBT");
-                    } catch (Exception ex) {
-                        dataoutputstream.writeShort(-1);
-                    }
-                } else {
-                    dataoutputstream.writeShort(-1);
-                }
-            }
+            PacketItemStackCodec.writeTag(dataoutputstream, this.e, this.pvn);
         }
     }
 

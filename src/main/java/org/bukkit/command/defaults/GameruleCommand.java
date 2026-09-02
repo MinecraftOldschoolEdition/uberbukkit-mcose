@@ -14,7 +14,7 @@ import java.util.Locale;
 public class GameruleCommand extends VanillaCommand {
     
     // Boolean gamerules
-    private static final String[] BOOLEAN_RULES = {"doDayNightCycle", "tntexplodes", "mobGriefing", "doWeatherCycle", "doFireTick", "showDeathMessages", "sleepEnabled", "advertiseAchievements", "keepInventory", "punchToPrimeTNT", "punchSheepForWool", "toggleFoodStacking", "hoeGrassForSeeds"};
+    private static final String[] BOOLEAN_RULES = {"doDayNightCycle", "tntexplodes", "mobGriefing", "doWeatherCycle", "doFireTick", "showDeathMessages", "sleepEnabled", "advertiseAchievements", "keepInventory", "punchToPrimeTNT", "punchSheepForWool", "toggleFoodStacking", "hoeGrassForSeeds", "adventureMovement", "adventureCombat"};
     // Integer gamerules
     private static final String[] INTEGER_RULES = {"spawnRadius", "spawnProtectionRadius"};
     
@@ -90,6 +90,12 @@ public class GameruleCommand extends VanillaCommand {
         if (ruleName.equalsIgnoreCase("hoeGrassForSeeds")) {
             return Boolean.valueOf(worldData.getHoeGrassForSeeds());
         }
+        if (ruleName.equalsIgnoreCase("adventureMovement")) {
+            return Boolean.valueOf(worldData.getAdventureMovement());
+        }
+        if (ruleName.equalsIgnoreCase("adventureCombat")) {
+            return Boolean.valueOf(worldData.getAdventureCombat());
+        }
         return null;
     }
 
@@ -123,6 +129,10 @@ public class GameruleCommand extends VanillaCommand {
             worldData.setToggleFoodStacking(value);
         } else if (ruleName.equalsIgnoreCase("hoeGrassForSeeds")) {
             worldData.setHoeGrassForSeeds(value);
+        } else if (ruleName.equalsIgnoreCase("adventureMovement")) {
+            worldData.setAdventureMovement(value);
+        } else if (ruleName.equalsIgnoreCase("adventureCombat")) {
+            worldData.setAdventureCombat(value);
         } else {
             return false;
         }
@@ -241,7 +251,9 @@ public class GameruleCommand extends VanillaCommand {
                     sender.sendMessage(ChatColor.RED + "Unknown game rule: " + args[0]);
                     return false;
                 }
-                if (ruleName.equalsIgnoreCase("toggleFoodStacking")) {
+                if (ruleName.equalsIgnoreCase("toggleFoodStacking")
+                        || ruleName.equalsIgnoreCase("adventureMovement")
+                        || ruleName.equalsIgnoreCase("adventureCombat")) {
                     GameRuleSync.broadcast(mcServer, worldData);
                 }
                 

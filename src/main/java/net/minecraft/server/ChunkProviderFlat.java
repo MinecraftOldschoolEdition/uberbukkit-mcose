@@ -2,14 +2,12 @@ package net.minecraft.server;
 
 import java.util.List;
 import java.util.Random;
-import java.util.HashMap;
 
 // Basic flat world generator - Server-side adaptation (ported from Poseidon)
 public class ChunkProviderFlat implements IChunkProvider {
     private World worldObj;
     private Random random;
     private final byte[] blockArrayTemplate = new byte[32768];
-    private final java.util.Map<Long, Chunk> cachedChunks = new HashMap<Long, Chunk>();
     private static final boolean DEBUG_LOGGING = false;
 
     public ChunkProviderFlat(World world, long seed, boolean mapFeaturesEnabled) {
@@ -39,25 +37,18 @@ public class ChunkProviderFlat implements IChunkProvider {
     }
 
     public boolean isChunkLoaded(int chunkX, int chunkZ) {
-        long key = (((long) chunkZ) << 32) ^ (chunkX & 0xFFFFFFFFL);
-        return this.cachedChunks.containsKey(key);
+        // This is a generation capability query. The outer ChunkProviderServer
+        // owns loaded identity and retention for every generated coordinate.
+        return true;
     }
 
     public Chunk getOrCreateChunk(int chunkX, int chunkZ) {
-        long key = (((long) chunkZ) << 32) ^ (chunkX & 0xFFFFFFFFL);
-        Chunk cached = this.cachedChunks.get(key);
-        if (cached != null) {
-            return cached;
-        }
-
         boolean doLog = DEBUG_LOGGING && ((chunkX & 31) == 0) && ((chunkZ & 31) == 0);
         if (doLog) System.out.println("[FlatGenSrv] Creating chunk at " + chunkX + ", " + chunkZ);
 
         byte[] newBlockArray = new byte[32768];
         System.arraycopy(this.blockArrayTemplate, 0, newBlockArray, 0, this.blockArrayTemplate.length);
         Chunk chunk = new Chunk(this.worldObj, newBlockArray, chunkX, chunkZ);
-
-        this.cachedChunks.put(key, chunk);
 
         chunk.o = false; // not modified
         chunk.initLighting();
@@ -91,5 +82,4 @@ public class ChunkProviderFlat implements IChunkProvider {
         return "FlatLevelSource";
     }
 }
-
 

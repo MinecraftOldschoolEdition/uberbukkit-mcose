@@ -1,6 +1,8 @@
 package net.minecraft.server;
 
 import net.minecraft.server.registry.Registries;
+import net.minecraft.server.registry.LegacyRandomChanceStructurePlacement;
+import net.minecraft.server.registry.StructureSetDataBootstrap;
 import net.minecraft.server.registry.StructureType;
 import net.minecraft.server.registry.StructureTypes;
 import net.minecraft.server.util.ResourceLocation;
@@ -264,7 +266,8 @@ public class WorldGenHerobrineShrine extends WorldGenerator {
                     int chunkX = playerChunkX + dx;
                     int chunkZ = playerChunkZ + dz;
                     
-                    int[] shrinePos = checkChunkForShrine(wcm, chunkX, chunkZ, worldSeed);
+                    int[] shrinePos = checkChunkForShrine(
+                            world, wcm, chunkX, chunkZ, worldSeed);
                     if (shrinePos != null) {
                         double dist = Math.sqrt(
                             (shrinePos[0] - playerX) * (shrinePos[0] - playerX) +
@@ -289,29 +292,33 @@ public class WorldGenHerobrineShrine extends WorldGenerator {
     /**
      * Checks if a specific chunk would contain a Herobrine Shrine based on seed.
      */
-    private static int[] checkChunkForShrine(WorldChunkManager wcm, int chunkX, int chunkZ, long worldSeed) {
+    private static int[] checkChunkForShrine(
+            World world,
+            WorldChunkManager wcm,
+            int chunkX,
+            int chunkZ,
+            long worldSeed) {
         int blockX = chunkX * 16;
         int blockZ = chunkZ * 16;
-        
-        // Check biome - shrine only spawns in desert
-        BiomeBase biome = wcm.getBiome(blockX + 16, blockZ + 16);
-        if (biome != BiomeBase.DESERT) {
+
+        int terrainType = world == null || world.worldData == null
+                ? 0 : world.worldData.getTerrainType();
+
+        // Overworld keeps the original desert-only gate. INFDEV explicitly
+        // allows shrine attempts so structure-type parity is maintained across
+        // terrain generators. Use the same biome sample as population.
+        BiomeBase biome = terrainType == 7
+                ? null : wcm.getBiome(blockX + 16, blockZ + 16);
+        if (!StructureSetDataBootstrap.isHerobrineShrineAllowed(
+                terrainType, biome)) {
             return null;
         }
-        
-        // Use deterministic random for shrine spawning
-        long shrineSeed = (long)chunkX * 341873128712L + (long)chunkZ * 132897987541L + worldSeed + 777777777L;
-        Random shrineRand = new Random(shrineSeed);
-        
-        // Check if shrine spawns (1/750000 chance)
-        if (shrineRand.nextInt(750000) == 0) {
-            int shrineX = blockX + shrineRand.nextInt(16) + 8;
-            int shrineZ = blockZ + shrineRand.nextInt(16) + 8;
-            int shrineY = 72; // Estimated desert surface height
-            
-            return new int[] { shrineX, shrineY, shrineZ };
-        }
-        
-        return null;
+
+        LegacyRandomChanceStructurePlacement.Candidate shrine =
+                StructureSetDataBootstrap.herobrineShrine()
+                        .getPlacement().sample(worldSeed, chunkX, chunkZ);
+        // Locate intentionally reports the data-defined estimate while
+        // generation retains its separate surface scan.
+        return shrine == null ? null : shrine.toLocatePosition();
     }
 }

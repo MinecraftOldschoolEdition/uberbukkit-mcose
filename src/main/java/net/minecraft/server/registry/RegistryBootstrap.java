@@ -1,5 +1,7 @@
 package net.minecraft.server.registry;
 
+import net.minecraft.server.DeathMessageRules;
+
 /**
  * Central bootstrap that initializes all registries in deterministic order.
  */
@@ -17,10 +19,13 @@ public final class RegistryBootstrap {
 
         BlockRegistryBootstrap.initialize();
         ItemRegistryBootstrap.initialize();
+        ItemTagRegistryBootstrap.initialize();
+        NumberProviderRegistryBootstrap.initialize();
         NaturalGrowthRegistryBootstrap.initialize();
         ItemCapabilityRegistryBootstrap.initialize();
         BlockCapabilityRegistryBootstrap.initialize();
         BlockMiningRegistryBootstrap.initialize();
+        FireSpreadDataBootstrap.initialize();
         if (!BlockRegistry.runSanityChecks()) {
             throw new IllegalStateException("Block registry sanity checks failed");
         }
@@ -34,10 +39,14 @@ public final class RegistryBootstrap {
         BlockEntityTypeRegistryBootstrap.initialize();
         EntityTypeRegistryBootstrap.initialize();
         BiomeRegistryBootstrap.initialize();
+        BiomeSpawnSettingsBootstrap.initialize();
+        DamageTypeRegistryBootstrap.initialize();
+        DeathMessageRules.initialize();
         ChunkGeneratorTypeRegistryBootstrap.initialize();
         WorldTypeRegistryBootstrap.initialize();
         FluidRegistryBootstrap.initialize();
         DimensionTypeRegistryBootstrap.initialize();
+        WorldPresetDataBootstrap.initialize();
 
         RecipeTypeRegistryBootstrap.initialize();
         RecipeRegistryBootstrap.initialize();
@@ -46,11 +55,15 @@ public final class RegistryBootstrap {
         TreeDecoratorTypeRegistryBootstrap.initialize();
         FoliagePlacerTypeRegistryBootstrap.initialize();
         FeatureRegistryBootstrap.initialize();
+        ConfiguredFeatureDataBootstrap.initialize();
+        PlacedFeatureDataBootstrap.initialize();
         CarverRegistryBootstrap.initialize();
+        ConfiguredCarverDataBootstrap.initialize();
         SurfaceBuilderRegistryBootstrap.initialize();
 
         LootTables.initialize();
         StructureTypes.initialize();
+        StructureSetDataBootstrap.initialize();
         SpawnGroupRegistryBootstrap.initialize();
         JukeboxSongRegistryBootstrap.initialize();
         PaintingMotiveRegistryBootstrap.initialize();

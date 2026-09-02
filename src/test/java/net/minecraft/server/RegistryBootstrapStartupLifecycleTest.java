@@ -23,14 +23,65 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import net.minecraft.server.registry.Registries;
+import net.minecraft.server.registry.ItemTagRegistryApi;
+import net.minecraft.server.registry.ItemTags;
 import net.minecraft.server.registry.RecipeRegistryApi;
 import net.minecraft.server.registry.RecipeRegistryBootstrap;
 import net.minecraft.server.registry.SimpleRegistry;
 import net.minecraft.server.util.ResourceLocation;
 import net.minecraft.server.registry.RegistryBootstrap;
+import net.minecraft.server.mod.ModContext;
+import net.minecraft.server.mod.ModInitializer;
 import org.junit.Test;
 
 public class RegistryBootstrapStartupLifecycleTest {
+    @Test
+    public void modItemsExistBeforeTheItemTagSnapshotInFreshJvm()
+            throws Exception {
+        Path root = Files.createTempDirectory("mcose-mod-item-tag-startup-");
+        Path tag = root.resolve(
+                "data/minecraft/tags/item/wolf_food.json");
+        Path modJson = root.resolve("mods/wolf-food/mod.json");
+        Files.createDirectories(tag.getParent());
+        Files.createDirectories(modJson.getParent());
+        write(tag, "{\"replace\":true,\"values\":[\"test:mod_food\"]}");
+        write(modJson, "{\"id\":\"wolf-food\",\"entrypoint\":\""
+                + ModItemInitializer.class.getName() + "\"}");
+        try {
+            File javaExecutable = new File(
+                    new File(System.getProperty("java.home"), "bin"),
+                    System.getProperty("os.name", "").toLowerCase().contains("win")
+                            ? "java.exe" : "java");
+            Process process = new ProcessBuilder(
+                    javaExecutable.getAbsolutePath(),
+                    "-Dmcose.resourcesDir=" + root.toAbsolutePath(),
+                    "-cp", System.getProperty("java.class.path"),
+                    ModItemTagProbe.class.getName(),
+                    root.toAbsolutePath().toString())
+                    .directory(root.toFile())
+                    .redirectErrorStream(true)
+                    .start();
+            ByteArrayOutputStream captured = new ByteArrayOutputStream();
+            InputStream output = process.getInputStream();
+            byte[] buffer = new byte[4096];
+            int read;
+            while ((read = output.read(buffer)) >= 0) {
+                captured.write(buffer, 0, read);
+            }
+            int exit = process.waitFor();
+            String text = new String(
+                    captured.toByteArray(), StandardCharsets.UTF_8);
+            assertEquals(text, 0, exit);
+            assertTrue(text, text.contains("MOD_ITEM_TAG_STARTUP_OK"));
+        } finally {
+            Files.walk(root)
+                    .sorted(Comparator.reverseOrder())
+                    .forEach(path -> {
+                        try { Files.deleteIfExists(path); } catch (Exception ignored) {}
+                    });
+        }
+    }
+
     @Test
     public void malformedConfiguredDataDoesNotCommitFlagsAndCanRetryInFreshJvm()
             throws Exception {
@@ -259,6 +310,38 @@ public class RegistryBootstrapStartupLifecycleTest {
         }
     }
 
+    public static final class ModItemTagProbe {
+        public static void main(String[] args) throws Exception {
+            StatisticList.a();
+            MinecraftServer.initializeModsAndRegistriesForStartup(
+                    new File(args[0]));
+            if (!RegistryBootstrap.isInitialized()
+                    || !ItemTagRegistryApi.areTagBindingsCurrent()
+                    || ModItemInitializer.item == null
+                    || !ItemTags.is(ModItemInitializer.item,
+                            ItemTags.WOLF_FOOD)) {
+                throw new AssertionError(
+                        "Mod item was not bound into the startup wolf-food tag");
+            }
+            System.out.println("MOD_ITEM_TAG_STARTUP_OK");
+        }
+    }
+
+    public static final class ModItemInitializer implements ModInitializer {
+        static Item item;
+
+        public void initialize(ModContext context) {
+            item = new ModFood(29001);
+            context.registerItem("test:mod_food", item, item.id);
+        }
+    }
+
+    private static final class ModFood extends ItemFood {
+        ModFood(int index) {
+            super(index, 3, true);
+        }
+    }
+
     public static final class RecipeProbe {
         public static void main(String[] args) throws Exception {
             Path override = new File(args[0]).toPath();
@@ -309,7 +392,7 @@ public class RegistryBootstrapStartupLifecycleTest {
                 throw new AssertionError("Corrected recipe retry did not commit");
             }
             List recipes = manager.b();
-            if (recipes.get(recipes.size() - 6) != craftingPlugin
+            if (recipes.get(recipes.size() - 7) != craftingPlugin
                     || furnace.a(Item.FEATHER.id) != genericPlugin
                     || furnace.a(new ItemStack(Block.SAND, 1, 7)) != exactPlugin) {
                 throw new AssertionError("Plugin recipe changed after retry");

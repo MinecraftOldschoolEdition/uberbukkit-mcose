@@ -27,7 +27,7 @@ public final class BlockRegistry {
     private static final MappedRegistry<Block> runtimeRegistry = new MappedRegistry<Block>();
     private static final List<Listener> listeners = new ArrayList<Listener>();
     private static boolean scanned = false;
-    private static long registrationRevision = 0L;
+    private static volatile long registrationRevision = 0L;
 
     public interface Listener {
         void onRegistered(ResourceLocation key, Block block);
@@ -147,6 +147,15 @@ public final class BlockRegistry {
 
     public static long getRegistrationRevision() {
         return registrationRevision();
+    }
+
+    /**
+     * Returns the already-observed canonical generation without walking the
+     * legacy block array. Gameplay tag reads use this event-driven value; full
+     * scans stay confined to bootstrap/control-plane boundaries.
+     */
+    static long trackedRegistrationRevision() {
+        return registrationRevision;
     }
 
     /** Runs one publication while the canonical block identity is unchanged. */

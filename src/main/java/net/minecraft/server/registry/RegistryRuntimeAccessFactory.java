@@ -30,7 +30,8 @@ final class RegistryRuntimeAccessFactory {
         add(out, "tree_decorator_type", Registries.TREE_DECORATOR_TYPE);
         add(out, "foliage_placer_type", Registries.FOLIAGE_PLACER_TYPE);
         add(out, "feature", Registries.FEATURE);
-        add(out, "carver", Registries.CARVER);
+        add(out, "worldgen/carver_type", Registries.CARVER_TYPE);
+        add(out, "carver", Registries.CARVER_TYPE);
         add(out, "surface_builder", Registries.SURFACE_BUILDER);
         return out.build();
     }
@@ -38,7 +39,13 @@ final class RegistryRuntimeAccessFactory {
     static RegistryAccess captureWorld() {
         RegistryAccess.Builder out = RegistryAccess.builder();
         add(out, "biome", Registries.BIOME);
+        add(out, "damage_type", Registries.DAMAGE_TYPE);
         add(out, "dimension_type", Registries.DIMENSION_TYPE);
+        add(out, "worldgen/world_preset", Registries.WORLD_PRESET);
+        add(out, "worldgen/feature", Registries.CONFIGURED_FEATURE);
+        add(out, "worldgen/placed_feature", Registries.PLACED_FEATURE);
+        add(out, "worldgen/carver", Registries.CONFIGURED_CARVER);
+        add(out, "worldgen/configured_carver", Registries.CONFIGURED_CARVER);
         add(out, "world_feature", Registries.WORLD_FEATURE);
         add(out, "structure_type", Registries.STRUCTURE_TYPE);
         add(out, "painting_variant", Registries.PAINTING_VARIANT);
@@ -50,6 +57,8 @@ final class RegistryRuntimeAccessFactory {
         RegistryAccess.Builder out = RegistryAccess.builder();
         add(out, "loot_table", Registries.LOOT_TABLE);
         add(out, "recipe", Registries.RECIPE);
+        add(out, "number_provider", Registries.NUMBER_PROVIDER);
+        add(out, "advancement", Registries.ADVANCEMENT);
         return out.build();
     }
 

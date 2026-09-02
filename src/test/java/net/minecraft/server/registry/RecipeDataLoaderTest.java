@@ -27,7 +27,8 @@ public class RecipeDataLoaderTest {
             "crafting/coal_block",
             "crafting/redstone_from_block",
             "crafting/coal_from_block",
-            "crafting/flint_and_steel"
+            "crafting/flint_and_steel",
+            "crafting/pumpkin_seeds"
     };
     private static List baselineRecipes;
 
@@ -45,13 +46,13 @@ public class RecipeDataLoaderTest {
     }
 
     @Test
-    public void defaultProfileIsFullyDataBackedBeforeExactUnsortedFiveEntryTail() {
+    public void defaultProfileIsFullyDataBackedBeforeExactUnsortedSixEntryTail() {
         List recipes = CraftingManager.getInstance().b();
         int tailStart = recipes.size() - KEYS.length;
         assertTrue(tailStart > 0);
         assertEquals("fallbacks " + describeFallbacks(),
                 0, RecipeRegistryBootstrap.javaFallbackRecipeCount());
-        assertEquals(179, RecipeRegistryBootstrap.dataRecipeKeys().size());
+        assertEquals(180, RecipeRegistryBootstrap.dataRecipeKeys().size());
 
         if (baselineRecipes != null) {
             assertEquals(baselineRecipes.size(), tailStart);
@@ -183,7 +184,7 @@ public class RecipeDataLoaderTest {
     @Test
     public void allElevenGenericSmeltingMappingsAreDataAuthoritative() {
         List<ResourceLocation> keys = RecipeRegistryBootstrap.dataRecipeKeys();
-        assertEquals(179, keys.size());
+        assertEquals(180, keys.size());
         assertEquals(11, FurnaceRecipes.getInstance().getBuiltInInputIds().size());
         for (int i = 163; i < 174; i++) {
             ResourceLocation key = keys.get(i);

@@ -143,7 +143,15 @@ public class ItemBlock extends Item {
                     world.update(i, j, k, placedBlockId); // <-- world.setTypeIdAndData does this on success (tell the world)
                 } else {
                     world.update(i, j, k, placedBlockId);
-                    Block.byId[placedBlockId].postPlace(world, i, j, k, l);
+                    if (shouldPreservePrecomputedFacing(modernTrapdoorPlacement)) {
+                        // placedMetadata already carries the 26.3 yaw-derived facing.
+                        // The Beta side callback would replace it with a direction
+                        // derived only from the clicked face. Preserve the state while
+                        // retaining the callback's redstone-neighbor processing.
+                        block.doPhysics(world, i, j, k, Block.REDSTONE_WIRE.id);
+                    } else {
+                        block.postPlace(world, i, j, k, l);
+                    }
                     Block.byId[placedBlockId].postPlace(world, i, j, k, entityhuman);
                 }
 
@@ -162,6 +170,10 @@ public class ItemBlock extends Item {
         } else {
             return false;
         }
+    }
+
+    static boolean shouldPreservePrecomputedFacing(boolean modernTrapdoorPlacement) {
+        return modernTrapdoorPlacement;
     }
 
     public String a() {
